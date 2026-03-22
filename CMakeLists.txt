@@ -24,8 +24,9 @@ find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(OpenSSL REQUIRED)
 find_package(realsense2 QUIET)
 
-# Third-party: g2o (submodule)
+# Third-party: g2o (submodule) + wrappers
 add_subdirectory(third_party/g2o)
+add_subdirectory(third_party/wrappers)
 
 # Include directories
 include_directories(
@@ -37,6 +38,9 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/third_party/DBoW2/include
     ${PROJECT_SOURCE_DIR}/third_party/DBoW2/include/DBoW2
     ${PROJECT_SOURCE_DIR}/third_party/DLib/include
+    ${PROJECT_SOURCE_DIR}/third_party/wrappers/dbow2_wrapper
+    ${PROJECT_SOURCE_DIR}/third_party/wrappers/opengv_wrapper
+    ${PROJECT_SOURCE_DIR}/third_party/wrappers/g2o_wrapper
     ${EIGEN3_INCLUDE_DIR}
     ${Pangolin_INCLUDE_DIRS}
 )
@@ -81,8 +85,7 @@ target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}
     ${EIGEN3_LIBS}
     ${Pangolin_LIBRARIES}
-    ${PROJECT_SOURCE_DIR}/third_party/DBoW2/build/libDBoW2.so
-    ${PROJECT_SOURCE_DIR}/third_party/DLib/build/libDLib.so
+    slam3_wrappers
     g2o
     Boost::serialization
     OpenSSL::Crypto

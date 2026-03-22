@@ -21,10 +21,8 @@
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/vector.hpp>
-#include <boost/serialization/map.hpp>
 
-#include <DBoW2/BowVector.h>
-#include <DBoW2/FeatureVector.h>
+#include "dbow2_wrapper.hpp"
 
 #include <sophus/se3.hpp>
 #include <Eigen/Core>
@@ -33,23 +31,6 @@
 #include <opencv2/features2d/features2d.hpp>
 
 #include <vector>
-
-// Non-intrusive serialization for upstream DBoW2 types
-namespace boost { namespace serialization {
-
-template<class Archive>
-void serialize(Archive& ar, DBoW2::BowVector& v, const unsigned int version)
-{
-    ar & static_cast<std::map<DBoW2::WordId, DBoW2::WordValue>&>(v);
-}
-
-template<class Archive>
-void serialize(Archive& ar, DBoW2::FeatureVector& v, const unsigned int version)
-{
-    ar & static_cast<std::map<DBoW2::NodeId, std::vector<unsigned int>>&>(v);
-}
-
-}} // namespace boost::serialization
 
 namespace ORB_SLAM3
 {
