@@ -1,0 +1,80 @@
+services:
+  dev:
+    image: orb-slam3-remastered:dev
+    container_name: remastered-dev
+    volumes:
+      - .:/workspace
+      - ../Datasets:/datasets:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    working_dir: /workspace
+    environment:
+      - LD_LIBRARY_PATH=/workspace/lib:/usr/local/lib
+      - DISPLAY=host.docker.internal:0
+      - LIBGL_ALWAYS_INDIRECT=1
+      - XDG_RUNTIME_DIR=/tmp
+    command: bash
+    stdin_open: true
+    tty: true
+
+  build:
+    image: orb-slam3-remastered:dev
+    container_name: remastered-build
+    volumes:
+      - .:/workspace
+      - ../Datasets:/datasets:ro
+    working_dir: /workspace
+    environment:
+      - LD_LIBRARY_PATH=/workspace/lib:/usr/local/lib
+    command: >
+      bash -c "
+        scripts/build_third_party.sh &&
+        scripts/build.sh &&
+        echo '=== BUILD SUCCESS ==='
+      "
+
+  display-test:
+    image: orb-slam3-remastered:dev
+    container_name: remastered-display-test
+    volumes:
+      - .:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    working_dir: /workspace
+    environment:
+      - DISPLAY=host.docker.internal:0
+      - LIBGL_ALWAYS_INDIRECT=1
+      - XDG_RUNTIME_DIR=/tmp
+      - LD_LIBRARY_PATH=/usr/local/lib
+    command: >
+      bash -c "
+        echo '=== Building Pangolin for display test ===' &&
+        cd /workspace/third_party/Pangolin &&
+        rm -rf build && mkdir build && cd build &&
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_PANGOLIN_LIBOPENEXR=OFF > /dev/null 2>&1 &&
+        make -j$$(nproc) > /dev/null 2>&1 && make install > /dev/null 2>&1 && ldconfig &&
+        echo '=== Building display test ===' &&
+        cd /workspace/docker && rm -rf build && mkdir build && cd build &&
+        cmake .. -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1 &&
+        make -j$$(nproc) 2>&1 &&
+        echo '=== Running display test ===' &&
+        ./display_test
+      "
+
+  run:
+    image: orb-slam3-remastered:dev
+    container_name: remastered-run
+    volumes:
+      - .:/workspace
+      - ../Datasets:/datasets:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    working_dir: /workspace
+    environment:
+      - LD_LIBRARY_PATH=/workspace/lib:/usr/local/lib
+      - DISPLAY=host.docker.internal:0
+      - LIBGL_ALWAYS_INDIRECT=1
+      - XDG_RUNTIME_DIR=/tmp
+    command: >
+      bash -c "
+        ldconfig &&
+        echo '=== Running Mono EuRoC with Viewer ===' &&
+        ./bin/mono_euroc Vocabulary/ORBvoc.txt Examples/Monocular/EuRoC.yaml /datasets/EuRoc/MH01/ Examples/Monocular/EuRoC_TimeStamps/MH01.txt
+      "

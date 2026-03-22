@@ -1,0 +1,18 @@
+[submodule "third_party/g2o"]
+	path = third_party/g2o
+	url = https://github.com/Hyeonvidia/g2o-orbslam3.git
+[submodule "third_party/DBoW2"]
+	path = third_party/DBoW2
+	url = https://github.com/dorian3d/DBoW2.git
+[submodule "third_party/DLib"]
+	path = third_party/DLib
+	url = https://github.com/dorian3d/DLib.git
+[submodule "third_party/Sophus"]
+	path = third_party/Sophus
+	url = https://github.com/strasdat/Sophus.git
+[submodule "third_party/Pangolin"]
+	path = third_party/Pangolin
+	url = https://github.com/stevenlovegrove/Pangolin.git
+[submodule "third_party/OpenGV"]
+	path = third_party/OpenGV
+	url = https://github.com/laurentkneip/opengv.git
