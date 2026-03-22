@@ -24,9 +24,15 @@ find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(OpenSSL REQUIRED)
 find_package(realsense2 QUIET)
 
-# Third-party: g2o (submodule) + wrappers
-add_subdirectory(third_party/g2o)
+# Third-party: g2o (out-of-source build) + wrappers
+add_subdirectory(third_party/g2o ${CMAKE_BINARY_DIR}/g2o)
 add_subdirectory(third_party/wrappers)
+
+# Find installed third-party libraries (built by scripts/build_third_party.sh)
+find_library(DBoW2_LIB DBoW2 PATHS /usr/local/lib REQUIRED)
+find_library(DLib_LIB DLib PATHS /usr/local/lib REQUIRED)
+message(STATUS "DBoW2: ${DBoW2_LIB}")
+message(STATUS "DLib: ${DLib_LIB}")
 
 # Include directories
 include_directories(
@@ -86,6 +92,8 @@ target_link_libraries(${PROJECT_NAME}
     ${EIGEN3_LIBS}
     ${Pangolin_LIBRARIES}
     slam3_wrappers
+    ${DBoW2_LIB}
+    ${DLib_LIB}
     g2o
     Boost::serialization
     OpenSSL::Crypto

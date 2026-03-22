@@ -9,8 +9,8 @@ target_include_directories(slam3_dbow2_wrapper PUBLIC
 )
 
 target_link_libraries(slam3_dbow2_wrapper PUBLIC
-    ${PROJECT_SOURCE_DIR}/third_party/DBoW2/build/libDBoW2.so
-    ${PROJECT_SOURCE_DIR}/third_party/DLib/build/libDLib.so
+    ${DBoW2_LIB}
+    ${DLib_LIB}
     ${OpenCV_LIBS}
     Boost::serialization
 )
