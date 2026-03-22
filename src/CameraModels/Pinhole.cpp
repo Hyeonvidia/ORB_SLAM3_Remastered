@@ -157,7 +157,7 @@ namespace ORB_SLAM3 {
         bool is_same_camera = true;
         for(size_t i=0; i<size(); ++i)
         {
-            if(abs(mvParameters[i] - pPinholeCam->getParameter(i)) > 1e-6)
+            if(std::abs(mvParameters[i] - pPinholeCam->getParameter(i)) > 1e-6)
             {
                 is_same_camera = false;
                 break;

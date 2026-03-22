@@ -412,7 +412,7 @@ namespace ORB_SLAM3 {
 
         KannalaBrandt8* pKBCam = (KannalaBrandt8*) pCam;
 
-        if(abs(precision - pKBCam->GetPrecision()) > 1e-6)
+        if(std::abs(precision - pKBCam->GetPrecision()) > 1e-6)
             return false;
 
         if(size() != pKBCam->size())
@@ -421,7 +421,7 @@ namespace ORB_SLAM3 {
         bool is_same_camera = true;
         for(size_t i=0; i<size(); ++i)
         {
-            if(abs(mvParameters[i] - pKBCam->getParameter(i)) > 1e-6)
+            if(std::abs(mvParameters[i] - pKBCam->getParameter(i)) > 1e-6)
             {
                 is_same_camera = false;
                 break;
