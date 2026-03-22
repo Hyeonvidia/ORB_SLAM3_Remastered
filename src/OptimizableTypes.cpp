@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "OptimizableTypes.h"
+#include "OptimizableTypes.hpp"
 
 namespace ORB_SLAM3 {
     bool EdgeSE3ProjectXYZOnlyPose::read(std::istream& is){

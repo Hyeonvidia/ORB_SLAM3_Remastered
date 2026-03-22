@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "KannalaBrandt8.h"
+#include "KannalaBrandt8.hpp"
 
 #include <boost/serialization/export.hpp>
 
