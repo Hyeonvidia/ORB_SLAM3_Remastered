@@ -37,5 +37,7 @@ slam3_add_test(test_dbow2_wrapper)
 slam3_add_test(test_map_point)
 slam3_add_test(test_map)
 # test_atlas: Atlas destructor blocks (Map cleanup mutex deadlock in isolated context)
-# Validated via integration tests (dataset runs) instead
 # slam3_add_test(test_atlas)
+
+# I/O
+slam3_add_test(test_trajectory_writer)
