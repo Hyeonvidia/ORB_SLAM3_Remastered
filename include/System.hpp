@@ -38,6 +38,7 @@
 #include "Viewer.hpp"
 #include "ImuTypes.hpp"
 #include "Settings.hpp"
+// TrajectoryWriter forward declared below, included in System.cpp
 
 
 namespace ORB_SLAM3
@@ -78,6 +79,7 @@ class Tracking;
 class LocalMapping;
 class LoopClosing;
 class PlaceRecognition;
+class TrajectoryWriter;
 class Settings;
 
 class System
@@ -265,6 +267,8 @@ private:
     std::string mStrVocabularyFilePath;
 
     Settings* settings_;
+
+    TrajectoryWriter* mpTrajectoryWriter;
 };
 
 }// namespace ORB_SLAM

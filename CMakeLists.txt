@@ -107,6 +107,7 @@ add_library(${PROJECT_NAME} SHARED
     src/camera/KannalaBrandt8.cpp
     # io/
     src/io/Settings.cpp
+    src/io/TrajectoryWriter.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
