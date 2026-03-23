@@ -18,10 +18,12 @@
 
 #pragma once
 
+#include "FeatureExtractor.hpp"
+
 #include <vector>
 #include <list>
+#include <memory>
 #include <opencv2/opencv.hpp>
-
 
 namespace ORB_SLAM3
 {
@@ -39,52 +41,44 @@ public:
     bool bNoMore;
 };
 
-class ORBextractor
+class ORBextractor : public FeatureExtractor
 {
 public:
-    
+
     enum {HARRIS_SCORE=0, FAST_SCORE=1 };
 
     ORBextractor(int nfeatures, float scaleFactor, int nlevels,
-                 int iniThFAST, int minThFAST);
+                 int iniThFAST, int minThFAST,
+                 std::unique_ptr<KeypointDistributor> distributor = nullptr);
 
-    ~ORBextractor(){}
+    ~ORBextractor() override = default;
 
-    // Compute the ORB features and descriptors on an image.
-    // ORB are dispersed on the image using an octree.
-    // Mask is ignored in the current implementation.
+    // Legacy operator() — delegates to extract()
     int operator()( cv::InputArray _image, cv::InputArray _mask,
                     std::vector<cv::KeyPoint>& _keypoints,
                     cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
 
-    int inline GetLevels(){
-        return nlevels;}
+    // FeatureExtractor interface
+    int extract(cv::InputArray image, cv::InputArray mask,
+                std::vector<cv::KeyPoint>& keypoints,
+                cv::OutputArray descriptors,
+                std::vector<int>& lappingArea) override;
 
-    float inline GetScaleFactor(){
-        return scaleFactor;}
+    int GetLevels() const override { return nlevels; }
+    float GetScaleFactor() const override { return scaleFactor; }
+    std::vector<float> GetScaleFactors() const override { return mvScaleFactor; }
+    std::vector<float> GetInverseScaleFactors() const override { return mvInvScaleFactor; }
+    std::vector<float> GetScaleSigmaSquares() const override { return mvLevelSigma2; }
+    std::vector<float> GetInverseScaleSigmaSquares() const override { return mvInvLevelSigma2; }
+    const std::vector<cv::Mat>& getImagePyramid() const override { return mvImagePyramid; }
 
-    std::vector<float> inline GetScaleFactors(){
-        return mvScaleFactor;
-    }
-
-    std::vector<float> inline GetInverseScaleFactors(){
-        return mvInvScaleFactor;
-    }
-
-    std::vector<float> inline GetScaleSigmaSquares(){
-        return mvLevelSigma2;
-    }
-
-    std::vector<float> inline GetInverseScaleSigmaSquares(){
-        return mvInvLevelSigma2;
-    }
-
+    // Public access for legacy code
     std::vector<cv::Mat> mvImagePyramid;
 
 protected:
 
     void ComputePyramid(cv::Mat image);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);    
+    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
     std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
                                            const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
 
@@ -102,10 +96,11 @@ protected:
     std::vector<int> umax;
 
     std::vector<float> mvScaleFactor;
-    std::vector<float> mvInvScaleFactor;    
+    std::vector<float> mvInvScaleFactor;
     std::vector<float> mvLevelSigma2;
     std::vector<float> mvInvLevelSigma2;
+
+    std::unique_ptr<KeypointDistributor> distributor_;
 };
 
-} //namespace ORB_SLAM
-
+} //namespace ORB_SLAM3

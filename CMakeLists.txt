@@ -64,6 +64,7 @@ add_library(${PROJECT_NAME} SHARED
     src/LocalMapping.cpp
     src/LoopClosing.cpp
     src/ORBextractor.cpp
+    src/FeatureExtractor.cpp
     src/ORBmatcher.cpp
     src/FrameDrawer.cpp
     src/Converter.cpp
