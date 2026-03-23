@@ -86,6 +86,12 @@ public:
             printStats(vTimesTrack);
         }
 
+        // Keep viewer open for a moment after processing
+        if (viewer_) {
+            std::cout << "\nProcessing complete. Viewer will stay open for 10 seconds..." << std::endl;
+            usleep(10 * 1000000);
+        }
+
         slam.Shutdown();
         saveTrajectory(slam);
         return 0;
