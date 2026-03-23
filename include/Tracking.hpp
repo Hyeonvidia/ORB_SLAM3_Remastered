@@ -265,8 +265,9 @@ protected:
     LoopClosing* mpLoopClosing;
 
     //ORB
-    ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
-    ORBextractor* mpIniORBextractor;
+    std::unique_ptr<ORBextractor> mpORBextractorLeft;
+    std::unique_ptr<ORBextractor> mpORBextractorRight;
+    std::unique_ptr<ORBextractor> mpIniORBextractor;
 
     //BoW
     ORBVocabulary* mpORBVocabulary;

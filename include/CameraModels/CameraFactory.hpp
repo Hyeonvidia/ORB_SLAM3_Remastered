@@ -15,20 +15,20 @@ class CameraFactory {
 public:
     enum class Type { Pinhole, KannalaBrandt8 };
 
-    // Create camera from type enum and calibration parameters
-    static GeometricCamera* create(Type type, const std::vector<float>& params) {
+    // Create camera — returns unique_ptr (caller owns)
+    static std::unique_ptr<GeometricCamera> create(Type type, const std::vector<float>& params) {
         switch (type) {
             case Type::Pinhole:
-                return new Pinhole(params);
+                return std::make_unique<Pinhole>(params);
             case Type::KannalaBrandt8:
-                return new KannalaBrandt8(params);
+                return std::make_unique<KannalaBrandt8>(params);
             default:
                 throw std::runtime_error("CameraFactory: unknown camera type");
         }
     }
 
     // Create camera from string type name (for YAML config parsing)
-    static GeometricCamera* create(const std::string& typeName, const std::vector<float>& params) {
+    static std::unique_ptr<GeometricCamera> create(const std::string& typeName, const std::vector<float>& params) {
         if (typeName == "PinHole" || typeName == "Rectified")
             return create(Type::Pinhole, params);
         else if (typeName == "KannalaBrandt8")
@@ -37,7 +37,11 @@ public:
             throw std::runtime_error("CameraFactory: unknown camera model '" + typeName + "'");
     }
 
-    // Parse type string to enum
+    // Create and return raw pointer (for contexts needing non-owning pointer)
+    static GeometricCamera* createRaw(Type type, const std::vector<float>& params) {
+        return create(type, params).release();
+    }
+
     static Type parseType(const std::string& typeName) {
         if (typeName == "PinHole" || typeName == "Rectified")
             return Type::Pinhole;

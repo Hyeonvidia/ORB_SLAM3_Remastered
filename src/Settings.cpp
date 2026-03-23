@@ -262,7 +262,7 @@ namespace ORB_SLAM3 {
                 int colEnd = readParameter<int>(fSettings,"Camera1.overlappingEnd",found);
                 std::vector<int> vOverlapping = {colBegin, colEnd};
 
-                static_cast<KannalaBrandt8*>(calibration1_)->mvLappingArea = vOverlapping;
+                static_cast<KannalaBrandt8*>(calibration1_.get())->mvLappingArea = vOverlapping;
             }
         }
         else{
@@ -328,7 +328,7 @@ namespace ORB_SLAM3 {
             int colEnd = readParameter<int>(fSettings,"Camera2.overlappingEnd",found);
             std::vector<int> vOverlapping = {colBegin, colEnd};
 
-            static_cast<KannalaBrandt8*>(calibration2_)->mvLappingArea = vOverlapping;
+            static_cast<KannalaBrandt8*>(calibration2_.get())->mvLappingArea = vOverlapping;
         }
 
         //Load stereo extrinsic calibration
@@ -395,11 +395,11 @@ namespace ORB_SLAM3 {
                     calibration2_->setParameter(calibration2_->getParameter(2) * scaleColFactor, 2);
 
                     if(cameraType_ == KannalaBrandt){
-                        static_cast<KannalaBrandt8*>(calibration1_)->mvLappingArea[0] *= scaleColFactor;
-                        static_cast<KannalaBrandt8*>(calibration1_)->mvLappingArea[1] *= scaleColFactor;
+                        static_cast<KannalaBrandt8*>(calibration1_.get())->mvLappingArea[0] *= scaleColFactor;
+                        static_cast<KannalaBrandt8*>(calibration1_.get())->mvLappingArea[1] *= scaleColFactor;
 
-                        static_cast<KannalaBrandt8*>(calibration2_)->mvLappingArea[0] *= scaleColFactor;
-                        static_cast<KannalaBrandt8*>(calibration2_)->mvLappingArea[1] *= scaleColFactor;
+                        static_cast<KannalaBrandt8*>(calibration2_.get())->mvLappingArea[0] *= scaleColFactor;
+                        static_cast<KannalaBrandt8*>(calibration2_.get())->mvLappingArea[1] *= scaleColFactor;
                     }
                 }
             }
@@ -482,9 +482,9 @@ namespace ORB_SLAM3 {
 
     void Settings::precomputeRectificationMaps() {
         //Precompute rectification maps, new calibrations, ...
-        cv::Mat K1 = static_cast<Pinhole*>(calibration1_)->toK();
+        cv::Mat K1 = static_cast<Pinhole*>(calibration1_.get())->toK();
         K1.convertTo(K1,CV_64F);
-        cv::Mat K2 = static_cast<Pinhole*>(calibration2_)->toK();
+        cv::Mat K2 = static_cast<Pinhole*>(calibration2_.get())->toK();
         K2.convertTo(K2,CV_64F);
 
         cv::Mat cvTlr;
@@ -550,7 +550,7 @@ namespace ORB_SLAM3 {
 
         if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO){
             // Rectified stereo uses Camera1 params for both cameras
-            GeometricCamera* pCalib2 = settings.originalCalib2_ ? settings.originalCalib2_ : settings.originalCalib1_;
+            GeometricCamera* pCalib2 = settings.originalCalib2_ ? settings.originalCalib2_.get() : settings.originalCalib1_.get();
             output << "\t-Camera 2 parameters (";
             if(settings.cameraType_ == Settings::PinHole || settings.cameraType_ ==  Settings::Rectified){
                 output << "Pinhole";
@@ -608,8 +608,8 @@ namespace ORB_SLAM3 {
             output << "\t-Stereo depth threshold : " << settings.thDepth_ << std::endl;
 
             if(settings.cameraType_ == Settings::KannalaBrandt){
-                auto vOverlapping1 = static_cast<KannalaBrandt8*>(settings.calibration1_)->mvLappingArea;
-                auto vOverlapping2 = static_cast<KannalaBrandt8*>(settings.calibration2_)->mvLappingArea;
+                auto vOverlapping1 = static_cast<KannalaBrandt8*>(settings.calibration1_.get())->mvLappingArea;
+                auto vOverlapping2 = static_cast<KannalaBrandt8*>(settings.calibration2_.get())->mvLappingArea;
                 output << "\t-Camera 1 overlapping area: [ " << vOverlapping1[0] << " , " << vOverlapping1[1] << " ]" << std::endl;
                 output << "\t-Camera 2 overlapping area: [ " << vOverlapping2[0] << " , " << vOverlapping2[1] << " ]" << std::endl;
             }
