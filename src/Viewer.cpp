@@ -339,26 +339,32 @@ void Viewer::Run()
             cv::resize(toShow, toShow, cv::Size(width, height));
         }
 
-        // Convert to BGRA (4 channels) — GL_RGBA is universally supported,
-        // avoids alignment issues with indirect OpenGL rendering
-        if(toShow.channels() < 3)
-            cv::cvtColor(toShow, toShow, cv::COLOR_GRAY2BGRA);
-        else if(toShow.channels() == 3)
-            cv::cvtColor(toShow, toShow, cv::COLOR_BGR2BGRA);
-
-        // Lazily initialize or reinitialize the GL texture
-        if(!mFrameTexture || mFrameTexture->width != toShow.cols || mFrameTexture->height != toShow.rows)
+        // Render frame in Pangolin 2D view (graceful fallback for indirect GL)
         {
-            mFrameTexture = std::make_unique<pangolin::GlTexture>(
-                toShow.cols, toShow.rows, GL_RGBA8, false, 0, GL_BGRA, GL_UNSIGNED_BYTE);
-        }
+            if(toShow.channels() < 3)
+                cv::cvtColor(toShow, toShow, cv::COLOR_GRAY2BGRA);
+            else if(toShow.channels() == 3)
+                cv::cvtColor(toShow, toShow, cv::COLOR_BGR2BGRA);
 
-        // Upload cv::Mat data to GPU texture and render
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        mFrameTexture->Upload(toShow.data, GL_BGRA, GL_UNSIGNED_BYTE);
-        d_image.Activate();
-        glColor3f(1.0f, 1.0f, 1.0f);
-        mFrameTexture->RenderToViewportFlipY();
+            GLenum glErr = glGetError(); // clear pending errors
+
+            if(!mFrameTexture || mFrameTexture->width != toShow.cols || mFrameTexture->height != toShow.rows)
+            {
+                mFrameTexture = std::make_unique<pangolin::GlTexture>(
+                    toShow.cols, toShow.rows, GL_RGBA8, false, 0, GL_BGRA, GL_UNSIGNED_BYTE);
+            }
+
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            mFrameTexture->Upload(toShow.data, GL_BGRA, GL_UNSIGNED_BYTE);
+
+            glErr = glGetError();
+            if(glErr == GL_NO_ERROR) {
+                d_image.Activate();
+                glColor3f(1.0f, 1.0f, 1.0f);
+                mFrameTexture->RenderToViewportFlipY();
+            }
+            // If GL error, skip frame rendering (indirect GL may not support textures)
+        }
 
         // Swap buffers after ALL rendering (3D map + 2D frame) is complete
         pangolin::FinishFrame();
