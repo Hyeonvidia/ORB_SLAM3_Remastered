@@ -23,7 +23,7 @@
 #include <g2o/types/sim3.h>
 
 #include <Eigen/Geometry>
-#include "CameraModels/GeometricCamera.hpp"
+#include "GeometricCamera.hpp"
 
 
 namespace ORB_SLAM3 {

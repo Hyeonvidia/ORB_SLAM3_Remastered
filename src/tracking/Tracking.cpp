@@ -24,7 +24,7 @@
 #include "Converter.hpp"
 #include "G2oTypes.hpp"
 #include "Optimizer.hpp"
-#include "CameraModels/CameraFactory.hpp"
+#include "CameraFactory.hpp"
 
 #include "MLPnPsolver.hpp"
 #include "GeometricTools.hpp"

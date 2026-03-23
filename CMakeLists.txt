@@ -36,11 +36,19 @@ find_library(DLib_LIB DLib PATHS /usr/local/lib REQUIRED)
 message(STATUS "DBoW2: ${DBoW2_LIB}")
 message(STATUS "DLib: ${DLib_LIB}")
 
-# Include directories
+# Include directories — modular structure
 include_directories(
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/include/CameraModels
+    ${PROJECT_SOURCE_DIR}/include/core
+    ${PROJECT_SOURCE_DIR}/include/tracking
+    ${PROJECT_SOURCE_DIR}/include/mapping
+    ${PROJECT_SOURCE_DIR}/include/recognition
+    ${PROJECT_SOURCE_DIR}/include/closing
+    ${PROJECT_SOURCE_DIR}/include/atlas
+    ${PROJECT_SOURCE_DIR}/include/visualization
+    ${PROJECT_SOURCE_DIR}/include/camera
+    ${PROJECT_SOURCE_DIR}/include/io
     ${PROJECT_SOURCE_DIR}/third_party/Sophus
     ${PROJECT_SOURCE_DIR}/third_party/g2o
     ${PROJECT_SOURCE_DIR}/third_party/DBoW2/include
@@ -57,37 +65,47 @@ include_directories(
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
-# Main library
+# Main library — modular source layout
 add_library(${PROJECT_NAME} SHARED
+    # System orchestrator
     src/System.cpp
-    src/Tracking.cpp
-    src/LocalMapping.cpp
-    src/LoopClosing.cpp
-    src/ORBextractor.cpp
-    src/FeatureExtractor.cpp
-    src/ORBmatcher.cpp
-    src/FrameDrawer.cpp
-    src/Converter.cpp
-    src/MapPoint.cpp
-    src/KeyFrame.cpp
-    src/Atlas.cpp
-    src/Map.cpp
-    src/MapDrawer.cpp
-    src/Optimizer.cpp
-    src/Frame.cpp
-    src/KeyFrameDatabase.cpp
-    src/Sim3Solver.cpp
-    src/Viewer.cpp
-    src/ImuTypes.cpp
-    src/G2oTypes.cpp
-    src/CameraModels/Pinhole.cpp
-    src/CameraModels/KannalaBrandt8.cpp
-    src/OptimizableTypes.cpp
-    src/MLPnPsolver.cpp
-    src/GeometricTools.cpp
-    src/TwoViewReconstruction.cpp
-    src/Config.cpp
-    src/Settings.cpp
+    # core/
+    src/core/Frame.cpp
+    src/core/KeyFrame.cpp
+    src/core/MapPoint.cpp
+    src/core/Map.cpp
+    src/core/ImuTypes.cpp
+    src/core/Converter.cpp
+    src/core/GeometricTools.cpp
+    src/core/Config.cpp
+    # tracking/
+    src/tracking/Tracking.cpp
+    src/tracking/ORBextractor.cpp
+    src/tracking/FeatureExtractor.cpp
+    src/tracking/ORBmatcher.cpp
+    src/tracking/MLPnPsolver.cpp
+    # mapping/
+    src/mapping/LocalMapping.cpp
+    src/mapping/Optimizer.cpp
+    src/mapping/G2oTypes.cpp
+    src/mapping/OptimizableTypes.cpp
+    src/mapping/TwoViewReconstruction.cpp
+    # recognition/
+    src/recognition/KeyFrameDatabase.cpp
+    # closing/
+    src/closing/LoopClosing.cpp
+    src/closing/Sim3Solver.cpp
+    # atlas/
+    src/atlas/Atlas.cpp
+    # visualization/
+    src/visualization/Viewer.cpp
+    src/visualization/FrameDrawer.cpp
+    src/visualization/MapDrawer.cpp
+    # camera/
+    src/camera/Pinhole.cpp
+    src/camera/KannalaBrandt8.cpp
+    # io/
+    src/io/Settings.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

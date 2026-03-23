@@ -27,8 +27,8 @@
 #include "GeometricCamera.hpp"
 
 #include <thread>
-#include "CameraModels/Pinhole.hpp"
-#include "CameraModels/KannalaBrandt8.hpp"
+#include "Pinhole.hpp"
+#include "KannalaBrandt8.hpp"
 
 namespace ORB_SLAM3
 {

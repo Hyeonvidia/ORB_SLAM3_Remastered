@@ -18,7 +18,7 @@
 
 #include "Settings.hpp"
 
-#include "CameraModels/CameraFactory.hpp"
+#include "CameraFactory.hpp"
 
 #include "System.hpp"
 
