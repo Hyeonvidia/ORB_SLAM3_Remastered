@@ -17,8 +17,7 @@
 */
 
 
-#ifndef KEYFRAMEDATABASE_H
-#define KEYFRAMEDATABASE_H
+#pragma once
 
 #include <vector>
 #include <list>
@@ -100,4 +99,3 @@ protected:
 
 } //namespace ORB_SLAM
 
-#endif

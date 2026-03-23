@@ -17,8 +17,7 @@
 */
 
 
-#ifndef KEYFRAME_H
-#define KEYFRAME_H
+#pragma once
 
 #include "MapPoint.hpp"
 #include "DBoW2/BowVector.h"
@@ -540,5 +539,3 @@ public:
 };
 
 } //namespace ORB_SLAM
-
-#endif // KEYFRAME_H

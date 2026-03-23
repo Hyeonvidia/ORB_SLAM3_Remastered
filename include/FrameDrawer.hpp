@@ -17,8 +17,7 @@
 */
 
 
-#ifndef FRAMEDRAWER_H
-#define FRAMEDRAWER_H
+#pragma once
 
 #include "Tracking.hpp"
 #include "MapPoint.hpp"
@@ -87,5 +86,3 @@ protected:
 };
 
 } //namespace ORB_SLAM
-
-#endif // FRAMEDRAWER_H

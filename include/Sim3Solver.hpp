@@ -17,8 +17,7 @@
 */
 
 
-#ifndef SIM3SOLVER_H
-#define SIM3SOLVER_H
+#pragma once
 
 #include <opencv2/opencv.hpp>
 #include <vector>
@@ -131,5 +130,3 @@ protected:
 };
 
 } //namespace ORB_SLAM
-
-#endif // SIM3SOLVER_H

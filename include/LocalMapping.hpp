@@ -17,8 +17,7 @@
 */
 
 
-#ifndef LOCALMAPPING_H
-#define LOCALMAPPING_H
+#pragma once
 
 #include "KeyFrame.hpp"
 #include "Atlas.hpp"
@@ -198,5 +197,3 @@ protected:
     };
 
 } //namespace ORB_SLAM
-
-#endif // LOCALMAPPING_H

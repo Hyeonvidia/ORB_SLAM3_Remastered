@@ -17,8 +17,7 @@
 */
 
 
-#ifndef SYSTEM_H
-#define SYSTEM_H
+#pragma once
 
 
 #include <unistd.h>
@@ -265,5 +264,3 @@ private:
 };
 
 }// namespace ORB_SLAM
-
-#endif // SYSTEM_H

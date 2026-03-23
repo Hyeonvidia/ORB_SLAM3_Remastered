@@ -17,8 +17,7 @@
 */
 
 
-#ifndef MAPDRAWER_H
-#define MAPDRAWER_H
+#pragma once
 
 #include"Atlas.hpp"
 #include"MapPoint.hpp"
@@ -75,5 +74,3 @@ private:
 };
 
 } //namespace ORB_SLAM
-
-#endif // MAPDRAWER_H

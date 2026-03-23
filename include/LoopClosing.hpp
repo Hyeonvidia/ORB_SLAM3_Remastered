@@ -17,8 +17,7 @@
 */
 
 
-#ifndef LOOPCLOSING_H
-#define LOOPCLOSING_H
+#pragma once
 
 #include "KeyFrame.hpp"
 #include "LocalMapping.hpp"
@@ -246,5 +245,3 @@ protected:
 };
 
 } //namespace ORB_SLAM
-
-#endif // LOOPCLOSING_H

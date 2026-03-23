@@ -16,8 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef SERIALIZATION_UTILS_H
-#define SERIALIZATION_UTILS_H
+#pragma once
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/vector.hpp>
@@ -164,5 +163,3 @@ void serializeVectorKeyPoints(Archive& ar, const std::vector<cv::KeyPoint>& vKP,
 }
 
 } // namespace ORB_SLAM3
-
-#endif // SERIALIZATION_UTILS_H

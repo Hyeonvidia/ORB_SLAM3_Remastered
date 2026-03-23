@@ -17,8 +17,7 @@
 */
 
 
-#ifndef ORBMATCHER_H
-#define ORBMATCHER_H
+#pragma once
 
 #include<vector>
 #include<opencv2/core/core.hpp>
@@ -103,5 +102,3 @@ namespace ORB_SLAM3
     };
 
 }// namespace ORB_SLAM
-
-#endif // ORBMATCHER_H

@@ -17,8 +17,7 @@
 */
 
 
-#ifndef IMUTYPES_H
-#define IMUTYPES_H
+#pragma once
 
 #include <vector>
 #include <utility>
@@ -262,5 +261,3 @@ Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f &R);
 }
 
 } //namespace ORB_SLAM2
-
-#endif // IMUTYPES_H

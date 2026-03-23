@@ -223,7 +223,7 @@ namespace ORB_SLAM3
     {
         const std::vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
-        vpMapPointMatches = std::vector<MapPoint*>(F.N,static_cast<MapPoint*>(NULL));
+        vpMapPointMatches = std::vector<MapPoint*>(F.N,static_cast<MapPoint*>(nullptr));
 
         const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec;
 
@@ -414,7 +414,7 @@ namespace ORB_SLAM3
                     continue;
                 for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
                 {
-                    vpMapPointMatches[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
+                    vpMapPointMatches[rotHist[i][j]]=static_cast<MapPoint*>(nullptr);
                     nmatches--;
                 }
             }
@@ -437,7 +437,7 @@ namespace ORB_SLAM3
 
         // Set of MapPoints already found in the KeyFrame
         std::set<MapPoint*> spAlreadyFound(vpMatched.begin(), vpMatched.end());
-        spAlreadyFound.erase(static_cast<MapPoint*>(NULL));
+        spAlreadyFound.erase(static_cast<MapPoint*>(nullptr));
 
         int nmatches=0;
 
@@ -544,7 +544,7 @@ namespace ORB_SLAM3
 
         // Set of MapPoints already found in the KeyFrame
         std::set<MapPoint*> spAlreadyFound(vpMatched.begin(), vpMatched.end());
-        spAlreadyFound.erase(static_cast<MapPoint*>(NULL));
+        spAlreadyFound.erase(static_cast<MapPoint*>(nullptr));
 
         int nmatches=0;
 
@@ -773,7 +773,7 @@ namespace ORB_SLAM3
         const std::vector<MapPoint*> vpMapPoints2 = pKF2->GetMapPointMatches();
         const cv::Mat &Descriptors2 = pKF2->mDescriptors;
 
-        vpMatches12 = std::vector<MapPoint*>(vpMapPoints1.size(),static_cast<MapPoint*>(NULL));
+        vpMatches12 = std::vector<MapPoint*>(vpMapPoints1.size(),static_cast<MapPoint*>(nullptr));
         std::vector<bool> vbMatched2(vpMapPoints2.size(),false);
 
         std::vector<int> rotHist[HISTO_LENGTH];
@@ -894,7 +894,7 @@ namespace ORB_SLAM3
                     continue;
                 for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
                 {
-                    vpMatches12[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
+                    vpMatches12[rotHist[i][j]]=static_cast<MapPoint*>(nullptr);
                     nmatches--;
                 }
             }
@@ -1875,7 +1875,7 @@ namespace ORB_SLAM3
                 {
                     for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
                     {
-                        CurrentFrame.mvpMapPoints[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
+                        CurrentFrame.mvpMapPoints[rotHist[i][j]]=static_cast<MapPoint*>(nullptr);
                         nmatches--;
                     }
                 }
@@ -1998,7 +1998,7 @@ namespace ORB_SLAM3
                 {
                     for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
                     {
-                        CurrentFrame.mvpMapPoints[rotHist[i][j]]=NULL;
+                        CurrentFrame.mvpMapPoints[rotHist[i][j]]=nullptr;
                         nmatches--;
                     }
                 }

@@ -17,8 +17,7 @@
 */
 
 
-#ifndef MAP_H
-#define MAP_H
+#pragma once
 
 #include "MapPoint.hpp"
 #include "KeyFrame.hpp"
@@ -204,5 +203,3 @@ protected:
 };
 
 } //namespace ORB_SLAM3
-
-#endif // MAP_H

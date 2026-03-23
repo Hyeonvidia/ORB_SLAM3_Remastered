@@ -16,8 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef G2OTYPES_H
-#define G2OTYPES_H
+#pragma once
 
 #include "g2o/core/base_vertex.h"
 #include "g2o/core/base_binary_edge.h"
@@ -140,13 +139,13 @@ public:
     }
 
 
-    virtual bool read(std::istream& is);
-    virtual bool write(std::ostream& os) const;
+    bool read(std::istream& is) override;
+    bool write(std::ostream& os) const override;
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         _estimate.Update(update_);
         updateCache();
     }
@@ -169,13 +168,13 @@ public:
         setEstimate(ImuCamPose(_Rwc, _twc, pKF));
     }
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         double update6DoF[6];
         update6DoF[0] = 0;
         update6DoF[1] = 0;
@@ -196,13 +195,13 @@ public:
     VertexVelocity(KeyFrame* pKF);
     VertexVelocity(Frame* pF);
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         Eigen::Vector3d uv;
         uv << update_[0], update_[1], update_[2];
         setEstimate(estimate()+uv);
@@ -217,13 +216,13 @@ public:
     VertexGyroBias(KeyFrame* pKF);
     VertexGyroBias(Frame* pF);
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         Eigen::Vector3d ubg;
         ubg << update_[0], update_[1], update_[2];
         setEstimate(estimate()+ubg);
@@ -239,13 +238,13 @@ public:
     VertexAccBias(KeyFrame* pKF);
     VertexAccBias(Frame* pF);
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         Eigen::Vector3d uba;
         uba << update_[0], update_[1], update_[2];
         setEstimate(estimate()+uba);
@@ -280,13 +279,13 @@ public:
         setEstimate(GDirection(pRwg));
     }
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         _estimate.Update(update_);
         updateCache();
     }
@@ -304,14 +303,14 @@ public:
         setEstimate(ps);
     }
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl(){
+    void setToOriginImpl() override {
         setEstimate(1.0);
     }
 
-    virtual void oplusImpl(const double *update_){
+    void oplusImpl(const double *update_) override {
         setEstimate(estimate()*exp(*update_));
     }
 };
@@ -327,13 +326,13 @@ public:
         setEstimate(InvDepthPoint(invDepth, u, v, pHostKF));
     }
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    virtual void setToOriginImpl() {
+    void setToOriginImpl() override {
         }
 
-    virtual void oplusImpl(const double* update_){
+    void oplusImpl(const double* update_) override {
         _estimate.Update(update_);
         updateCache();
     }
@@ -347,10 +346,10 @@ public:
     EdgeMono(int cam_idx_=0): cam_idx(cam_idx_){
     }
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const g2o::VertexSBAPointXYZ* VPoint = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
         const VertexPose* VPose = static_cast<const VertexPose*>(_vertices[1]);
         const Eigen::Vector2d obs(_measurement);
@@ -358,7 +357,7 @@ public:
     }
 
 
-    virtual void linearizeOplus();
+    void linearizeOplus() override;
 
     bool isDepthPositive()
     {
@@ -395,16 +394,16 @@ public:
     EdgeMonoOnlyPose(const Eigen::Vector3f &Xw_, int cam_idx_=0):Xw(Xw_.cast<double>()),
         cam_idx(cam_idx_){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexPose* VPose = static_cast<const VertexPose*>(_vertices[0]);
         const Eigen::Vector2d obs(_measurement);
         _error = obs - VPose->estimate().Project(Xw,cam_idx);
     }
 
-    virtual void linearizeOplus();
+    void linearizeOplus() override;
 
     bool isDepthPositive()
     {
@@ -429,10 +428,10 @@ public:
 
     EdgeStereo(int cam_idx_=0): cam_idx(cam_idx_){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const g2o::VertexSBAPointXYZ* VPoint = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
         const VertexPose* VPose = static_cast<const VertexPose*>(_vertices[1]);
         const Eigen::Vector3d obs(_measurement);
@@ -440,7 +439,7 @@ public:
     }
 
 
-    virtual void linearizeOplus();
+    void linearizeOplus() override;
 
     Eigen::Matrix<double,3,9> GetJacobian(){
         linearizeOplus();
@@ -471,16 +470,16 @@ public:
     EdgeStereoOnlyPose(const Eigen::Vector3f &Xw_, int cam_idx_=0):
         Xw(Xw_.cast<double>()), cam_idx(cam_idx_){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexPose* VPose = static_cast<const VertexPose*>(_vertices[0]);
         const Eigen::Vector3d obs(_measurement);
         _error = obs - VPose->estimate().ProjectStereo(Xw, cam_idx);
     }
 
-    virtual void linearizeOplus();
+    void linearizeOplus() override;
 
     Eigen::Matrix<double,6,6> GetHessian(){
         linearizeOplus();
@@ -499,11 +498,11 @@ public:
 
     EdgeInertial(IMU::Preintegrated* pInt);
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError();
-    virtual void linearizeOplus();
+    void computeError() override;
+    void linearizeOplus() override;
 
     Eigen::Matrix<double,24,24> GetHessian(){
         linearizeOplus();
@@ -553,11 +552,11 @@ public:
     // EdgeInertialGS(IMU::Preintegrated* pInt);
     EdgeInertialGS(IMU::Preintegrated* pInt);
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError();
-    virtual void linearizeOplus();
+    void computeError() override;
+    void linearizeOplus() override;
 
     const Eigen::Matrix3d JRg, JVg, JPg;
     const Eigen::Matrix3d JVa, JPa;
@@ -639,16 +638,16 @@ public:
 
     EdgeGyroRW(){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexGyroBias* VG1= static_cast<const VertexGyroBias*>(_vertices[0]);
         const VertexGyroBias* VG2= static_cast<const VertexGyroBias*>(_vertices[1]);
         _error = VG2->estimate()-VG1->estimate();
     }
 
-    virtual void linearizeOplus(){
+    void linearizeOplus() override {
         _jacobianOplusXi = -Eigen::Matrix3d::Identity();
         _jacobianOplusXj.setIdentity();
     }
@@ -675,16 +674,16 @@ public:
 
     EdgeAccRW(){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexAccBias* VA1= static_cast<const VertexAccBias*>(_vertices[0]);
         const VertexAccBias* VA2= static_cast<const VertexAccBias*>(_vertices[1]);
         _error = VA2->estimate()-VA1->estimate();
     }
 
-    virtual void linearizeOplus(){
+    void linearizeOplus() override {
         _jacobianOplusXi = -Eigen::Matrix3d::Identity();
         _jacobianOplusXj.setIdentity();
     }
@@ -735,11 +734,11 @@ public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         EdgePriorPoseImu(ConstraintPoseImu* c);
 
-        virtual bool read(std::istream& is){return false;}
-        virtual bool write(std::ostream& os) const{return false;}
+        bool read(std::istream& is) override {return false;}
+        bool write(std::ostream& os) const override {return false;}
 
-        void computeError();
-        virtual void linearizeOplus();
+        void computeError() override;
+        void linearizeOplus() override;
 
         Eigen::Matrix<double,15,15> GetHessian(){
             linearizeOplus();
@@ -772,14 +771,14 @@ public:
 
     EdgePriorAcc(const Eigen::Vector3f &bprior_):bprior(bprior_.cast<double>()){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexAccBias* VA = static_cast<const VertexAccBias*>(_vertices[0]);
         _error = bprior - VA->estimate();
     }
-    virtual void linearizeOplus();
+    void linearizeOplus() override;
 
     Eigen::Matrix<double,3,3> GetHessian(){
         linearizeOplus();
@@ -796,14 +795,14 @@ public:
 
     EdgePriorGyro(const Eigen::Vector3f &bprior_):bprior(bprior_.cast<double>()){}
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexGyroBias* VG = static_cast<const VertexGyroBias*>(_vertices[0]);
         _error = bprior - VG->estimate();
     }
-    virtual void linearizeOplus();
+    void linearizeOplus() override;
 
     Eigen::Matrix<double,3,3> GetHessian(){
         linearizeOplus();
@@ -825,10 +824,10 @@ public:
         dtij = deltaT.block<3,1>(0,3);
     }
 
-    virtual bool read(std::istream& is){return false;}
-    virtual bool write(std::ostream& os) const{return false;}
+    bool read(std::istream& is) override {return false;}
+    bool write(std::ostream& os) const override {return false;}
 
-    void computeError(){
+    void computeError() override {
         const VertexPose4DoF* VPi = static_cast<const VertexPose4DoF*>(_vertices[0]);
         const VertexPose4DoF* VPj = static_cast<const VertexPose4DoF*>(_vertices[1]);
         _error << LogSO3(VPi->estimate().Rcw[0]*VPj->estimate().Rcw[0].transpose()*dRij.transpose()),
@@ -843,5 +842,3 @@ public:
 };
 
 } //namespace ORB_SLAM2
-
-#endif // G2OTYPES_H
