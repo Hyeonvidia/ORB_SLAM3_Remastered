@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include "ImuTypes.hpp"
 
 namespace ORB_SLAM3 {
 
@@ -33,6 +34,23 @@ public:
     virtual bool IsInitializing() = 0;
     virtual double GetCurrKFTime() = 0;
     virtual KeyFrame* GetCurrKF() = 0;
+};
+
+// Interface for querying/updating tracking state (used by LocalMapping)
+class ITrackingState {
+public:
+    virtual ~ITrackingState() = default;
+
+    // Query
+    virtual int GetMatchesInliers() = 0;
+    virtual int GetTrackingState() const = 0;
+    virtual double GetLastFrameTimestamp() const = 0;
+    virtual double GetCurrentFrameTimestamp() const = 0;
+
+    // Mutate
+    virtual void SetTrackingState(int state) = 0;
+    virtual void UpdateFrameIMU(float s, const IMU::Bias& b, KeyFrame* pCurrentKeyFrame) = 0;
+    virtual void SetIMUStartTime(double t) = 0;
 };
 
 } // namespace ORB_SLAM3

@@ -22,7 +22,6 @@
 #include "KeyFrame.hpp"
 #include "Atlas.hpp"
 #include "core/Interfaces.hpp"
-#include "Tracking.hpp"
 #include "KeyFrameDatabase.hpp"
 #include "Settings.hpp"
 
@@ -45,7 +44,7 @@ public:
 
     void SetLoopCloser(IKeyFrameConsumer* pLoopCloser);
 
-    void SetTracker(Tracking* pTracker);
+    void SetTracker(ITrackingState* pTracker);
 
     // Main function
     void Run();
@@ -158,7 +157,7 @@ protected:
     Atlas* mpAtlas;
 
     IKeyFrameConsumer* mpLoopCloser;
-    Tracking* mpTracker;
+    ITrackingState* mpTracker;
 
     std::list<KeyFrame*> mlNewKeyFrames;
 

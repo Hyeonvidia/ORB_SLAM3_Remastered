@@ -38,6 +38,7 @@
 
 #include "GeometricCamera.hpp"
 #include "TrackingObserver.hpp"
+#include "core/Interfaces.hpp"
 
 #include <mutex>
 #include <unordered_set>
@@ -54,8 +55,8 @@ class LoopClosing;
 class System;
 class Settings;
 
-class Tracking
-{  
+class Tracking : public ITrackingState
+{
 
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -95,19 +96,25 @@ public:
     // Use this function if you have deactivated local mapping and you only want to localize the camera.
     void InformOnlyTracking(const bool &flag);
 
-    void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame);
+    void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame) override;
     KeyFrame* GetLastKeyFrame()
     {
         return mpLastKeyFrame;
     }
 
     void CreateMapInAtlas();
-    //std::mutex mMutexTracks;
 
     //--
     void NewDataset();
     int GetNumberDataset();
-    int GetMatchesInliers();
+    int GetMatchesInliers() override;
+
+    // ITrackingState interface
+    int GetTrackingState() const override { return mState; }
+    void SetTrackingState(int state) override { mState = static_cast<eTrackingState>(state); }
+    double GetLastFrameTimestamp() const override { return mLastFrame.mTimeStamp; }
+    double GetCurrentFrameTimestamp() const override { return mCurrentFrame.mTimeStamp; }
+    void SetIMUStartTime(double t) override { t0IMU = t; }
 
     //DEBUG
     void SaveSubTrajectory(std::string strNameFile_frames, std::string strNameFile_kf, std::string strFolder="");

@@ -18,6 +18,7 @@
 
 
 #include "LocalMapping.hpp"
+#include "Tracking.hpp"
 #include "LoopClosing.hpp"
 #include "ORBmatcher.hpp"
 #include "Optimizer.hpp"
@@ -56,7 +57,7 @@ void LocalMapping::SetLoopCloser(IKeyFrameConsumer* pLoopCloser)
     mpLoopCloser = pLoopCloser;
 }
 
-void LocalMapping::SetTracker(Tracking *pTracker)
+void LocalMapping::SetTracker(ITrackingState *pTracker)
 {
     mpTracker=pTracker;
 }
@@ -199,7 +200,7 @@ void LocalMapping::Run()
 
                 if ((mTinit<50.0f) && mbInertial)
                 {
-                    if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
+                    if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->GetTrackingState()==Tracking::OK) // Enter here everytime local-mapping is called
                     {
                         if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){
                             if (mTinit>5.0f)
@@ -461,7 +462,7 @@ void LocalMapping::CreateNewMapPoints()
 
         // Search matches that fullfil epipolar constraint
         std::vector<std::pair<size_t,size_t> > vMatchedIndices;
-        bool bCoarse = mbInertial && mpTracker->mState==Tracking::RECENTLY_LOST && mpCurrentKeyFrame->GetMap()->GetIniertialBA2();
+        bool bCoarse = mbInertial && mpTracker->GetTrackingState()==Tracking::RECENTLY_LOST && mpCurrentKeyFrame->GetMap()->GetIniertialBA2();
 
         matcher.SearchForTriangulation(mpCurrentKeyFrame,pKF2,vMatchedIndices,false,bCoarse);
 
@@ -1261,7 +1262,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     mScale=1.0;
 
-    mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
+    mInitTime = mpTracker->GetLastFrameTimestamp()-vpKF.front()->mTimeStamp;
 
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
@@ -1296,7 +1297,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     if (!mpAtlas->isImuInitialized())
     {
         mpAtlas->SetImuInitialized();
-        mpTracker->t0IMU = mpTracker->mCurrentFrame.mTimeStamp;
+        mpTracker->SetIMUStartTime(mpTracker->GetCurrentFrameTimestamp());
         mpCurrentKeyFrame->bImu = true;
     }
 
@@ -1418,7 +1419,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     }
     mlNewKeyFrames.clear();
 
-    mpTracker->mState=Tracking::OK;
+    mpTracker->SetTrackingState(Tracking::OK);
     bInitializing = false;
 
     mpCurrentKeyFrame->GetMap()->IncreaseChangeIndex();
