@@ -23,6 +23,7 @@
 #include"MapPoint.hpp"
 #include"KeyFrame.hpp"
 #include "Settings.hpp"
+#include "TrackingObserver.hpp"
 #include<pangolin/pangolin.h>
 
 #include<mutex>
@@ -32,7 +33,7 @@ namespace ORB_SLAM3
 
 class Settings;
 
-class MapDrawer
+class MapDrawer : public TrackingObserver
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -45,6 +46,10 @@ public:
     void DrawMapPoints();
     void DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph, const bool bDrawOptLba);
     void DrawCurrentCamera(pangolin::OpenGlMatrix &Twc);
+    // TrackingObserver interface
+    void onTrackingUpdate(Tracking* tracker) override {}
+    void onPoseUpdate(const Sophus::SE3f& pose) override;
+
     void SetCurrentCameraPose(const Sophus::SE3f &Tcw);
     void SetReferenceKeyFrame(KeyFrame *pKF);
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);

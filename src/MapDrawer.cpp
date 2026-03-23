@@ -438,6 +438,8 @@ void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
 }
 
 
+void MapDrawer::onPoseUpdate(const Sophus::SE3f& pose) { SetCurrentCameraPose(pose); }
+
 void MapDrawer::SetCurrentCameraPose(const Sophus::SE3f &Tcw)
 {
     std::unique_lock<std::mutex> lock(mMutexCamera);

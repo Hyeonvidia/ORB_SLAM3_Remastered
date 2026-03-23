@@ -1438,6 +1438,23 @@ void Tracking::SetViewer(Viewer *pViewer)
     mpViewer=pViewer;
 }
 
+void Tracking::addObserver(TrackingObserver* observer)
+{
+    mObservers.push_back(observer);
+}
+
+void Tracking::notifyTrackingUpdate()
+{
+    for (auto* obs : mObservers)
+        obs->onTrackingUpdate(this);
+}
+
+void Tracking::notifyPoseUpdate(const Sophus::SE3f& pose)
+{
+    for (auto* obs : mObservers)
+        obs->onPoseUpdate(pose);
+}
+
 void Tracking::SetStepByStep(bool bSet)
 {
     bStepByStep = bSet;

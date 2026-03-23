@@ -22,6 +22,7 @@
 #include "Tracking.hpp"
 #include "MapPoint.hpp"
 #include "Atlas.hpp"
+#include "TrackingObserver.hpp"
 
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
@@ -36,13 +37,17 @@ namespace ORB_SLAM3
 class Tracking;
 class Viewer;
 
-class FrameDrawer
+class FrameDrawer : public TrackingObserver
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     FrameDrawer(Atlas* pAtlas);
 
-    // Update info from the last processed frame.
+    // TrackingObserver interface
+    void onTrackingUpdate(Tracking* tracker) override;
+    void onPoseUpdate(const Sophus::SE3f& pose) override {}
+
+    // Legacy API (calls onTrackingUpdate)
     void Update(Tracking *pTracker);
 
     // Draw last processed frame.

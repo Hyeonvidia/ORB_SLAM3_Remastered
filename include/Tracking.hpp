@@ -37,9 +37,11 @@
 #include "Settings.hpp"
 
 #include "GeometricCamera.hpp"
+#include "TrackingObserver.hpp"
 
 #include <mutex>
 #include <unordered_set>
+#include <vector>
 
 namespace ORB_SLAM3
 {
@@ -77,6 +79,12 @@ public:
     void SetLocalMapper(LocalMapping* pLocalMapper);
     void SetLoopClosing(LoopClosing* pLoopClosing);
     void SetViewer(Viewer* pViewer);
+
+    // Observer pattern
+    void addObserver(TrackingObserver* observer);
+    void notifyTrackingUpdate();
+    void notifyPoseUpdate(const Sophus::SE3f& pose);
+
     void SetStepByStep(bool bSet);
     bool GetStepByStep();
 
@@ -280,6 +288,7 @@ protected:
     Viewer* mpViewer;
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
+    std::vector<TrackingObserver*> mObservers;
     bool bStepByStep;
 
     //Atlas

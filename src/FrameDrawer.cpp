@@ -367,6 +367,8 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 
 }
 
+void FrameDrawer::onTrackingUpdate(Tracking *tracker) { Update(tracker); }
+
 void FrameDrawer::Update(Tracking *pTracker)
 {
     std::unique_lock<std::mutex> lock(mMutex);
