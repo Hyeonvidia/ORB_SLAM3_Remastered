@@ -24,8 +24,8 @@
 #include "Converter.hpp"
 #include "G2oTypes.hpp"
 #include "Optimizer.hpp"
-#include "Pinhole.hpp"
-#include "KannalaBrandt8.hpp"
+#include "CameraModels/CameraFactory.hpp"
+
 #include "MLPnPsolver.hpp"
 #include "GeometricTools.hpp"
 
@@ -746,7 +746,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
 
         std::vector<float> vCamCalib{fx,fy,cx,cy};
 
-        mpCamera = new Pinhole(vCamCalib);
+        mpCamera = CameraFactory::create(CameraFactory::Type::Pinhole, vCamCalib);
 
         mpCamera = mpAtlas->AddCamera(mpCamera);
 
@@ -890,7 +890,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
             }
 
             std::vector<float> vCamCalib{fx,fy,cx,cy,k1,k2,k3,k4};
-            mpCamera = new KannalaBrandt8(vCamCalib);
+            mpCamera = CameraFactory::create(CameraFactory::Type::KannalaBrandt8, vCamCalib);
             mpCamera = mpAtlas->AddCamera(mpCamera);
             std::cout << "- Camera: Fisheye" << std::endl;
             std::cout << "- Image scale: " << mImageScale << std::endl;
@@ -1089,7 +1089,7 @@ bool Tracking::ParseCamParamFile(cv::FileStorage &fSettings)
                 mpFrameDrawer->both = true;
 
                 std::vector<float> vCamCalib2{fx,fy,cx,cy,k1,k2,k3,k4};
-                mpCamera2 = new KannalaBrandt8(vCamCalib2);
+                mpCamera2 = CameraFactory::create(CameraFactory::Type::KannalaBrandt8, vCamCalib2);
                 mpCamera2 = mpAtlas->AddCamera(mpCamera2);
 
                 mTlr = Converter::toSophus(cvTlr);

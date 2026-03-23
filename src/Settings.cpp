@@ -18,8 +18,7 @@
 
 #include "Settings.hpp"
 
-#include "CameraModels/Pinhole.hpp"
-#include "CameraModels/KannalaBrandt8.hpp"
+#include "CameraModels/CameraFactory.hpp"
 
 #include "System.hpp"
 
@@ -198,8 +197,8 @@ namespace ORB_SLAM3 {
 
             vCalibration = {fx, fy, cx, cy};
 
-            calibration1_ = new Pinhole(vCalibration);
-            originalCalib1_ = new Pinhole(vCalibration);
+            calibration1_ = CameraFactory::create(cameraModel, vCalibration);
+            originalCalib1_ = CameraFactory::create(cameraModel, vCalibration);
 
             //Check if it is a distorted PinHole
             readParameter<float>(fSettings,"Camera1.k1",found,false);
@@ -234,8 +233,8 @@ namespace ORB_SLAM3 {
 
             vCalibration = {fx, fy, cx, cy};
 
-            calibration1_ = new Pinhole(vCalibration);
-            originalCalib1_ = new Pinhole(vCalibration);
+            calibration1_ = CameraFactory::create(cameraModel, vCalibration);
+            originalCalib1_ = CameraFactory::create(cameraModel, vCalibration);
 
             //Rectified images are assumed to be ideal PinHole images (no distortion)
         }
@@ -255,8 +254,8 @@ namespace ORB_SLAM3 {
 
             vCalibration = {fx,fy,cx,cy,k0,k1,k2,k3};
 
-            calibration1_ = new KannalaBrandt8(vCalibration);
-            originalCalib1_ = new KannalaBrandt8(vCalibration);
+            calibration1_ = CameraFactory::create(cameraModel, vCalibration);
+            originalCalib1_ = CameraFactory::create(cameraModel, vCalibration);
 
             if(sensor_ == System::STEREO || sensor_ == System::IMU_STEREO){
                 int colBegin = readParameter<int>(fSettings,"Camera1.overlappingBegin",found);
@@ -287,8 +286,8 @@ namespace ORB_SLAM3 {
 
             vCalibration = {fx, fy, cx, cy};
 
-            calibration2_ = new Pinhole(vCalibration);
-            originalCalib2_ = new Pinhole(vCalibration);
+            calibration2_ = CameraFactory::create("PinHole", vCalibration);
+            originalCalib2_ = CameraFactory::create("PinHole", vCalibration);
 
             //Check if it is a distorted PinHole
             readParameter<float>(fSettings,"Camera2.k1",found,false);
@@ -322,8 +321,8 @@ namespace ORB_SLAM3 {
 
             vCalibration = {fx,fy,cx,cy,k0,k1,k2,k3};
 
-            calibration2_ = new KannalaBrandt8(vCalibration);
-            originalCalib2_ = new KannalaBrandt8(vCalibration);
+            calibration2_ = CameraFactory::create("KannalaBrandt8", vCalibration);
+            originalCalib2_ = CameraFactory::create("KannalaBrandt8", vCalibration);
 
             int colBegin = readParameter<int>(fSettings,"Camera2.overlappingBegin",found);
             int colEnd = readParameter<int>(fSettings,"Camera2.overlappingEnd",found);
