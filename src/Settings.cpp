@@ -550,6 +550,8 @@ namespace ORB_SLAM3 {
         }
 
         if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO){
+            // Rectified stereo uses Camera1 params for both cameras
+            GeometricCamera* pCalib2 = settings.originalCalib2_ ? settings.originalCalib2_ : settings.originalCalib1_;
             output << "\t-Camera 2 parameters (";
             if(settings.cameraType_ == Settings::PinHole || settings.cameraType_ ==  Settings::Rectified){
                 output << "Pinhole";
@@ -558,8 +560,8 @@ namespace ORB_SLAM3 {
                 output << "Kannala-Brandt";
             }
             output << "" << ": [";
-            for(size_t i = 0; i < settings.originalCalib2_->size(); i++){
-                output << " " << settings.originalCalib2_->getParameter(i);
+            for(size_t i = 0; i < pCalib2->size(); i++){
+                output << " " << pCalib2->getParameter(i);
             }
             output << " ]" << std::endl;
 
