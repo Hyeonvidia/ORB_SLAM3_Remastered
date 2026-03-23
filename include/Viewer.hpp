@@ -27,6 +27,8 @@
 #include "Settings.hpp"
 
 #include <mutex>
+#include <memory>
+#include <pangolin/pangolin.h>
 
 namespace ORB_SLAM3
 {
@@ -94,6 +96,8 @@ private:
 
     bool mbStopTrack;
 
+    // Pangolin texture for rendering FrameDrawer output (replaces cv::imshow)
+    std::unique_ptr<pangolin::GlTexture> mFrameTexture;
 };
 
 }

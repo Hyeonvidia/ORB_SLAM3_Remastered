@@ -43,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libepoxy-dev \
     # Boost serialization (required by ORB_SLAM3 map save/load)
     libboost-serialization-dev \
+    # GTK3 (OpenCV highgui backend — fallback for GUI display)
+    libgtk-3-dev \
     # OpenSSL crypto
     libssl-dev \
     # Python (evaluation scripts)

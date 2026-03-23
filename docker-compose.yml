@@ -74,6 +74,7 @@ services:
       - XDG_RUNTIME_DIR=/tmp
     command: >
       bash -c "
+        scripts/build_third_party.sh &&
         ldconfig &&
         echo '=== Running Mono EuRoC with Viewer ===' &&
         ./bin/mono_euroc Vocabulary/ORBvoc.txt Examples/Monocular/EuRoC.yaml /datasets/EuRoc/MH01/ Examples/Monocular/EuRoC_TimeStamps/MH01.txt

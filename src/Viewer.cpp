@@ -196,15 +196,21 @@ void Viewer::Run()
                 );
 
     // Add named OpenGL viewport to window and provide 3D Handler
+    // 3D map view occupies top 60% of window (right of menu panel)
     pangolin::View& d_cam = pangolin::CreateDisplay()
-            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
+            .SetBounds(0.4, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
             .SetHandler(new pangolin::Handler3D(s_cam));
+
+    // 2D frame view occupies bottom 40% of window (right of menu panel)
+    pangolin::View& d_image = pangolin::Display("image")
+            .SetBounds(0.0, 0.4, pangolin::Attach::Pix(175), 1.0)
+            .SetLock(pangolin::LockLeft, pangolin::LockBottom);
 
     pangolin::OpenGlMatrix Twc, Twr;
     Twc.SetIdentity();
     pangolin::OpenGlMatrix Ow; // Oriented with g in the z axis
     Ow.SetIdentity();
-    cv::namedWindow("ORB-SLAM3: Current Frame");
+
 
     bool bFollow = true;
     bool bLocalizationMode = false;
@@ -315,8 +321,6 @@ void Viewer::Run()
         if(menuShowPoints)
             mpMapDrawer->DrawMapPoints();
 
-        pangolin::FinishFrame();
-
         cv::Mat toShow;
         cv::Mat im = mpFrameDrawer->DrawFrame(trackedImageScale);
 
@@ -335,8 +339,29 @@ void Viewer::Run()
             cv::resize(toShow, toShow, cv::Size(width, height));
         }
 
-        cv::imshow("ORB-SLAM3: Current Frame",toShow);
-        cv::waitKey(mT);
+        // Convert to BGRA (4 channels) — GL_RGBA is universally supported,
+        // avoids alignment issues with indirect OpenGL rendering
+        if(toShow.channels() < 3)
+            cv::cvtColor(toShow, toShow, cv::COLOR_GRAY2BGRA);
+        else if(toShow.channels() == 3)
+            cv::cvtColor(toShow, toShow, cv::COLOR_BGR2BGRA);
+
+        // Lazily initialize or reinitialize the GL texture
+        if(!mFrameTexture || mFrameTexture->width != toShow.cols || mFrameTexture->height != toShow.rows)
+        {
+            mFrameTexture = std::make_unique<pangolin::GlTexture>(
+                toShow.cols, toShow.rows, GL_RGBA8, false, 0, GL_BGRA, GL_UNSIGNED_BYTE);
+        }
+
+        // Upload cv::Mat data to GPU texture and render
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        mFrameTexture->Upload(toShow.data, GL_BGRA, GL_UNSIGNED_BYTE);
+        d_image.Activate();
+        glColor3f(1.0f, 1.0f, 1.0f);
+        mFrameTexture->RenderToViewportFlipY();
+
+        // Swap buffers after ALL rendering (3D map + 2D frame) is complete
+        pangolin::FinishFrame();
 
         if(menuReset)
         {
