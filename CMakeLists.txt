@@ -92,6 +92,7 @@ add_library(${PROJECT_NAME} SHARED
     src/mapping/TwoViewReconstruction.cpp
     # recognition/
     src/recognition/KeyFrameDatabase.cpp
+    src/recognition/PlaceRecognition.cpp
     # closing/
     src/closing/LoopClosing.cpp
     src/closing/Sim3Solver.cpp
