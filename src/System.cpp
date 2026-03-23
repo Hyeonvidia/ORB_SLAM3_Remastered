@@ -20,6 +20,7 @@
 
 #include "System.hpp"
 #include "Converter.hpp"
+#include "PlaceRecognition.hpp"
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
@@ -208,9 +209,12 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
     else
         mpLocalMapper->mbFarPoints = false;
 
+    //Initialize Place Recognition module
+    mpPlaceRecognition = new PlaceRecognition(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC);
+
     //Initialize the Loop Closing thread and launch
-    // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
-    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC); // mSensor!=MONOCULAR);
+    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC);
+    mpLoopCloser->SetPlaceRecognition(mpPlaceRecognition);
     mptLoopClosing = new std::thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
     //Set pointers between threads

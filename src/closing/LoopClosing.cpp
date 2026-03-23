@@ -18,6 +18,7 @@
 
 
 #include "LoopClosing.hpp"
+#include "PlaceRecognition.hpp"
 
 #include "Sim3Solver.hpp"
 #include "Converter.hpp"
@@ -109,7 +110,8 @@ void LoopClosing::Run()
             std::chrono::steady_clock::time_point time_StartPR = std::chrono::steady_clock::now();
 #endif
 
-            bool bFindedRegion = NewDetectCommonRegions();
+            auto result = mpPlaceRecognition->detect(mpCurrentKF, static_cast<System::eSensor>(mpTracker->mSensor));
+            bool bFindedRegion = result.loopDetected || result.mergeDetected;
 
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndPR = std::chrono::steady_clock::now();
@@ -119,7 +121,7 @@ void LoopClosing::Run()
 #endif
             if(bFindedRegion)
             {
-                if(mbMergeDetected)
+                if(result.mergeDetected)
                 {
                     if ((mpTracker->mSensor==System::IMU_MONOCULAR || mpTracker->mSensor==System::IMU_STEREO || mpTracker->mSensor==System::IMU_RGBD) &&
                         (!mpCurrentKF->GetMap()->isImuInitialized()))
@@ -128,27 +130,22 @@ void LoopClosing::Run()
                     }
                     else
                     {
-                        Sophus::SE3d mTmw = mpMergeMatchedKF->GetPose().cast<double>();
+                        Sophus::SE3d mTmw = result.mergeMatchedKF->GetPose().cast<double>();
                         g2o::Sim3 gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
                         Sophus::SE3d mTcw = mpCurrentKF->GetPose().cast<double>();
                         g2o::Sim3 gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
-                        g2o::Sim3 gSw2c = mg2oMergeSlw.inverse();
-                        g2o::Sim3 gSw1m = mg2oMergeSlw;
+                        g2o::Sim3 gSw2c = result.mergeSlw.inverse();
 
                         mSold_new = (gSw2c * gScw1);
 
 
-                        if(mpCurrentKF->GetMap()->IsInertial() && mpMergeMatchedKF->GetMap()->IsInertial())
+                        if(mpCurrentKF->GetMap()->IsInertial() && result.mergeMatchedKF->GetMap()->IsInertial())
                         {
                             std::cout << "Merge check transformation with IMU" << std::endl;
                             if(mSold_new.scale()<0.90||mSold_new.scale()>1.1){
-                                mpMergeLastCurrentKF->SetErase();
-                                mpMergeMatchedKF->SetErase();
-                                mnMergeNumCoincidences = 0;
-                                mvpMergeMatchedMPs.clear();
-                                mvpMergeMPs.clear();
-                                mnMergeNumNotFound = 0;
-                                mbMergeDetected = false;
+                                result.mergeLastCurrentKF->SetErase();
+                                result.mergeMatchedKF->SetErase();
+                                mpPlaceRecognition->resetMergeState();
                                 Verbose::PrintMess("scale bad estimated. Abort merging", Verbose::VERBOSITY_NORMAL);
                                 continue;
                             }
@@ -163,9 +160,19 @@ void LoopClosing::Run()
                             }
                         }
 
-                        mg2oMergeSmw = gSmw2 * gSw2c * gScw1;
+                        g2o::Sim3 mg2oMergeSmw_local = gSmw2 * gSw2c * gScw1;
 
-                        mg2oMergeScw = mg2oMergeSlw;
+                        g2o::Sim3 mg2oMergeScw_local = result.mergeSlw;
+
+                        // Copy result to member vars for CorrectLoop/MergeLocal compatibility
+                        mpMergeMatchedKF = result.mergeMatchedKF;
+                        mpMergeLastCurrentKF = result.mergeLastCurrentKF;
+                        mg2oMergeSlw = result.mergeSlw;
+                        mg2oMergeSmw = mg2oMergeSmw_local;
+                        mg2oMergeScw = mg2oMergeScw_local;
+                        mvpMergeMPs = result.mergeMPs;
+                        mvpMergeMatchedMPs = result.mergeMatchedMPs;
+                        mvpMergeConnectedKFs = result.mergeConnectedKFs;
 
                         //mpTracker->SetStepByStep(true);
 
@@ -193,50 +200,42 @@ void LoopClosing::Run()
                     }
 
                     vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
-                    vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
+                    vdPR_MatchedTime.push_back(result.mergeMatchedKF->mTimeStamp);
                     vnPR_TypeRecogn.push_back(1);
 
                     // Reset all variables
-                    mpMergeLastCurrentKF->SetErase();
-                    mpMergeMatchedKF->SetErase();
-                    mnMergeNumCoincidences = 0;
-                    mvpMergeMatchedMPs.clear();
-                    mvpMergeMPs.clear();
-                    mnMergeNumNotFound = 0;
-                    mbMergeDetected = false;
+                    result.mergeLastCurrentKF->SetErase();
+                    result.mergeMatchedKF->SetErase();
+                    mpPlaceRecognition->resetMergeState();
 
-                    if(mbLoopDetected)
+                    if(result.loopDetected)
                     {
                         // Reset Loop variables
-                        mpLoopLastCurrentKF->SetErase();
-                        mpLoopMatchedKF->SetErase();
-                        mnLoopNumCoincidences = 0;
-                        mvpLoopMatchedMPs.clear();
-                        mvpLoopMPs.clear();
-                        mnLoopNumNotFound = 0;
-                        mbLoopDetected = false;
+                        result.loopLastCurrentKF->SetErase();
+                        result.loopMatchedKF->SetErase();
+                        mpPlaceRecognition->resetLoopState();
                     }
 
                 }
 
-                if(mbLoopDetected)
+                if(result.loopDetected)
                 {
                     bool bGoodLoop = true;
                     vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
-                    vdPR_MatchedTime.push_back(mpLoopMatchedKF->mTimeStamp);
+                    vdPR_MatchedTime.push_back(result.loopMatchedKF->mTimeStamp);
                     vnPR_TypeRecogn.push_back(0);
 
                     Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
 
-                    mg2oLoopScw = mg2oLoopSlw; //*mvg2oSim3LoopTcw[nCurrentIndex];
+                    g2o::Sim3 mg2oLoopScw_local = result.loopSlw;
                     if(mpCurrentKF->GetMap()->IsInertial())
                     {
                         Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
                         g2o::Sim3 g2oTwc(Twc.unit_quaternion(),Twc.translation(),1.0);
-                        g2o::Sim3 g2oSww_new = g2oTwc*mg2oLoopScw;
+                        g2o::Sim3 g2oSww_new = g2oTwc*mg2oLoopScw_local;
 
                         Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
-                        std::cout << "phi = " << phi.transpose() << std::endl; 
+                        std::cout << "phi = " << phi.transpose() << std::endl;
                         if (fabs(phi(0))<0.008f && fabs(phi(1))<0.008f && fabs(phi(2))<0.349f)
                         {
                             if(mpCurrentKF->GetMap()->IsInertial())
@@ -248,7 +247,7 @@ void LoopClosing::Run()
                                     phi(0)=0;
                                     phi(1)=0;
                                     g2oSww_new = g2o::Sim3(ExpSO3(phi),g2oSww_new.translation(),1.0);
-                                    mg2oLoopScw = g2oTwc.inverse()*g2oSww_new;
+                                    mg2oLoopScw_local = g2oTwc.inverse()*g2oSww_new;
                                 }
                             }
 
@@ -263,7 +262,15 @@ void LoopClosing::Run()
 
                     if (bGoodLoop) {
 
-                        mvpLoopMapPoints = mvpLoopMPs;
+                        mvpLoopMapPoints = result.loopMPs;
+
+                        // Copy result to member vars for CorrectLoop compatibility
+                        mpLoopMatchedKF = result.loopMatchedKF;
+                        mpLoopLastCurrentKF = result.loopLastCurrentKF;
+                        mg2oLoopSlw = result.loopSlw;
+                        mg2oLoopScw = mg2oLoopScw_local;
+                        mvpLoopMPs = result.loopMPs;
+                        mvpLoopMatchedMPs = result.loopMatchedMPs;
 
 #ifdef REGISTER_TIMES
                         std::chrono::steady_clock::time_point time_StartLoop = std::chrono::steady_clock::now();
@@ -283,13 +290,9 @@ void LoopClosing::Run()
                     }
 
                     // Reset all variables
-                    mpLoopLastCurrentKF->SetErase();
-                    mpLoopMatchedKF->SetErase();
-                    mnLoopNumCoincidences = 0;
-                    mvpLoopMatchedMPs.clear();
-                    mvpLoopMPs.clear();
-                    mnLoopNumNotFound = 0;
-                    mbLoopDetected = false;
+                    result.loopLastCurrentKF->SetErase();
+                    result.loopMatchedKF->SetErase();
+                    mpPlaceRecognition->resetLoopState();
                 }
 
             }

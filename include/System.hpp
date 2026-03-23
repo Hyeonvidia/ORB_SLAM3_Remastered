@@ -77,6 +77,7 @@ class Atlas;
 class Tracking;
 class LocalMapping;
 class LoopClosing;
+class PlaceRecognition;
 class Settings;
 
 class System
@@ -218,6 +219,9 @@ private:
 
     // Local Mapper. It manages the local map and performs local bundle adjustment.
     LocalMapping* mpLocalMapper;
+
+    // Place Recognition — detects common regions for loop/merge
+    PlaceRecognition* mpPlaceRecognition;
 
     // Loop Closer. It searches loops with every new keyframe. If there is a loop it performs
     // a pose graph optimization and full bundle adjustment (in a new thread) afterwards.

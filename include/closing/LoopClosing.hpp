@@ -24,6 +24,7 @@
 #include "Atlas.hpp"
 #include "ORBVocabulary.hpp"
 #include "Tracking.hpp"
+#include "core/Types.hpp"
 
 #include "KeyFrameDatabase.hpp"
 
@@ -39,23 +40,20 @@ class Tracking;
 class LocalMapping;
 class KeyFrameDatabase;
 class Map;
+class PlaceRecognition;
 
 
 class LoopClosing
 {
 public:
 
-    typedef std::pair<std::set<KeyFrame*>,int> ConsistentGroup;
-    typedef std::map<KeyFrame*,g2o::Sim3,std::less<KeyFrame*>,
-        Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3> > > KeyFrameAndPose;
-
 public:
 
     LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale, const bool bActiveLC);
 
     void SetTracker(Tracking* pTracker);
-
     void SetLocalMapper(LocalMapping* pLocalMapper);
+    void SetPlaceRecognition(PlaceRecognition* pPR) { mpPlaceRecognition = pPR; }
 
     // Main function
     void Run();
@@ -184,6 +182,7 @@ protected:
 
     //-------
     Map* mpLastMap;
+    PlaceRecognition* mpPlaceRecognition = nullptr;
 
     bool mbLoopDetected;
     int mnLoopNumCoincidences;
