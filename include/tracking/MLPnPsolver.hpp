@@ -50,6 +50,7 @@
 
 #include "MapPoint.hpp"
 #include "Frame.hpp"
+#include "opengv_wrapper.hpp"
 
 #include<Eigen/Dense>
 #include<Eigen/Sparse>
@@ -66,60 +67,22 @@ namespace ORB_SLAM3{
         void SetRansacParameters(double probability = 0.99, int minInliers = 8, int maxIterations = 300, int minSet = 6, float epsilon = 0.4,
                                  float th2 = 5.991);
 
-        //Find metod is necessary?
-
         bool iterate(int nIterations, bool &bNoMore, std::vector<bool> &vbInliers, int &nInliers, Eigen::Matrix4f &Tout);
 
-        //Type definitions needed by the original code
-
-        /** A 3-vector of unit length used to describe landmark observations/bearings
-         *  in camera frames (always expressed in camera frames)
-         */
-        typedef Eigen::Vector3d bearingVector_t;
-
-        /** An array of bearing-vectors */
-        typedef std::vector<bearingVector_t, Eigen::aligned_allocator<bearingVector_t> >
-                bearingVectors_t;
-
-        /** A 2-matrix containing the 2D covariance information of a bearing vector
-        */
-        typedef Eigen::Matrix2d cov2_mat_t;
-
-        /** A 3-matrix containing the 3D covariance information of a bearing vector */
-        typedef Eigen::Matrix3d cov3_mat_t;
-
-        /** An array of 3D covariance matrices */
-        typedef std::vector<cov3_mat_t, Eigen::aligned_allocator<cov3_mat_t> >
-                cov3_mats_t;
-
-        /** A 3-vector describing a point in 3D-space */
-        typedef Eigen::Vector3d point_t;
-
-        /** An array of 3D-points */
-        typedef std::vector<point_t, Eigen::aligned_allocator<point_t> >
-                points_t;
-
-        /** A homogeneous 3-vector describing a point in 3D-space */
-        typedef Eigen::Vector4d point4_t;
-
-        /** An array of homogeneous 3D-points */
-        typedef std::vector<point4_t, Eigen::aligned_allocator<point4_t> >
-                points4_t;
-
-        /** A 3-vector containing the rodrigues parameters of a rotation matrix */
-        typedef Eigen::Vector3d rodrigues_t;
-
-        /** A rotation matrix */
-        typedef Eigen::Matrix3d rotation_t;
-
-        /** A 3x4 transformation matrix containing rotation \f$ \mathbf{R} \f$ and
-         *  translation \f$ \mathbf{t} \f$ as follows:
-         *  \f$ \left( \begin{array}{cc} \mathbf{R} & \mathbf{t} \end{array} \right) \f$
-         */
-        typedef Eigen::Matrix<double,3,4> transformation_t;
-
-        /** A 3-vector describing a translation/camera position */
-        typedef Eigen::Vector3d translation_t;
+        // Type aliases from OpenGV wrapper (replaces inline typedefs)
+        using bearingVector_t  = slam3::geometry::BearingVector;
+        using bearingVectors_t = slam3::geometry::BearingVectors;
+        using cov2_mat_t       = slam3::geometry::Covariance2d;
+        using cov3_mat_t       = slam3::geometry::Covariance3d;
+        using cov3_mats_t      = slam3::geometry::Covariances3d;
+        using point_t          = slam3::geometry::Point3d;
+        using points_t         = slam3::geometry::Points3d;
+        using point4_t         = slam3::geometry::Point4d;
+        using points4_t        = slam3::geometry::Points4d;
+        using rodrigues_t      = slam3::geometry::Rodrigues;
+        using rotation_t       = slam3::geometry::Rotation;
+        using transformation_t = slam3::geometry::Transformation;
+        using translation_t    = slam3::geometry::Translation;
 
 
 
