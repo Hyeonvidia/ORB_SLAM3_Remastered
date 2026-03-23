@@ -31,14 +31,7 @@ time*
 Time*
 Table_*
 
-# Compiled binaries (Examples)
-Examples/Monocular/mono_*
-Examples/Stereo/stereo_*
-Examples/Monocular-Inertial/mono_inertial_*
-Examples/Stereo-Inertial/stereo_inertial_*
-Examples/RGB-D/rgbd_*
-Examples/RGB-D-Inertial/rgbd_inertial_*
-Examples/Calibration/recorder_*
+# Compiled binaries are output to bin/ (not Examples/)
 
 # IDE
 .idea/
