@@ -23,7 +23,8 @@ public:
         : vocPath_(vocPath), settingsPath_(settingsPath),
           loader_(loader), viewer_(viewer) {
         // Auto-disable viewer if no display available
-        if (viewer_ && !std::getenv("DISPLAY"))
+        const char* display = std::getenv("DISPLAY");
+        if (viewer_ && (!display || display[0] == '\0'))
             viewer_ = false;
     }
 
@@ -86,6 +87,9 @@ public:
             printStats(vTimesTrack);
         }
 
+        // Save trajectory before shutdown (Atlas must still be alive)
+        saveTrajectory(slam);
+
         // Keep viewer open for a moment after processing
         if (viewer_) {
             std::cout << "\nProcessing complete. Viewer will stay open for 10 seconds..." << std::endl;
@@ -93,7 +97,6 @@ public:
         }
 
         slam.Shutdown();
-        saveTrajectory(slam);
         return 0;
     }
 

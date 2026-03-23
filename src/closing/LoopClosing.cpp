@@ -106,6 +106,13 @@ void LoopClosing::Run()
                 mpLastCurrentKF->mvpLoopCandKFs.clear();
                 mpLastCurrentKF->mvpMergeCandKFs.clear();
             }
+            // Pop keyframe from queue (was inside NewDetectCommonRegions before extraction)
+            {
+                std::unique_lock<std::mutex> lock(mMutexLoopQueue);
+                mpCurrentKF = mlpLoopKeyFrameQueue.front();
+                mlpLoopKeyFrameQueue.pop_front();
+            }
+
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_StartPR = std::chrono::steady_clock::now();
 #endif
