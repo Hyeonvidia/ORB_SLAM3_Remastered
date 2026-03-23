@@ -51,7 +51,7 @@ LocalMapping::LocalMapping(System* pSys, Atlas *pAtlas, const float bMonocular, 
 
 }
 
-void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
+void LocalMapping::SetLoopCloser(IKeyFrameConsumer* pLoopCloser)
 {
     mpLoopCloser = pLoopCloser;
 }

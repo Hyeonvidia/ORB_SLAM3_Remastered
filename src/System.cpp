@@ -214,7 +214,7 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
     mpPlaceRecognition = new PlaceRecognition(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC);
 
     //Initialize the Loop Closing thread and launch
-    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC);
+    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC, mSensor);
     mpLoopCloser->SetPlaceRecognition(mpPlaceRecognition);
     mptLoopClosing = new std::thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 

@@ -1,0 +1,38 @@
+#pragma once
+
+#include <vector>
+
+namespace ORB_SLAM3 {
+
+class KeyFrame;
+
+// =============================================================================
+// Module interfaces — break circular dependencies between modules
+// =============================================================================
+
+// Interface for modules that consume keyframes (e.g., LoopClosing)
+class IKeyFrameConsumer {
+public:
+    virtual ~IKeyFrameConsumer() = default;
+    virtual void InsertKeyFrame(KeyFrame* pKF) = 0;
+};
+
+// Interface for controlling the mapping thread (e.g., from LoopClosing)
+class IMappingControl {
+public:
+    virtual ~IMappingControl() = default;
+    virtual void RequestStop() = 0;
+    virtual bool Stop() = 0;
+    virtual bool isStopped() = 0;
+    virtual void Release() = 0;
+    virtual bool SetNotStop(bool flag) = 0;
+    virtual bool stopRequested() = 0;
+    virtual bool AcceptKeyFrames() = 0;
+    virtual void SetAcceptKeyFrames(bool flag) = 0;
+    virtual void EmptyQueue() = 0;
+    virtual bool IsInitializing() = 0;
+    virtual double GetCurrKFTime() = 0;
+    virtual KeyFrame* GetCurrKF() = 0;
+};
+
+} // namespace ORB_SLAM3

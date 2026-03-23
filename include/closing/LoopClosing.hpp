@@ -25,6 +25,7 @@
 #include "ORBVocabulary.hpp"
 #include "Tracking.hpp"
 #include "core/Types.hpp"
+#include "core/Interfaces.hpp"
 
 #include "KeyFrameDatabase.hpp"
 
@@ -43,13 +44,14 @@ class Map;
 class PlaceRecognition;
 
 
-class LoopClosing
+class LoopClosing : public IKeyFrameConsumer
 {
 public:
 
 public:
 
-    LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale, const bool bActiveLC);
+    LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,
+                const bool bFixScale, const bool bActiveLC, int sensor);
 
     void SetTracker(Tracking* pTracker);
     void SetLocalMapper(LocalMapping* pLocalMapper);
@@ -58,7 +60,7 @@ public:
     // Main function
     void Run();
 
-    void InsertKeyFrame(KeyFrame *pKF);
+    void InsertKeyFrame(KeyFrame *pKF) override;
 
     void RequestReset();
     void RequestResetActiveMap(Map* pMap);
@@ -143,7 +145,8 @@ protected:
     std::mutex mMutexFinish;
 
     Atlas* mpAtlas;
-    Tracking* mpTracker;
+    Tracking* mpTracker;  // Only for UpdateFrameIMU/GetLastKeyFrame
+    int mSensor;          // Sensor type (avoids mpTracker->mSensor lookups)
 
     KeyFrameDatabase* mpKeyFrameDB;
     ORBVocabulary* mpORBVocabulary;

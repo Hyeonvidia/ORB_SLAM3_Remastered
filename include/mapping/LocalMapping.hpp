@@ -21,7 +21,7 @@
 
 #include "KeyFrame.hpp"
 #include "Atlas.hpp"
-#include "LoopClosing.hpp"
+#include "core/Interfaces.hpp"
 #include "Tracking.hpp"
 #include "KeyFrameDatabase.hpp"
 #include "Settings.hpp"
@@ -43,7 +43,7 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bInertial, const std::string &_strSeqName=std::string());
 
-    void SetLoopCloser(LoopClosing* pLoopCloser);
+    void SetLoopCloser(IKeyFrameConsumer* pLoopCloser);
 
     void SetTracker(Tracking* pTracker);
 
@@ -157,7 +157,7 @@ protected:
 
     Atlas* mpAtlas;
 
-    LoopClosing* mpLoopCloser;
+    IKeyFrameConsumer* mpLoopCloser;
     Tracking* mpTracker;
 
     std::list<KeyFrame*> mlNewKeyFrames;
