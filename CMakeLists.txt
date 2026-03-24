@@ -78,6 +78,7 @@ add_library(${PROJECT_NAME} SHARED
     src/core/Converter.cpp
     src/core/GeometricTools.cpp
     src/core/Config.cpp
+    src/core/Sim3Type.cpp
     # tracking/
     src/tracking/Tracking.cpp
     src/tracking/ORBextractor.cpp
@@ -87,6 +88,7 @@ add_library(${PROJECT_NAME} SHARED
     # mapping/
     src/mapping/LocalMapping.cpp
     src/mapping/Optimizer.cpp
+    src/mapping/G2oOptimizer.cpp
     src/mapping/G2oTypes.cpp
     src/mapping/OptimizableTypes.cpp
     src/mapping/TwoViewReconstruction.cpp

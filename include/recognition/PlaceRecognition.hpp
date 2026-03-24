@@ -31,7 +31,7 @@
 #include "Optimizer.hpp"
 #include "core/SensorTypes.hpp"
 
-#include "g2o/types/types_seven_dof_expmap.h"
+#include "core/Sim3Type.hpp"
 
 #include <vector>
 #include <set>
@@ -59,17 +59,17 @@ public:
         // Loop closure data
         KeyFrame* loopMatchedKF = nullptr;
         KeyFrame* loopLastCurrentKF = nullptr;
-        g2o::Sim3 loopSlw;
-        g2o::Sim3 loopScw;
+        Sim3Type loopSlw;
+        Sim3Type loopScw;
         std::vector<MapPoint*> loopMPs;
         std::vector<MapPoint*> loopMatchedMPs;
 
         // Map merge data
         KeyFrame* mergeMatchedKF = nullptr;
         KeyFrame* mergeLastCurrentKF = nullptr;
-        g2o::Sim3 mergeSlw;
-        g2o::Sim3 mergeSmw;
-        g2o::Sim3 mergeScw;
+        Sim3Type mergeSlw;
+        Sim3Type mergeSmw;
+        Sim3Type mergeScw;
         std::vector<MapPoint*> mergeMPs;
         std::vector<MapPoint*> mergeMatchedMPs;
         std::vector<KeyFrame*> mergeConnectedKFs;
@@ -95,26 +95,26 @@ protected:
 
     // ---- Helper methods (ported from LoopClosing) --------------------------
     bool DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF,
-                                        g2o::Sim3 &gScw, int &nNumProjMatches,
+                                        Sim3Type &gScw, int &nNumProjMatches,
                                         std::vector<MapPoint*> &vpMPs,
                                         std::vector<MapPoint*> &vpMatchedMPs,
                                         eSensor sensor);
 
     bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand,
                                     KeyFrame* &pMatchedKF, KeyFrame* &pLastCurrentKF,
-                                    g2o::Sim3 &g2oScw, int &nNumCoincidences,
+                                    Sim3Type &g2oScw, int &nNumCoincidences,
                                     std::vector<MapPoint*> &vpMPs,
                                     std::vector<MapPoint*> &vpMatchedMPs,
                                     KeyFrame* pCurrentKF,
                                     eSensor sensor);
 
     bool DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF,
-                                       g2o::Sim3 &gScw, int &nNumProjMatches,
+                                       Sim3Type &gScw, int &nNumProjMatches,
                                        std::vector<MapPoint*> &vpMPs,
                                        std::vector<MapPoint*> &vpMatchedMPs);
 
     int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw,
-                                g2o::Sim3 &g2oScw,
+                                Sim3Type &g2oScw,
                                 std::set<MapPoint*> &spMatchedMPinOrigin,
                                 std::vector<MapPoint*> &vpMapPoints,
                                 std::vector<MapPoint*> &vpMatchedMapPoints);
@@ -133,8 +133,8 @@ protected:
     int mnLoopNumNotFound = 0;
     KeyFrame* mpLoopLastCurrentKF = nullptr;
     KeyFrame* mpLoopMatchedKF = nullptr;
-    g2o::Sim3 mg2oLoopSlw;
-    g2o::Sim3 mg2oLoopScw;
+    Sim3Type mg2oLoopSlw;
+    Sim3Type mg2oLoopScw;
     std::vector<MapPoint*> mvpLoopMPs;
     std::vector<MapPoint*> mvpLoopMatchedMPs;
 
@@ -144,9 +144,9 @@ protected:
     int mnMergeNumNotFound = 0;
     KeyFrame* mpMergeLastCurrentKF = nullptr;
     KeyFrame* mpMergeMatchedKF = nullptr;
-    g2o::Sim3 mg2oMergeSlw;
-    g2o::Sim3 mg2oMergeSmw;
-    g2o::Sim3 mg2oMergeScw;
+    Sim3Type mg2oMergeSlw;
+    Sim3Type mg2oMergeSmw;
+    Sim3Type mg2oMergeScw;
     std::vector<MapPoint*> mvpMergeMPs;
     std::vector<MapPoint*> mvpMergeMatchedMPs;
     std::vector<KeyFrame*> mvpMergeConnectedKFs;

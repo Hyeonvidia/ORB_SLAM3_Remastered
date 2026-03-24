@@ -139,10 +139,10 @@ void LoopClosing::Run()
                     else
                     {
                         Sophus::SE3d mTmw = result.mergeMatchedKF->GetPose().cast<double>();
-                        g2o::Sim3 gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
+                        Sim3Type gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
                         Sophus::SE3d mTcw = mpCurrentKF->GetPose().cast<double>();
-                        g2o::Sim3 gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
-                        g2o::Sim3 gSw2c = result.mergeSlw.inverse();
+                        Sim3Type gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
+                        Sim3Type gSw2c = result.mergeSlw.inverse();
 
                         mSold_new = (gSw2c * gScw1);
 
@@ -164,13 +164,13 @@ void LoopClosing::Run()
                                 Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
                                 phi(0)=0;
                                 phi(1)=0;
-                                mSold_new = g2o::Sim3(ExpSO3(phi),mSold_new.translation(),1.0);
+                                mSold_new = Sim3Type(ExpSO3(phi),mSold_new.translation(),1.0);
                             }
                         }
 
-                        g2o::Sim3 mg2oMergeSmw_local = gSmw2 * gSw2c * gScw1;
+                        Sim3Type mg2oMergeSmw_local = gSmw2 * gSw2c * gScw1;
 
-                        g2o::Sim3 mg2oMergeScw_local = result.mergeSlw;
+                        Sim3Type mg2oMergeScw_local = result.mergeSlw;
 
                         // Copy result to member vars for CorrectLoop/MergeLocal compatibility
                         mpMergeMatchedKF = result.mergeMatchedKF;
@@ -235,12 +235,12 @@ void LoopClosing::Run()
 
                     Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
 
-                    g2o::Sim3 mg2oLoopScw_local = result.loopSlw;
+                    Sim3Type mg2oLoopScw_local = result.loopSlw;
                     if(mpCurrentKF->GetMap()->IsInertial())
                     {
                         Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
-                        g2o::Sim3 g2oTwc(Twc.unit_quaternion(),Twc.translation(),1.0);
-                        g2o::Sim3 g2oSww_new = g2oTwc*mg2oLoopScw_local;
+                        Sim3Type g2oTwc(Twc.unit_quaternion(),Twc.translation(),1.0);
+                        Sim3Type g2oSww_new = g2oTwc*mg2oLoopScw_local;
 
                         Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
                         std::cout << "phi = " << phi.transpose() << std::endl;
@@ -254,7 +254,7 @@ void LoopClosing::Run()
                                 {
                                     phi(0)=0;
                                     phi(1)=0;
-                                    g2oSww_new = g2o::Sim3(ExpSO3(phi),g2oSww_new.translation(),1.0);
+                                    g2oSww_new = Sim3Type(ExpSO3(phi),g2oSww_new.translation(),1.0);
                                     mg2oLoopScw_local = g2oTwc.inverse()*g2oSww_new;
                                 }
                             }
@@ -380,7 +380,7 @@ void LoopClosing::CorrectLoop()
     CorrectedSim3[mpCurrentKF]=mg2oLoopScw;
     Sophus::SE3f Twc = mpCurrentKF->GetPoseInverse();
     Sophus::SE3f Tcw = mpCurrentKF->GetPose();
-    g2o::Sim3 g2oScw(Tcw.unit_quaternion().cast<double>(),Tcw.translation().cast<double>(),1.0);
+    Sim3Type g2oScw(Tcw.unit_quaternion().cast<double>(),Tcw.translation().cast<double>(),1.0);
     NonCorrectedSim3[mpCurrentKF]=g2oScw;
 
     // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
@@ -416,8 +416,8 @@ void LoopClosing::CorrectLoop()
             {
                 Sophus::SE3f Tiw = pKFi->GetPose();
                 Sophus::SE3d Tic = (Tiw * Twc).cast<double>();
-                g2o::Sim3 g2oSic(Tic.unit_quaternion(),Tic.translation(),1.0);
-                g2o::Sim3 g2oCorrectedSiw = g2oSic*mg2oLoopScw;
+                Sim3Type g2oSic(Tic.unit_quaternion(),Tic.translation(),1.0);
+                Sim3Type g2oCorrectedSiw = g2oSic*mg2oLoopScw;
                 //Pose corrected with the Sim3 of the loop closure
                 CorrectedSim3[pKFi]=g2oCorrectedSiw;
 
@@ -426,7 +426,7 @@ void LoopClosing::CorrectLoop()
                 pKFi->SetPose(correctedTiw.cast<float>());
 
                 //Pose without correction
-                g2o::Sim3 g2oSiw(Tiw.unit_quaternion().cast<double>(),Tiw.translation().cast<double>(),1.0);
+                Sim3Type g2oSiw(Tiw.unit_quaternion().cast<double>(),Tiw.translation().cast<double>(),1.0);
                 NonCorrectedSim3[pKFi]=g2oSiw;
             }  
         }
@@ -435,10 +435,10 @@ void LoopClosing::CorrectLoop()
         for(KeyFrameAndPose::iterator mit=CorrectedSim3.begin(), mend=CorrectedSim3.end(); mit!=mend; mit++)
         {
             KeyFrame* pKFi = mit->first;
-            g2o::Sim3 g2oCorrectedSiw = mit->second;
-            g2o::Sim3 g2oCorrectedSwi = g2oCorrectedSiw.inverse();
+            Sim3Type g2oCorrectedSiw = mit->second;
+            Sim3Type g2oCorrectedSwi = g2oCorrectedSiw.inverse();
 
-            g2o::Sim3 g2oSiw =NonCorrectedSim3[pKFi];
+            Sim3Type g2oSiw =NonCorrectedSim3[pKFi];
 
             // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
             /*Sophus::SE3d correctedTiw(g2oCorrectedSiw.rotation(),g2oCorrectedSiw.translation() / g2oCorrectedSiw.scale());
@@ -770,9 +770,9 @@ void LoopClosing::MergeLocal()
 
     //
     Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
-    g2o::Sim3 g2oNonCorrectedSwc(Twc.unit_quaternion(),Twc.translation(),1.0);
-    g2o::Sim3 g2oNonCorrectedScw = g2oNonCorrectedSwc.inverse();
-    g2o::Sim3 g2oCorrectedScw = mg2oMergeScw; //TODO Check the transformation
+    Sim3Type g2oNonCorrectedSwc(Twc.unit_quaternion(),Twc.translation(),1.0);
+    Sim3Type g2oNonCorrectedScw = g2oNonCorrectedSwc.inverse();
+    Sim3Type g2oCorrectedScw = mg2oMergeScw; //TODO Check the transformation
 
     KeyFrameAndPose vCorrectedSim3, vNonCorrectedSim3;
     vCorrectedSim3[mpCurrentKF]=g2oCorrectedScw;
@@ -794,17 +794,17 @@ void LoopClosing::MergeLocal()
         if(pKFi->GetMap() != pCurrentMap)
             Verbose::PrintMess("Other map KF, this should't happen", Verbose::VERBOSITY_DEBUG);
 
-        g2o::Sim3 g2oCorrectedSiw;
+        Sim3Type g2oCorrectedSiw;
 
         if(pKFi!=mpCurrentKF)
         {
             Sophus::SE3d Tiw = (pKFi->GetPose()).cast<double>();
-            g2o::Sim3 g2oSiw(Tiw.unit_quaternion(),Tiw.translation(),1.0);
+            Sim3Type g2oSiw(Tiw.unit_quaternion(),Tiw.translation(),1.0);
             //Pose without correction
             vNonCorrectedSim3[pKFi]=g2oSiw;
 
             Sophus::SE3d Tic = Tiw*Twc;
-            g2o::Sim3 g2oSic(Tic.unit_quaternion(),Tic.translation(),1.0);
+            Sim3Type g2oSic(Tic.unit_quaternion(),Tic.translation(),1.0);
             g2oCorrectedSiw = g2oSic*mg2oMergeScw;
             vCorrectedSim3[pKFi]=g2oCorrectedSiw;
         }
@@ -850,8 +850,8 @@ void LoopClosing::MergeLocal()
             numPointsWithCorrection++;
             continue;
         }
-        g2o::Sim3 g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
-        g2o::Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
+        Sim3Type g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
+        Sim3Type g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
 
         // Project with non-corrected pose and project back with corrected pose
         Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
@@ -1021,15 +1021,15 @@ void LoopClosing::MergeLocal()
                     continue;
                 }
 
-                g2o::Sim3 g2oCorrectedSiw;
+                Sim3Type g2oCorrectedSiw;
 
                 Sophus::SE3d Tiw = (pKFi->GetPose()).cast<double>();
-                g2o::Sim3 g2oSiw(Tiw.unit_quaternion(),Tiw.translation(),1.0);
+                Sim3Type g2oSiw(Tiw.unit_quaternion(),Tiw.translation(),1.0);
                 //Pose without correction
                 vNonCorrectedSim3[pKFi]=g2oSiw;
 
                 Sophus::SE3d Tic = Tiw*Twc;
-                g2o::Sim3 g2oSim(Tic.unit_quaternion(),Tic.translation(),1.0);
+                Sim3Type g2oSim(Tic.unit_quaternion(),Tic.translation(),1.0);
                 g2oCorrectedSiw = g2oSim*mg2oMergeScw;
                 vCorrectedSim3[pKFi]=g2oCorrectedSiw;
 
@@ -1058,8 +1058,8 @@ void LoopClosing::MergeLocal()
                     continue;
 
                 KeyFrame* pKFref = pMPi->GetReferenceKeyFrame();
-                g2o::Sim3 g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
-                g2o::Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
+                Sim3Type g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
+                Sim3Type g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
 
                 // Project with non-corrected pose and project back with corrected pose
                 Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
@@ -1281,7 +1281,7 @@ void LoopClosing::MergeLocal2()
         for(KeyFrame* pKFi : vpKFs)
         {
             Sophus::SE3d Tiw = (pKFi->GetPose()).cast<double>();
-            g2o::Sim3 g2oSiw(Tiw.unit_quaternion(),Tiw.translation(),1.0);
+            Sim3Type g2oSiw(Tiw.unit_quaternion(),Tiw.translation(),1.0);
             NonCorrectedSim3[pKFi]=g2oSiw;
         }
     }
@@ -1492,7 +1492,7 @@ void LoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, std::v
         KeyFrame* pKFi = mit->first;
         Map* pMap = pKFi->GetMap();
 
-        g2o::Sim3 g2oScw = mit->second;
+        Sim3Type g2oScw = mit->second;
         Sophus::Sim3f Scw = Converter::toSophus(g2oScw);
 
         std::vector<MapPoint*> vpReplacePoints(vpMapPoints.size(),static_cast<MapPoint*>(nullptr));

@@ -31,7 +31,6 @@
 #include <boost/algorithm/string.hpp>
 #include <thread>
 #include <mutex>
-#include "g2o/types/types_seven_dof_expmap.h"
 
 namespace ORB_SLAM3
 {
@@ -165,7 +164,7 @@ protected:
     std::vector<MapPoint*> mvpCurrentMatchedPoints;
     std::vector<MapPoint*> mvpLoopMapPoints;
     cv::Mat mScw;
-    g2o::Sim3 mg2oScw;
+    Sim3Type mg2oScw;
 
     //-------
     Map* mpLastMap;
@@ -175,8 +174,8 @@ protected:
     int mnLoopNumCoincidences;
     int mnLoopNumNotFound;
     KeyFrame* mpLoopLastCurrentKF;
-    g2o::Sim3 mg2oLoopSlw;
-    g2o::Sim3 mg2oLoopScw;
+    Sim3Type mg2oLoopSlw;
+    Sim3Type mg2oLoopScw;
     KeyFrame* mpLoopMatchedKF;
     std::vector<MapPoint*> mvpLoopMPs;
     std::vector<MapPoint*> mvpLoopMatchedMPs;
@@ -184,15 +183,15 @@ protected:
     int mnMergeNumCoincidences;
     int mnMergeNumNotFound;
     KeyFrame* mpMergeLastCurrentKF;
-    g2o::Sim3 mg2oMergeSlw;
-    g2o::Sim3 mg2oMergeSmw;
-    g2o::Sim3 mg2oMergeScw;
+    Sim3Type mg2oMergeSlw;
+    Sim3Type mg2oMergeSmw;
+    Sim3Type mg2oMergeScw;
     KeyFrame* mpMergeMatchedKF;
     std::vector<MapPoint*> mvpMergeMPs;
     std::vector<MapPoint*> mvpMergeMatchedMPs;
     std::vector<KeyFrame*> mvpMergeConnectedKFs;
 
-    g2o::Sim3 mSold_new;
+    Sim3Type mSold_new;
     //-------
 
     long unsigned int mLastLoopKFid;

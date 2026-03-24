@@ -126,8 +126,8 @@ PlaceRecognition::DetectionResult PlaceRecognition::detect(KeyFrame* pCurrentKF,
         bCheckSpatial = true;
         // Find from the last KF candidates
         Sophus::SE3d mTcl = (pCurrentKF->GetPose() * mpLoopLastCurrentKF->GetPoseInverse()).cast<double>();
-        g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
-        g2o::Sim3 gScw = gScl * mg2oLoopSlw;
+        Sim3Type gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
+        Sim3Type gScw = gScl * mg2oLoopSlw;
         int numProjMatches = 0;
         std::vector<MapPoint*> vpMatchedMPs;
         bool bCommonRegion = DetectAndReffineSim3FromLastKF(pCurrentKF, mpLoopMatchedKF, gScw, numProjMatches, mvpLoopMPs, vpMatchedMPs, sensor);
@@ -173,8 +173,8 @@ PlaceRecognition::DetectionResult PlaceRecognition::detect(KeyFrame* pCurrentKF,
         // Find from the last KF candidates
         Sophus::SE3d mTcl = (pCurrentKF->GetPose() * mpMergeLastCurrentKF->GetPoseInverse()).cast<double>();
 
-        g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
-        g2o::Sim3 gScw = gScl * mg2oMergeSlw;
+        Sim3Type gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
+        Sim3Type gScw = gScl * mg2oMergeSlw;
         int numProjMatches = 0;
         std::vector<MapPoint*> vpMatchedMPs;
         bool bCommonRegion = DetectAndReffineSim3FromLastKF(pCurrentKF, mpMergeMatchedKF, gScw, numProjMatches, mvpMergeMPs, vpMatchedMPs, sensor);
@@ -305,7 +305,7 @@ PlaceRecognition::DetectionResult PlaceRecognition::detect(KeyFrame* pCurrentKF,
 // DetectAndReffineSim3FromLastKF  --  ported from LoopClosing (lines 535-576)
 // =============================================================================
 bool PlaceRecognition::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF,
-                                                       g2o::Sim3 &gScw, int &nNumProjMatches,
+                                                       Sim3Type &gScw, int &nNumProjMatches,
                                                        std::vector<MapPoint*> &vpMPs,
                                                        std::vector<MapPoint*> &vpMatchedMPs,
                                                        eSensor sensor)
@@ -320,8 +320,8 @@ bool PlaceRecognition::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyF
     if(nNumProjMatches >= nProjMatches)
     {
         Sophus::SE3d mTwm = pMatchedKF->GetPoseInverse().cast<double>();
-        g2o::Sim3 gSwm(mTwm.unit_quaternion(), mTwm.translation(), 1.0);
-        g2o::Sim3 gScm = gScw * gSwm;
+        Sim3Type gSwm(mTwm.unit_quaternion(), mTwm.translation(), 1.0);
+        Sim3Type gScm = gScw * gSwm;
         Eigen::Matrix<double, 7, 7> mHessian7x7;
 
         bool bFixedScale = mbFixScale;
@@ -331,7 +331,7 @@ bool PlaceRecognition::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyF
 
         if(numOptMatches > nProjOptMatches)
         {
-            g2o::Sim3 gScw_estimation(gScw.rotation(), gScw.translation(), 1.0);
+            Sim3Type gScw_estimation(gScw.rotation(), gScw.translation(), 1.0);
 
             std::vector<MapPoint*> vpMatchedMP;
             vpMatchedMP.resize(pCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(nullptr));
@@ -352,7 +352,7 @@ bool PlaceRecognition::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyF
 // =============================================================================
 bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand,
                                                    KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF,
-                                                   g2o::Sim3 &g2oScw, int &nNumCoincidences,
+                                                   Sim3Type &g2oScw, int &nNumCoincidences,
                                                    std::vector<MapPoint*> &vpMPs,
                                                    std::vector<MapPoint*> &vpMatchedMPs,
                                                    KeyFrame* pCurrentKF,
@@ -375,7 +375,7 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
     KeyFrame* pBestMatchedKF;
     int nBestMatchesReproj = 0;
     int nBestNumCoindicendes = 0;
-    g2o::Sim3 g2oBestScw;
+    Sim3Type g2oBestScw;
     std::vector<MapPoint*> vpBestMapPoints;
     std::vector<MapPoint*> vpBestMatchedMapPoints;
 
@@ -507,9 +507,9 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
                     }
                 }
 
-                g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(), solver.GetEstimatedTranslation().cast<double>(), (double)solver.GetEstimatedScale());
-                g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(), pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                g2o::Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
+                Sim3Type gScm(solver.GetEstimatedRotation().cast<double>(), solver.GetEstimatedTranslation().cast<double>(), (double)solver.GetEstimatedScale());
+                Sim3Type gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(), pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+                Sim3Type gScw = gScm * gSmw; // Similarity matrix of current from the world position
                 Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
                 std::vector<MapPoint*> vpMatchedMP;
@@ -531,8 +531,8 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
 
                     if(numOptMatches >= nSim3Inliers)
                     {
-                        g2o::Sim3 gSmw2(pMostBoWMatchesKF->GetRotation().cast<double>(), pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                        g2o::Sim3 gScw2 = gScm * gSmw2; // Similarity matrix of current from the world position
+                        Sim3Type gSmw2(pMostBoWMatchesKF->GetRotation().cast<double>(), pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+                        Sim3Type gScw2 = gScm * gSmw2; // Similarity matrix of current from the world position
                         Sophus::Sim3f mScw2 = Converter::toSophus(gScw2);
 
                         std::vector<MapPoint*> vpMatchedMP2;
@@ -584,8 +584,8 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
                             {
                                 KeyFrame* pKFj = vpCurrentCovKFs[j];
                                 Sophus::SE3d mTjc = (pKFj->GetPose() * pCurrentKF->GetPoseInverse()).cast<double>();
-                                g2o::Sim3 gSjc(mTjc.unit_quaternion(), mTjc.translation(), 1.0);
-                                g2o::Sim3 gSjw = gSjc * gScw2;
+                                Sim3Type gSjc(mTjc.unit_quaternion(), mTjc.translation(), 1.0);
+                                Sim3Type gSjw = gSjc * gScw2;
                                 int numProjMatches_j = 0;
                                 std::vector<MapPoint*> vpMatchedMPs_j;
                                 bool bValid = DetectCommonRegionsFromLastKF(pKFj, pMostBoWMatchesKF, gSjw, numProjMatches_j, vpMapPoints, vpMatchedMPs_j);
@@ -656,7 +656,7 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
 // DetectCommonRegionsFromLastKF  --  ported from LoopClosing (lines 898-911)
 // =============================================================================
 bool PlaceRecognition::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF,
-                                                      g2o::Sim3 &gScw, int &nNumProjMatches,
+                                                      Sim3Type &gScw, int &nNumProjMatches,
                                                       std::vector<MapPoint*> &vpMPs,
                                                       std::vector<MapPoint*> &vpMatchedMPs)
 {
@@ -676,7 +676,7 @@ bool PlaceRecognition::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFr
 // FindMatchesByProjection  --  ported from LoopClosing (lines 913-967)
 // =============================================================================
 int PlaceRecognition::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw,
-                                               g2o::Sim3 &g2oScw,
+                                               Sim3Type &g2oScw,
                                                std::set<MapPoint*> &spMatchedMPinOrigin,
                                                std::vector<MapPoint*> &vpMapPoints,
                                                std::vector<MapPoint*> &vpMatchedMapPoints)

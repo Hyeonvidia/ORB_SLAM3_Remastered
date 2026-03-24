@@ -28,6 +28,8 @@
 #include "sophus/geometry.hpp"
 #include "sophus/sim3.hpp"
 
+#include "core/Sim3Type.hpp"
+
 namespace ORB_SLAM3
 {
 
@@ -73,6 +75,11 @@ public:
     //TODO: Sophus migration, to be deleted in the future
     static Sophus::SE3<float> toSophus(const cv::Mat& T);
     static Sophus::Sim3f toSophus(const g2o::Sim3& S);
+
+    // Sim3Type conversions
+    static g2o::Sim3 toG2oSim3(const Sim3Type& sim3);
+    static Sim3Type toSim3Type(const g2o::Sim3& gSim3);
+    static Sophus::Sim3f toSophus(const Sim3Type& sim3);
 };
 
 }// namespace ORB_SLAM

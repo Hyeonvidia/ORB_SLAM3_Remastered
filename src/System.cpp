@@ -22,6 +22,7 @@
 #include "Converter.hpp"
 #include "PlaceRecognition.hpp"
 #include "TrajectoryWriter.hpp"
+#include "G2oOptimizer.hpp"
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
@@ -45,6 +46,9 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
     mSensor(sensor), mpViewer(static_cast<Viewer*>(nullptr)), mbReset(false), mbResetActiveMap(false),
     mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false)
 {
+    // Initialize optimizer backend (g2o by default)
+    Optimizer::SetBackend(std::make_unique<G2oOptimizer>());
+
     // Output welcome message
     std::cout << std::endl <<
     "ORB-SLAM3 Copyright (C) 2017-2020 Carlos Campos, Richard Elvira, Juan J. Gómez, José M.M. Montiel and Juan D. Tardós, University of Zaragoza." << std::endl <<

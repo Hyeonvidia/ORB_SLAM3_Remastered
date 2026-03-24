@@ -311,4 +311,18 @@ Sophus::Sim3f Converter::toSophus(const g2o::Sim3& S) {
                          S.translation().cast<float>());
 }
 
+g2o::Sim3 Converter::toG2oSim3(const Sim3Type& sim3) {
+    return g2o::Sim3(sim3.rotation(), sim3.t, sim3.s);
+}
+
+Sim3Type Converter::toSim3Type(const g2o::Sim3& gSim3) {
+    return Sim3Type(gSim3.rotation(), gSim3.translation(), gSim3.scale());
+}
+
+Sophus::Sim3f Converter::toSophus(const Sim3Type& sim3) {
+    return Sophus::Sim3f(
+        Sophus::RxSO3d(sim3.s, sim3.R).cast<float>(),
+        sim3.t.cast<float>());
+}
+
 } //namespace ORB_SLAM
