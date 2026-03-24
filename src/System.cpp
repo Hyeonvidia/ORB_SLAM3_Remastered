@@ -52,9 +52,7 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
 {
     // Initialize optimizer backend
 #ifdef WITH_GTSAM
-    Optimizer::SetBackend(std::make_unique<ABTestOptimizer>(
-        std::make_unique<G2oOptimizer>(),     // primary
-        std::make_unique<GtsamOptimizer>())); // reference
+    Optimizer::SetBackend(std::make_unique<GtsamOptimizer>());  // GTSAM only (no AB test)
 #else
     Optimizer::SetBackend(std::make_unique<G2oOptimizer>());
 #endif
