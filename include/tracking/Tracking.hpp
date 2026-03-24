@@ -22,20 +22,12 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
-#include "Viewer.hpp"
-#include "FrameDrawer.hpp"
-#include "Atlas.hpp"
-#include "LocalMapping.hpp"
-#include "LoopClosing.hpp"
 #include "Frame.hpp"
-#include "ORBVocabulary.hpp"
-#include "KeyFrameDatabase.hpp"
+#include "Atlas.hpp"
 #include "ORBextractor.hpp"
-#include "MapDrawer.hpp"
-#include "System.hpp"
+#include "ORBVocabulary.hpp"
 #include "ImuTypes.hpp"
 #include "Settings.hpp"
-
 #include "GeometricCamera.hpp"
 #include "TrackingObserver.hpp"
 #include "core/Interfaces.hpp"
@@ -47,15 +39,14 @@
 namespace ORB_SLAM3
 {
 
-class Viewer;
 class FrameDrawer;
-class Atlas;
+class MapDrawer;
 class LocalMapping;
 class LoopClosing;
 class System;
-class Settings;
+class KeyFrameDatabase;
 
-class Tracking : public ITrackingState
+class Tracking : public ITrackingState, public ITrackingInfo
 {
 
 public:
@@ -79,15 +70,14 @@ public:
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
     void SetLoopClosing(LoopClosing* pLoopClosing);
-    void SetViewer(Viewer* pViewer);
+    void SetViewer(IViewerControl* pViewer);
 
     // Observer pattern
     void addObserver(TrackingObserver* observer);
     void notifyTrackingUpdate();
     void notifyPoseUpdate(const Sophus::SE3f& pose);
 
-    void SetStepByStep(bool bSet);
-    bool GetStepByStep();
+    // SetStepByStep/GetStepByStep declared above with ITrackingInfo overrides
 
     // Load new settings
     // The focal lenght should be similar or scale prediction will fail when projecting points
@@ -97,10 +87,17 @@ public:
     void InformOnlyTracking(const bool &flag);
 
     void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame) override;
-    KeyFrame* GetLastKeyFrame()
+    KeyFrame* GetLastKeyFrame() override
     {
         return mpLastKeyFrame;
     }
+
+    // ITrackingInfo interface
+    int GetSensor() const override { return mSensor; }
+    float GetImageScale() override;
+    void SetStepByStep(bool bSet) override;
+    bool GetStepByStep() override;
+    void SetStep() override { mbStep = true; }
 
     void CreateMapInAtlas();
 
@@ -120,7 +117,7 @@ public:
     void SaveSubTrajectory(std::string strNameFile_frames, std::string strNameFile_kf, std::string strFolder="");
     void SaveSubTrajectory(std::string strNameFile_frames, std::string strNameFile_kf, Map* pMap);
 
-    float GetImageScale();
+    // GetImageScale declared above with ITrackingInfo overrides
 
 #ifdef REGISTER_LOOP
     void RequestStop();
@@ -293,7 +290,7 @@ protected:
     System* mpSystem;
     
     //Drawers
-    Viewer* mpViewer;
+    IViewerControl* mpViewer;
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
     std::vector<TrackingObserver*> mObservers;

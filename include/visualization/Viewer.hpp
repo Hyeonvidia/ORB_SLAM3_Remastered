@@ -21,8 +21,7 @@
 
 #include "FrameDrawer.hpp"
 #include "MapDrawer.hpp"
-#include "Tracking.hpp"
-#include "System.hpp"
+#include "core/Interfaces.hpp"
 #include "Settings.hpp"
 
 #include <mutex>
@@ -32,17 +31,16 @@
 namespace ORB_SLAM3
 {
 
-class Tracking;
 class FrameDrawer;
 class MapDrawer;
 class System;
 class Settings;
 
-class Viewer
+class Viewer : public IViewerControl
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Viewer(System* pSystem, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Tracking *pTracking, const std::string &strSettingPath, Settings* settings);
+    Viewer(System* pSystem, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, ITrackingInfo *pTracking, const std::string &strSettingPath, Settings* settings);
 
     void newParameterLoader(Settings* settings);
 
@@ -52,15 +50,15 @@ public:
 
     void RequestFinish();
 
-    void RequestStop();
+    void RequestStop() override;
 
     bool isFinished();
 
-    bool isStopped();
+    bool isStopped() override;
 
     bool isStepByStep();
 
-    void Release();
+    void Release() override;
 
     //void SetTrackingPause();
 
@@ -74,7 +72,7 @@ private:
     System* mpSystem;
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
-    Tracking* mpTracker;
+    ITrackingInfo* mpTracker;
 
     // 1/fps in ms
     double mT;

@@ -20,12 +20,11 @@
 #pragma once
 
 #include "KeyFrame.hpp"
-#include "LocalMapping.hpp"
 #include "Atlas.hpp"
 #include "ORBVocabulary.hpp"
-#include "Tracking.hpp"
 #include "core/Types.hpp"
 #include "core/Interfaces.hpp"
+#include "core/SensorTypes.hpp"
 
 #include "KeyFrameDatabase.hpp"
 
@@ -37,8 +36,6 @@
 namespace ORB_SLAM3
 {
 
-class Tracking;
-class LocalMapping;
 class KeyFrameDatabase;
 class Map;
 class PlaceRecognition;
@@ -53,8 +50,8 @@ public:
     LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,
                 const bool bFixScale, const bool bActiveLC, int sensor);
 
-    void SetTracker(Tracking* pTracker);
-    void SetLocalMapper(LocalMapping* pLocalMapper);
+    void SetTracker(ITrackingState* pTracker);
+    void SetLocalMapper(IMappingControl* pLocalMapper);
     void SetPlaceRecognition(PlaceRecognition* pPR) { mpPlaceRecognition = pPR; }
 
     // Main function
@@ -80,8 +77,6 @@ public:
     void RequestFinish();
 
     bool isFinished();
-
-    Viewer* mpViewer;
 
 #ifdef REGISTER_TIMES
 
@@ -145,13 +140,13 @@ protected:
     std::mutex mMutexFinish;
 
     Atlas* mpAtlas;
-    Tracking* mpTracker;  // Only for UpdateFrameIMU/GetLastKeyFrame
-    int mSensor;          // Sensor type (avoids mpTracker->mSensor lookups)
+    ITrackingState* mpTracker;  // Only for UpdateFrameIMU/GetLastKeyFrame
+    int mSensor;                // Sensor type (avoids mpTracker->mSensor lookups)
 
     KeyFrameDatabase* mpKeyFrameDB;
     ORBVocabulary* mpORBVocabulary;
 
-    LocalMapping *mpLocalMapper;
+    IMappingControl *mpLocalMapper;
 
     std::list<KeyFrame*> mlpLoopKeyFrameQueue;
 

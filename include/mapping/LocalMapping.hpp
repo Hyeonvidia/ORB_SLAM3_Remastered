@@ -36,7 +36,7 @@ class Tracking;
 class LoopClosing;
 class Atlas;
 
-class LocalMapping
+class LocalMapping : public IMappingControl
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -50,33 +50,33 @@ public:
     void Run();
 
     void InsertKeyFrame(KeyFrame* pKF);
-    void EmptyQueue();
+    void EmptyQueue() override;
 
     // Thread Synch
-    void RequestStop();
+    void RequestStop() override;
     void RequestReset();
     void RequestResetActiveMap(Map* pMap);
-    bool Stop();
-    void Release();
-    bool isStopped();
-    bool stopRequested();
-    bool AcceptKeyFrames();
-    void SetAcceptKeyFrames(bool flag);
-    bool SetNotStop(bool flag);
+    bool Stop() override;
+    void Release() override;
+    bool isStopped() override;
+    bool stopRequested() override;
+    bool AcceptKeyFrames() override;
+    void SetAcceptKeyFrames(bool flag) override;
+    bool SetNotStop(bool flag) override;
 
     void InterruptBA();
 
     void RequestFinish();
-    bool isFinished();
+    bool isFinished() override;
 
     int KeyframesInQueue(){
         std::unique_lock<std::mutex> lock(mMutexNewKFs);
         return mlNewKeyFrames.size();
     }
 
-    bool IsInitializing();
-    double GetCurrKFTime();
-    KeyFrame* GetCurrKF();
+    bool IsInitializing() override;
+    double GetCurrKFTime() override;
+    KeyFrame* GetCurrKF() override;
 
     std::mutex mMutexImuInit;
 

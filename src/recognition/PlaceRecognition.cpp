@@ -81,7 +81,7 @@ void PlaceRecognition::resetMergeState()
 // =============================================================================
 // detect()  --  ported from LoopClosing::NewDetectCommonRegions()
 // =============================================================================
-PlaceRecognition::DetectionResult PlaceRecognition::detect(KeyFrame* pCurrentKF, System::eSensor sensor)
+PlaceRecognition::DetectionResult PlaceRecognition::detect(KeyFrame* pCurrentKF, eSensor sensor)
 {
     DetectionResult result;
 
@@ -102,7 +102,7 @@ PlaceRecognition::DetectionResult PlaceRecognition::detect(KeyFrame* pCurrentKF,
         return result;
     }
 
-    if(sensor == System::STEREO && pLastMap->GetAllKeyFrames().size() < 5)
+    if(sensor == STEREO && pLastMap->GetAllKeyFrames().size() < 5)
     {
         mpKeyFrameDB->add(pCurrentKF);
         pCurrentKF->SetErase();
@@ -308,7 +308,7 @@ bool PlaceRecognition::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyF
                                                        g2o::Sim3 &gScw, int &nNumProjMatches,
                                                        std::vector<MapPoint*> &vpMPs,
                                                        std::vector<MapPoint*> &vpMatchedMPs,
-                                                       System::eSensor sensor)
+                                                       eSensor sensor)
 {
     std::set<MapPoint*> spAlreadyMatchedMPs;
     nNumProjMatches = FindMatchesByProjection(pCurrentKF, pMatchedKF, gScw, spAlreadyMatchedMPs, vpMPs, vpMatchedMPs);
@@ -325,7 +325,7 @@ bool PlaceRecognition::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyF
         Eigen::Matrix<double, 7, 7> mHessian7x7;
 
         bool bFixedScale = mbFixScale;
-        if(sensor == System::IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
+        if(sensor == IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
             bFixedScale = false;
         int numOptMatches = Optimizer::OptimizeSim3(pCurrentKF, pMatchedKF, vpMatchedMPs, gScm, 10, bFixedScale, mHessian7x7, true);
 
@@ -356,7 +356,7 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
                                                    std::vector<MapPoint*> &vpMPs,
                                                    std::vector<MapPoint*> &vpMatchedMPs,
                                                    KeyFrame* pCurrentKF,
-                                                   System::eSensor sensor)
+                                                   eSensor sensor)
 {
     int nBoWMatches = 20;
     int nBoWInliers = 15;
@@ -464,7 +464,7 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
         {
             // Geometric validation
             bool bFixedScale = mbFixScale;
-            if(sensor == System::IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
+            if(sensor == IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
                 bFixedScale = false;
 
             Sim3Solver solver = Sim3Solver(pCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, bFixedScale, vpKeyFrameMatchedMP);
@@ -524,7 +524,7 @@ bool PlaceRecognition::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowC
                     Eigen::Matrix<double, 7, 7> mHessian7x7;
 
                     bool bFixedScale2 = mbFixScale;
-                    if(sensor == System::IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
+                    if(sensor == IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
                         bFixedScale2 = false;
 
                     int numOptMatches = Optimizer::OptimizeSim3(pCurrentKF, pKFi, vpMatchedMP, gScm, 10, mbFixScale, mHessian7x7, true);

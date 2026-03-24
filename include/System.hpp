@@ -27,6 +27,7 @@
 #include<thread>
 #include<opencv2/core/core.hpp>
 
+#include "core/SensorTypes.hpp"
 #include "Tracking.hpp"
 #include "FrameDrawer.hpp"
 #include "MapDrawer.hpp"
@@ -85,15 +86,14 @@ class Settings;
 class System
 {
 public:
-    // Input sensor
-    enum eSensor{
-        MONOCULAR=0,
-        STEREO=1,
-        RGBD=2,
-        IMU_MONOCULAR=3,
-        IMU_STEREO=4,
-        IMU_RGBD=5,
-    };
+    // Input sensor (defined in core/SensorTypes.hpp, aliased here for backward compat)
+    using eSensor = ORB_SLAM3::eSensor;
+    static constexpr eSensor MONOCULAR = ORB_SLAM3::MONOCULAR;
+    static constexpr eSensor STEREO = ORB_SLAM3::STEREO;
+    static constexpr eSensor RGBD = ORB_SLAM3::RGBD;
+    static constexpr eSensor IMU_MONOCULAR = ORB_SLAM3::IMU_MONOCULAR;
+    static constexpr eSensor IMU_STEREO = ORB_SLAM3::IMU_STEREO;
+    static constexpr eSensor IMU_RGBD = ORB_SLAM3::IMU_RGBD;
 
     // File type
     enum FileType{

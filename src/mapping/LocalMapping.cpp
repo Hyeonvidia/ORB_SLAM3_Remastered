@@ -18,6 +18,7 @@
 
 
 #include "LocalMapping.hpp"
+#include "System.hpp"
 #include "Tracking.hpp"
 #include "LoopClosing.hpp"
 #include "ORBmatcher.hpp"

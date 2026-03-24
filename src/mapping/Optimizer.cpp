@@ -18,6 +18,7 @@
 
 
 #include "Optimizer.hpp"
+#include "System.hpp"
 #include "LoopClosing.hpp"
 
 #include <complex>

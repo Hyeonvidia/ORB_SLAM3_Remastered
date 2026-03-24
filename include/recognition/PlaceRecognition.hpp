@@ -29,7 +29,7 @@
 #include "Sim3Solver.hpp"
 #include "Converter.hpp"
 #include "Optimizer.hpp"
-#include "System.hpp"
+#include "core/SensorTypes.hpp"
 
 #include "g2o/types/types_seven_dof_expmap.h"
 
@@ -83,7 +83,7 @@ public:
     // Runs the NewDetectCommonRegions logic on pCurrentKF.
     // The sensor type is needed for stereo / IMU-monocular checks that the
     // original code performed through mpTracker->mSensor.
-    DetectionResult detect(KeyFrame* pCurrentKF, System::eSensor sensor);
+    DetectionResult detect(KeyFrame* pCurrentKF, eSensor sensor);
 
     // ---- State resets (called by LoopClosing after correction) -------------
     void resetLoopState();
@@ -98,7 +98,7 @@ protected:
                                         g2o::Sim3 &gScw, int &nNumProjMatches,
                                         std::vector<MapPoint*> &vpMPs,
                                         std::vector<MapPoint*> &vpMatchedMPs,
-                                        System::eSensor sensor);
+                                        eSensor sensor);
 
     bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand,
                                     KeyFrame* &pMatchedKF, KeyFrame* &pLastCurrentKF,
@@ -106,7 +106,7 @@ protected:
                                     std::vector<MapPoint*> &vpMPs,
                                     std::vector<MapPoint*> &vpMatchedMPs,
                                     KeyFrame* pCurrentKF,
-                                    System::eSensor sensor);
+                                    eSensor sensor);
 
     bool DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF,
                                        g2o::Sim3 &gScw, int &nNumProjMatches,

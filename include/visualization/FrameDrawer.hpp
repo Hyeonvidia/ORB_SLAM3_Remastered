@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "Tracking.hpp"
 #include "MapPoint.hpp"
 #include "Atlas.hpp"
 #include "TrackingObserver.hpp"

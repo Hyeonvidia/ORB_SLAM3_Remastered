@@ -18,6 +18,7 @@
 
 
 #include "LoopClosing.hpp"
+#include "System.hpp"
 #include "PlaceRecognition.hpp"
 
 #include "Sim3Solver.hpp"
@@ -77,12 +78,12 @@ LoopClosing::LoopClosing(Atlas *pAtlas, KeyFrameDatabase *pDB, ORBVocabulary *pV
     mnCorrectionGBA = 0;
 }
 
-void LoopClosing::SetTracker(Tracking *pTracker)
+void LoopClosing::SetTracker(ITrackingState *pTracker)
 {
     mpTracker=pTracker;
 }
 
-void LoopClosing::SetLocalMapper(LocalMapping *pLocalMapper)
+void LoopClosing::SetLocalMapper(IMappingControl *pLocalMapper)
 {
     mpLocalMapper=pLocalMapper;
 }
@@ -117,7 +118,7 @@ void LoopClosing::Run()
             std::chrono::steady_clock::time_point time_StartPR = std::chrono::steady_clock::now();
 #endif
 
-            auto result = mpPlaceRecognition->detect(mpCurrentKF, static_cast<System::eSensor>(mSensor));
+            auto result = mpPlaceRecognition->detect(mpCurrentKF, static_cast<eSensor>(mSensor));
             bool bFindedRegion = result.loopDetected || result.mergeDetected;
 
 #ifdef REGISTER_TIMES
@@ -130,7 +131,7 @@ void LoopClosing::Run()
             {
                 if(result.mergeDetected)
                 {
-                    if ((mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD) &&
+                    if ((mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD) &&
                         (!mpCurrentKF->GetMap()->isImuInitialized()))
                     {
                         std::cout << "IMU is not initilized, merge is aborted" << std::endl;
@@ -157,7 +158,7 @@ void LoopClosing::Run()
                                 continue;
                             }
                             // If inertial, force only yaw
-                            if ((mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD) &&
+                            if ((mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD) &&
                                    mpCurrentKF->GetMap()->GetIniertialBA1())
                             {
                                 Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
@@ -191,7 +192,7 @@ void LoopClosing::Run()
                         nMerges += 1;
 #endif
                         // TODO UNCOMMENT
-                        if (mSensor==System::IMU_MONOCULAR ||mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD)
+                        if (mSensor==IMU_MONOCULAR ||mSensor==IMU_STEREO || mSensor==IMU_RGBD)
                             MergeLocal2();
                         else
                             MergeLocal();
@@ -248,7 +249,7 @@ void LoopClosing::Run()
                             if(mpCurrentKF->GetMap()->IsInertial())
                             {
                                 // If inertial, force only yaw
-                                if ((mSensor==System::IMU_MONOCULAR ||mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD) &&
+                                if ((mSensor==IMU_MONOCULAR ||mSensor==IMU_STEREO || mSensor==IMU_RGBD) &&
                                         mpCurrentKF->GetMap()->GetIniertialBA2())
                                 {
                                     phi(0)=0;
@@ -528,7 +529,7 @@ void LoopClosing::CorrectLoop()
     // Optimize graph
     bool bFixedScale = mbFixScale;
     // TODO CHECK; Solo para el monocular inertial
-    if(mSensor==System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+    if(mSensor==IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
         bFixedScale=false;
 
 #ifdef REGISTER_TIMES
@@ -983,7 +984,7 @@ void LoopClosing::MergeLocal()
     vpMergeConnectedKFs.clear();
     std::copy(spLocalWindowKFs.begin(), spLocalWindowKFs.end(), std::back_inserter(vpLocalCurrentWindowKFs));
     std::copy(spMergeConnectedKFs.begin(), spMergeConnectedKFs.end(), std::back_inserter(vpMergeConnectedKFs));
-    if (mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD)
+    if (mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD)
     {
         Optimizer::MergeInertialBA(mpCurrentKF,mpMergeMatchedKF,&bStop, pCurrentMap,vCorrectedSim3);
     }
@@ -1009,7 +1010,7 @@ void LoopClosing::MergeLocal()
 
     if(vpCurrentMapKFs.size() == 0){}
     else {
-        if(mSensor == System::MONOCULAR)
+        if(mSensor == MONOCULAR)
         {
             std::unique_lock<std::mutex> currentLock(pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
 
@@ -1077,7 +1078,7 @@ void LoopClosing::MergeLocal()
         }
 
         // Optimize graph (and update the loop position for each element form the begining to the end)
-        if(mSensor != System::MONOCULAR)
+        if(mSensor != MONOCULAR)
         {
             Optimizer::OptimizeEssentialGraph(mpCurrentKF, vpMergeConnectedKFs, vpLocalCurrentWindowKFs, vpCurrentMapKFs, vpCurrentMapMPs);
         }
@@ -1219,7 +1220,7 @@ void LoopClosing::MergeLocal2()
 
     const int numKFnew=pCurrentMap->KeyFramesInMap();
 
-    if((mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD)
+    if((mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD)
        && !pCurrentMap->GetIniertialBA2()){
         // Map is not completly initialized
         Eigen::Vector3d bg, ba;

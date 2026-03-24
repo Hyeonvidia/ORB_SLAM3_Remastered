@@ -21,6 +21,12 @@
 
 #include "ORBmatcher.hpp"
 #include "FrameDrawer.hpp"
+#include "MapDrawer.hpp"
+#include "LocalMapping.hpp"
+#include "LoopClosing.hpp"
+#include "System.hpp"
+#include "KeyFrameDatabase.hpp"
+#include "ORBVocabulary.hpp"
 #include "Converter.hpp"
 #include "G2oTypes.hpp"
 #include "Optimizer.hpp"
@@ -1433,7 +1439,7 @@ void Tracking::SetLoopClosing(LoopClosing *pLoopClosing)
     mpLoopClosing=pLoopClosing;
 }
 
-void Tracking::SetViewer(Viewer *pViewer)
+void Tracking::SetViewer(IViewerControl *pViewer)
 {
     mpViewer=pViewer;
 }

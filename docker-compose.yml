@@ -18,7 +18,7 @@ services:
     environment:
       - LD_LIBRARY_PATH=/workspace/lib:/usr/local/lib
       - DISPLAY=host.docker.internal:0
-      - LIBGL_ALWAYS_INDIRECT=1
+      # LIBGL_ALWAYS_INDIRECT removed — breaks Pangolin on macOS Docker
       - XDG_RUNTIME_DIR=/tmp
       - CCACHE_DIR=/ccache
     command: >
@@ -84,15 +84,15 @@ services:
     environment:
       - LD_LIBRARY_PATH=/workspace/lib:/usr/local/lib
       - DISPLAY=host.docker.internal:0
-      - LIBGL_ALWAYS_INDIRECT=1
+      # LIBGL_ALWAYS_INDIRECT removed — breaks Pangolin on macOS Docker
       - XDG_RUNTIME_DIR=/tmp
       - CCACHE_DIR=/ccache
     command: >
       bash -c "
         ldconfig &&
         bash scripts/build.sh > /dev/null 2>&1 &&
-        echo '=== Running Mono EuRoC with Viewer ===' &&
-        ./bin/mono_euroc Vocabulary/ORBvoc.txt Examples/Monocular/EuRoC.yaml /datasets/EuRoc/MH01/ Examples/Monocular/EuRoC_TimeStamps/MH01.txt
+        echo '=== Running Stereo EuRoC with Viewer ===' &&
+        ./bin/stereo_euroc Vocabulary/ORBvoc.txt examples/Stereo/EuRoC.yaml /datasets/EuRoc/MH01 examples/Stereo/EuRoC_TimeStamps/MH01.txt
       "
 
 volumes:

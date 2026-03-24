@@ -18,6 +18,8 @@
 
 
 #include "Viewer.hpp"
+#include "System.hpp"
+#include "core/SensorTypes.hpp"
 #include <pangolin/pangolin.h>
 
 #include <mutex>
@@ -25,7 +27,7 @@
 namespace ORB_SLAM3
 {
 
-Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking, const std::string &strSettingPath, Settings* settings):
+Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, ITrackingInfo *pTracking, const std::string &strSettingPath, Settings* settings):
     both(false), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer),mpMapDrawer(pMapDrawer), mpTracker(pTracking),
     mbFinishRequested(false), mbFinished(true), mbStopped(true), mbStopRequested(false)
 {
@@ -217,7 +219,7 @@ void Viewer::Run()
     bool bStepByStep = false;
     bool bCameraView = true;
 
-    if(mpTracker->mSensor == mpSystem->MONOCULAR || mpTracker->mSensor == mpSystem->STEREO || mpTracker->mSensor == mpSystem->RGBD)
+    if(mpTracker->GetSensor() == ORB_SLAM3::MONOCULAR || mpTracker->GetSensor() == ORB_SLAM3::STEREO || mpTracker->GetSensor() == ORB_SLAM3::RGBD)
     {
         menuShowGraph = true;
     }
@@ -308,7 +310,7 @@ void Viewer::Run()
 
         if(menuStep)
         {
-            mpTracker->mbStep = true;
+            mpTracker->SetStep();
             menuStep = false;
         }
 
