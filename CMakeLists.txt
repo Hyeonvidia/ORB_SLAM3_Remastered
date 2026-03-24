@@ -11,6 +11,7 @@ endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 option(BUILD_TESTS "Build unit tests" ON)
+option(WITH_GTSAM "Build with GTSAM optimizer backend" OFF)
 
 # Compiler flags — NO -march=native for arm64 portability
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -O3")
@@ -29,6 +30,13 @@ find_package(realsense2 QUIET)
 # Third-party: g2o (out-of-source build) + wrappers
 add_subdirectory(third_party/g2o ${CMAKE_BINARY_DIR}/g2o)
 add_subdirectory(third_party/wrappers)
+
+# Optional: GTSAM optimizer backend
+if(WITH_GTSAM)
+    find_package(GTSAM REQUIRED)
+    message(STATUS "GTSAM: found (version ${GTSAM_VERSION})")
+    add_definitions(-DWITH_GTSAM)
+endif()
 
 # Find installed third-party libraries (built by scripts/build_third_party.sh)
 find_library(DBoW2_LIB DBoW2 PATHS /usr/local/lib REQUIRED)
@@ -127,6 +135,11 @@ target_link_libraries(${PROJECT_NAME}
 if(realsense2_FOUND)
     include_directories(${realsense_INCLUDE_DIR})
     target_link_libraries(${PROJECT_NAME} ${realsense2_LIBRARY})
+endif()
+
+if(WITH_GTSAM)
+    target_link_libraries(${PROJECT_NAME} gtsam)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${GTSAM_INCLUDE_DIR})
 endif()
 
 # =============================================================================

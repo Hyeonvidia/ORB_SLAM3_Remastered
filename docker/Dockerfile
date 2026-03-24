@@ -38,6 +38,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon-dev \
     libepoxy-dev \
     libboost-serialization-dev \
+    libboost-system-dev \
+    libboost-filesystem-dev \
+    libboost-thread-dev \
+    libboost-date-time-dev \
+    libboost-regex-dev \
+    libboost-timer-dev \
+    libboost-chrono-dev \
+    libboost-program-options-dev \
+    libtbb-dev \
     libgtk-3-dev \
     libssl-dev \
     python3-dev \

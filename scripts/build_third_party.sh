@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Build third-party submodules for ORB_SLAM3_Remastered
-# Order: Pangolin -> DLib -> DBoW2 -> OpenGV
+# Order: Pangolin -> DLib -> DBoW2 -> OpenGV -> GTSAM (optional)
 # (Sophus is header-only, g2o is built via add_subdirectory in CMakeLists.txt)
 #
 # Build directories are created in /tmp to keep source trees clean.
@@ -67,5 +67,27 @@ make -j${NPROC} > /dev/null 2>&1
 make install > /dev/null 2>&1
 ldconfig
 echo ">>> OpenGV installed"
+
+# 5. GTSAM (optional — only if source exists)
+if [ -d "${WORKSPACE}/third_party/gtsam" ]; then
+    echo ">>> [5/5] Building GTSAM..."
+    mkdir -p "${BUILD_ROOT}/gtsam" && cd "${BUILD_ROOT}/gtsam"
+    cmake "${WORKSPACE}/third_party/gtsam" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DGTSAM_BUILD_TESTS=OFF \
+        -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF \
+        -DGTSAM_BUILD_UNSTABLE=OFF \
+        -DGTSAM_USE_SYSTEM_EIGEN=ON \
+        -DGTSAM_WITH_TBB=OFF \
+        -DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF \
+        > /dev/null 2>&1
+    make -j${NPROC} > /dev/null 2>&1
+    make install > /dev/null 2>&1
+    ldconfig
+    echo ">>> GTSAM installed"
+else
+    echo ">>> [5/5] GTSAM source not found, skipping"
+fi
 
 echo "=== All third-party libraries built and installed to /usr/local ==="
