@@ -31,7 +31,6 @@ services:
   # ==========================================================================
   build:
     image: orb-slam3-remastered:dev
-    container_name: remastered-build
     volumes:
       - .:/workspace
       - ccache:/ccache
@@ -51,7 +50,6 @@ services:
   # ==========================================================================
   test:
     image: orb-slam3-remastered:dev
-    container_name: remastered-test
     volumes:
       - .:/workspace
       - ccache:/ccache
@@ -74,7 +72,6 @@ services:
   # ==========================================================================
   run:
     image: orb-slam3-remastered:dev
-    container_name: remastered-run
     volumes:
       - .:/workspace
       - ../Datasets:/datasets:ro
