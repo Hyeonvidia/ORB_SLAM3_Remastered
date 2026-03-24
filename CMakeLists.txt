@@ -138,7 +138,9 @@ if(realsense2_FOUND)
 endif()
 
 if(WITH_GTSAM)
-    target_sources(${PROJECT_NAME} PRIVATE src/mapping/GtsamOptimizer.cpp)
+    target_sources(${PROJECT_NAME} PRIVATE
+        src/mapping/GtsamOptimizer.cpp
+        src/mapping/ABTestOptimizer.cpp)
     target_link_libraries(${PROJECT_NAME} gtsam)
     target_include_directories(${PROJECT_NAME} PRIVATE ${GTSAM_INCLUDE_DIR})
 endif()
