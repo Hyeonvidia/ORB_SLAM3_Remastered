@@ -23,6 +23,9 @@
 #include "PlaceRecognition.hpp"
 #include "TrajectoryWriter.hpp"
 #include "G2oOptimizer.hpp"
+#ifdef WITH_GTSAM
+#include "GtsamOptimizer.hpp"
+#endif
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
@@ -46,8 +49,12 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
     mSensor(sensor), mpViewer(static_cast<Viewer*>(nullptr)), mbReset(false), mbResetActiveMap(false),
     mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false)
 {
-    // Initialize optimizer backend (g2o by default)
+    // Initialize optimizer backend
+#ifdef WITH_GTSAM
+    Optimizer::SetBackend(std::make_unique<GtsamOptimizer>());
+#else
     Optimizer::SetBackend(std::make_unique<G2oOptimizer>());
+#endif
 
     // Output welcome message
     std::cout << std::endl <<
