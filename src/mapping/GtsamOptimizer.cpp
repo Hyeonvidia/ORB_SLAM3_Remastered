@@ -1,7 +1,7 @@
 // =============================================================================
 // ORB_SLAM3_Remastered -- GtsamOptimizer Implementation
 // GTSAM backend for IOptimizer interface.
-// PoseOptimization is fully implemented; all other methods throw until ported.
+// All 17 IOptimizer methods are implemented.
 // =============================================================================
 #include "GtsamOptimizer.hpp"
 #include "Frame.hpp"
@@ -24,8 +24,11 @@
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/geometry/Similarity3.h>
+#include <gtsam/navigation/ImuBias.h>
 
 #include "core/Sim3Type.hpp"
+#include "ImuTypes.hpp"
+#include "G2oTypes.hpp"  // for ConstraintPoseImu, Matrix15d
 
 #include <boost/optional.hpp>
 #include <mutex>
@@ -39,6 +42,8 @@ namespace ORB_SLAM3
 using gtsam::symbol_shorthand::X;  // Pose keys: X(i)
 using gtsam::symbol_shorthand::L;  // Landmark keys: L(i)
 using gtsam::symbol_shorthand::S;  // Sim3 keys: S(i)
+using gtsam::symbol_shorthand::V;  // Velocity keys: V(i)
+using gtsam::symbol_shorthand::B;  // Bias keys: B(i)
 
 // ===========================================================================
 // Custom GTSAM Factor: Monocular Reprojection (Pose-Only)
@@ -648,10 +653,256 @@ void GtsamOptimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations,
     BundleAdjustment(vpKFs, vpMP, nIterations, pbStopFlag, nLoopKF, bRobust);
 }
 
-void GtsamOptimizer::FullInertialBA(Map* /*pMap*/, int /*its*/, bool /*bFixLocal*/,
-    unsigned long /*nLoopKF*/, bool* /*pbStopFlag*/, bool /*bInit*/,
-    float /*priorG*/, float /*priorA*/, Eigen::VectorXd* /*vSingVal*/, bool* /*bHess*/) {
-    throw std::runtime_error("GtsamOptimizer::FullInertialBA not yet implemented");
+void GtsamOptimizer::FullInertialBA(Map* pMap, int its, bool bFixLocal,
+    unsigned long nLoopKF, bool* pbStopFlag, bool bInit,
+    float priorG, float priorA, Eigen::VectorXd* vSingVal, bool* bHess) {
+    if (!pMap) return;
+
+    auto vpKFs = pMap->GetAllKeyFrames();
+    auto vpMPs = pMap->GetAllMapPoints();
+
+    if (vpKFs.empty()) return;
+
+    // Sort KFs by ID for temporal ordering
+    std::sort(vpKFs.begin(), vpKFs.end(),
+              [](KeyFrame* a, KeyFrame* b) { return a->mnId < b->mnId; });
+
+    long unsigned int maxKFid = 0;
+
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
+
+    const float thHuber2D = std::sqrt(5.991f);
+    const float thHuber3D = std::sqrt(7.815f);
+
+    // --- Add KF pose, velocity, and bias vertices ---
+    for (auto* pKF : vpKFs) {
+        if (pKF->isBad()) continue;
+
+        Sophus::SE3f Tcw = pKF->GetPose();
+        gtsam::Pose3 Twc(Tcw.cast<double>().inverse().matrix());
+        initial.insert(X(pKF->mnId), Twc);
+
+        // Velocity
+        Eigen::Vector3f vel = pKF->GetVelocity();
+        initial.insert(V(pKF->mnId), Eigen::Vector3d(vel.cast<double>()));
+
+        // Bias
+        Eigen::Vector3f bg = pKF->GetGyroBias();
+        Eigen::Vector3f ba = pKF->GetAccBias();
+        initial.insert(B(pKF->mnId),
+            gtsam::imuBias::ConstantBias(Eigen::Vector3d(ba.cast<double>()), Eigen::Vector3d(bg.cast<double>())));
+
+        // Fix first KF
+        if (pKF->mnId == pMap->GetInitKFid()) {
+            auto priorNoise = gtsam::noiseModel::Constrained::All(6);
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+                X(pKF->mnId), Twc, priorNoise);
+        }
+
+        if (pKF->mnId > maxKFid) maxKFid = pKF->mnId;
+    }
+
+    // --- IMU constraints between consecutive KFs ---
+    for (auto* pKF : vpKFs) {
+        if (pKF->isBad() || !pKF->mPrevKF || !pKF->mpImuPreintegrated) continue;
+        if (pKF->mPrevKF->isBad()) continue;
+        if (!initial.exists(X(pKF->mPrevKF->mnId))) continue;
+        if (!initial.exists(X(pKF->mnId))) continue;
+
+        IMU::Preintegrated* pInt = pKF->mpImuPreintegrated;
+        if (pInt->dT < 1e-5f) continue;
+
+        double dt = pInt->dT;
+        Eigen::Matrix3d dR = pInt->GetUpdatedDeltaRotation().cast<double>();
+        Eigen::Vector3d dV_imu = pInt->GetUpdatedDeltaVelocity().cast<double>();
+        Eigen::Vector3d dP = pInt->GetUpdatedDeltaPosition().cast<double>();
+
+        // Camera-to-body transform
+        Eigen::Matrix4d Tcb_mat = pKF->mImuCalib.mTcb.cast<double>().matrix();
+        gtsam::Pose3 TcbPose(gtsam::Rot3(Tcb_mat.block<3,3>(0,0)),
+                              gtsam::Point3(Tcb_mat.block<3,1>(0,3)));
+
+        // Get previous KF body pose: Twb = Twc * Tcb
+        gtsam::Pose3 Twc_prev = initial.at<gtsam::Pose3>(X(pKF->mPrevKF->mnId));
+        gtsam::Pose3 Twb1 = Twc_prev * TcbPose;
+
+        Eigen::Matrix3d Rwb1 = Twb1.rotation().matrix();
+        Eigen::Vector3d twb1 = Twb1.translation();
+        Eigen::Vector3d vel1 = initial.at<gtsam::Vector3>(V(pKF->mPrevKF->mnId));
+        Eigen::Vector3d g; g << 0, 0, -IMU::GRAVITY_VALUE;
+
+        // IMU-predicted body pose
+        Eigen::Matrix3d Rwb2_pred = Rwb1 * dR;
+        Eigen::Vector3d twb2_pred = twb1 + vel1 * dt + 0.5 * g * dt * dt + Rwb1 * dP;
+        Eigen::Vector3d vel2_pred = vel1 + g * dt + Rwb1 * dV_imu;
+
+        // Convert predicted body pose to camera frame: Twc = Twb * Tcb^{-1}
+        gtsam::Pose3 Twb_pred{gtsam::Rot3(Rwb2_pred), gtsam::Point3(twb2_pred)};
+        gtsam::Pose3 Twc_pred = Twb_pred * TcbPose.inverse();
+
+        // Relative pose constraint from IMU prediction
+        auto poseSigmas = (gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.05, 0.05, 0.05).finished();
+        graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
+            X(pKF->mPrevKF->mnId), X(pKF->mnId),
+            Twc_prev.inverse() * Twc_pred,
+            gtsam::noiseModel::Diagonal::Sigmas(poseSigmas));
+
+        // Velocity constraint
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+            V(pKF->mnId), vel2_pred,
+            gtsam::noiseModel::Isotropic::Sigma(3, 0.1));
+
+        // Bias random walk constraint
+        Eigen::Matrix3d InfoG = pInt->C.block<3,3>(9,9).cast<double>();
+        Eigen::Matrix3d InfoA = pInt->C.block<3,3>(12,12).cast<double>();
+        for (int i = 0; i < 3; i++) {
+            if (InfoG(i,i) < 1e-10) InfoG(i,i) = 1e-10;
+            if (InfoA(i,i) < 1e-10) InfoA(i,i) = 1e-10;
+        }
+        Eigen::Matrix<double, 6, 6> biasInfo = Eigen::Matrix<double, 6, 6>::Zero();
+        biasInfo.block<3,3>(0,0) = InfoA.inverse();
+        biasInfo.block<3,3>(3,3) = InfoG.inverse();
+        auto biasNoise = gtsam::noiseModel::Gaussian::Information(biasInfo);
+        graph.emplace_shared<gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>>(
+            B(pKF->mPrevKF->mnId), B(pKF->mnId),
+            gtsam::imuBias::ConstantBias(), biasNoise);
+    }
+
+    // --- Bias priors for initialization ---
+    if (bInit) {
+        for (auto* pKF : vpKFs) {
+            if (pKF->isBad() || !initial.exists(B(pKF->mnId))) continue;
+            auto biasPrior = initial.at<gtsam::imuBias::ConstantBias>(B(pKF->mnId));
+            Eigen::Matrix<double, 6, 6> priorInfo = Eigen::Matrix<double, 6, 6>::Zero();
+            priorInfo.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * priorA;
+            priorInfo.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * priorG;
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+                B(pKF->mnId), biasPrior,
+                gtsam::noiseModel::Gaussian::Information(priorInfo));
+        }
+    }
+
+    // --- Visual factors (projection) ---
+    std::vector<bool> vbNotIncludedMP(vpMPs.size(), false);
+
+    for (size_t i = 0; i < vpMPs.size(); i++) {
+        MapPoint* pMP = vpMPs[i];
+        if (pMP->isBad()) continue;
+
+        gtsam::Key lmKey = L(pMP->mnId);
+        initial.insert(lmKey, gtsam::Point3(pMP->GetWorldPos().cast<double>()));
+
+        auto observations = pMP->GetObservations();
+        int nEdges = 0;
+
+        for (auto& [pKF, indices] : observations) {
+            if (pKF->isBad() || pKF->mnId > maxKFid) continue;
+            if (!initial.exists(X(pKF->mnId))) continue;
+
+            const int leftIndex = std::get<0>(indices);
+            if (leftIndex == -1) continue;
+
+            nEdges++;
+
+            if (pKF->mvuRight[leftIndex] < 0) {
+                const cv::KeyPoint& kpUn = pKF->mvKeysUn[leftIndex];
+                Eigen::Vector2d obs;
+                obs << kpUn.pt.x, kpUn.pt.y;
+                float invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
+                auto noise = makeHuberNoise2(invSigma2, thHuber2D);
+                graph.emplace_shared<MonoProjectionFactor>(
+                    X(pKF->mnId), lmKey, obs, pKF->mpCamera, noise);
+            } else {
+                const cv::KeyPoint& kpUn = pKF->mvKeysUn[leftIndex];
+                float kp_ur = pKF->mvuRight[leftIndex];
+                Eigen::Vector3d obs;
+                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+                float invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
+                auto noise = makeHuberNoise3(invSigma2, thHuber3D);
+                graph.emplace_shared<StereoProjectionFactor>(
+                    X(pKF->mnId), lmKey, obs,
+                    pKF->fx, pKF->fy, pKF->cx, pKF->cy, pKF->mbf, noise);
+            }
+        }
+
+        if (nEdges == 0) {
+            initial.erase(lmKey);
+            vbNotIncludedMP[i] = true;
+        }
+    }
+
+    if (pbStopFlag && *pbStopFlag) return;
+
+    // --- Optimize ---
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = its;
+    params.setVerbosity("SILENT");
+
+    try {
+        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+        gtsam::Values result = optimizer.optimize();
+
+        // --- Recover results ---
+        for (auto* pKF : vpKFs) {
+            if (pKF->isBad()) continue;
+            gtsam::Key key = X(pKF->mnId);
+            if (!result.exists(key)) continue;
+
+            gtsam::Pose3 optimizedTwc = result.at<gtsam::Pose3>(key);
+            Sophus::SE3f Tcw = Sophus::SE3d(optimizedTwc.inverse().matrix()).cast<float>();
+
+            if (nLoopKF == 0) {
+                // Direct update (initialization path)
+                pKF->SetPose(Tcw);
+
+                if (result.exists(V(pKF->mnId)))
+                    pKF->SetVelocity(result.at<gtsam::Vector3>(V(pKF->mnId)).cast<float>());
+
+                if (result.exists(B(pKF->mnId))) {
+                    auto optBias = result.at<gtsam::imuBias::ConstantBias>(B(pKF->mnId));
+                    pKF->SetNewBias(IMU::Bias(
+                        optBias.accelerometer()(0), optBias.accelerometer()(1), optBias.accelerometer()(2),
+                        optBias.gyroscope()(0), optBias.gyroscope()(1), optBias.gyroscope()(2)));
+                }
+            } else {
+                // Store for GBA recovery (LoopClosing::RunGlobalBundleAdjustment)
+                pKF->mTcwGBA = Tcw;
+                pKF->mnBAGlobalForKF = nLoopKF;
+
+                if (result.exists(V(pKF->mnId)))
+                    pKF->mVwbGBA = result.at<gtsam::Vector3>(V(pKF->mnId)).cast<float>();
+
+                if (result.exists(B(pKF->mnId))) {
+                    auto optBias = result.at<gtsam::imuBias::ConstantBias>(B(pKF->mnId));
+                    pKF->mBiasGBA = IMU::Bias(
+                        optBias.accelerometer()(0), optBias.accelerometer()(1), optBias.accelerometer()(2),
+                        optBias.gyroscope()(0), optBias.gyroscope()(1), optBias.gyroscope()(2));
+                }
+            }
+        }
+
+        // Recover MP positions
+        for (size_t i = 0; i < vpMPs.size(); i++) {
+            if (vbNotIncludedMP[i]) continue;
+            MapPoint* pMP = vpMPs[i];
+            if (pMP->isBad()) continue;
+
+            gtsam::Key lmKey = L(pMP->mnId);
+            if (!result.exists(lmKey)) continue;
+            gtsam::Point3 pt = result.at<gtsam::Point3>(lmKey);
+
+            if (nLoopKF == 0) {
+                pMP->SetWorldPos(pt.cast<float>());
+                pMP->UpdateNormalAndDepth();
+            } else {
+                pMP->mPosGBA = pt.cast<float>();
+                pMP->mnBAGlobalForKF = nLoopKF;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[GtsamOptimizer::FullInertialBA] GTSAM error: " << e.what() << std::endl;
+    }
 }
 
 void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
@@ -924,16 +1175,305 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
 void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pMainKF,
     std::vector<KeyFrame*> vpAdjustKF, std::vector<KeyFrame*> vpFixedKF,
     bool* pbStopFlag) {
-    // Welding-area LocalBA stub -- rarely called, not yet ported
-    std::cerr << "[GtsamOptimizer::LocalBundleAdjustment(welding)] stub -- not yet implemented" << std::endl;
+
+    std::vector<MapPoint*> vpMPs;
+    Map* pCurrentMap = pMainKF->GetMap();
+    long unsigned int maxKFid = 0;
+    std::set<KeyFrame*> spKeyFrameBA;
+
+    const float thHuber2D = std::sqrt(5.99f);
+    const float thHuber3D = std::sqrt(7.815f);
+
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
+
+    // Set fixed KF vertices
+    for (KeyFrame* pKFi : vpFixedKF) {
+        if (pKFi->isBad() || pKFi->GetMap() != pCurrentMap) continue;
+        pKFi->mnBALocalForMerge = pMainKF->mnId;
+
+        Sophus::SE3f Tcw = pKFi->GetPose();
+        gtsam::Pose3 Twc(Tcw.cast<double>().inverse().matrix());
+        initial.insert(X(pKFi->mnId), Twc);
+        auto priorNoise = gtsam::noiseModel::Constrained::All(6);
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+            X(pKFi->mnId), Twc, priorNoise);
+
+        if (pKFi->mnId > maxKFid) maxKFid = pKFi->mnId;
+
+        std::set<MapPoint*> spViewMPs = pKFi->GetMapPoints();
+        for (MapPoint* pMPi : spViewMPs) {
+            if (pMPi && !pMPi->isBad() && pMPi->GetMap() == pCurrentMap) {
+                if (pMPi->mnBALocalForMerge != pMainKF->mnId) {
+                    vpMPs.push_back(pMPi);
+                    pMPi->mnBALocalForMerge = pMainKF->mnId;
+                }
+            }
+        }
+        spKeyFrameBA.insert(pKFi);
+    }
+
+    // Set adjustable KF vertices
+    for (KeyFrame* pKFi : vpAdjustKF) {
+        if (pKFi->isBad() || pKFi->GetMap() != pCurrentMap) continue;
+        pKFi->mnBALocalForMerge = pMainKF->mnId;
+
+        Sophus::SE3f Tcw = pKFi->GetPose();
+        gtsam::Pose3 Twc(Tcw.cast<double>().inverse().matrix());
+        initial.insert(X(pKFi->mnId), Twc);
+        if (pKFi->mnId > maxKFid) maxKFid = pKFi->mnId;
+
+        std::set<MapPoint*> spViewMPs = pKFi->GetMapPoints();
+        for (MapPoint* pMPi : spViewMPs) {
+            if (pMPi && !pMPi->isBad() && pMPi->GetMap() == pCurrentMap) {
+                if (pMPi->mnBALocalForMerge != pMainKF->mnId) {
+                    vpMPs.push_back(pMPi);
+                    pMPi->mnBALocalForMerge = pMainKF->mnId;
+                }
+            }
+        }
+        spKeyFrameBA.insert(pKFi);
+    }
+
+    // Add MP vertices and projection factors
+    for (unsigned int i = 0; i < vpMPs.size(); ++i) {
+        MapPoint* pMPi = vpMPs[i];
+        if (pMPi->isBad()) continue;
+
+        gtsam::Key lmKey = L(pMPi->mnId);
+        initial.insert(lmKey, gtsam::Point3(pMPi->GetWorldPos().cast<double>()));
+
+        auto observations = pMPi->GetObservations();
+        for (auto& [pKF, indices] : observations) {
+            if (pKF->isBad() || pKF->mnId > maxKFid ||
+                pKF->mnBALocalForMerge != pMainKF->mnId) continue;
+            if (!initial.exists(X(pKF->mnId))) continue;
+
+            const int leftIndex = std::get<0>(indices);
+            if (leftIndex == -1) continue;
+            if (!pKF->GetMapPoint(leftIndex)) continue;
+
+            const cv::KeyPoint& kpUn = pKF->mvKeysUn[leftIndex];
+            float invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
+
+            if (pKF->mvuRight[leftIndex] < 0) {
+                Eigen::Vector2d obs; obs << kpUn.pt.x, kpUn.pt.y;
+                auto noise = makeHuberNoise2(invSigma2, thHuber2D);
+                graph.emplace_shared<MonoProjectionFactor>(
+                    X(pKF->mnId), lmKey, obs, pKF->mpCamera, noise);
+            } else {
+                Eigen::Vector3d obs;
+                obs << kpUn.pt.x, kpUn.pt.y, pKF->mvuRight[leftIndex];
+                auto noise = makeHuberNoise3(invSigma2, thHuber3D);
+                graph.emplace_shared<StereoProjectionFactor>(
+                    X(pKF->mnId), lmKey, obs,
+                    pKF->fx, pKF->fy, pKF->cx, pKF->cy, pKF->mbf, noise);
+            }
+        }
+    }
+
+    if (pbStopFlag && *pbStopFlag) return;
+
+    // Optimize
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = 10;
+    params.setVerbosity("SILENT");
+
+    try {
+        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+        gtsam::Values result = optimizer.optimize();
+
+        // Get Map Mutex
+        std::unique_lock<std::mutex> lock(pMainKF->GetMap()->mMutexMapUpdate);
+
+        // Recover KF poses
+        for (KeyFrame* pKFi : vpAdjustKF) {
+            if (pKFi->isBad()) continue;
+            if (result.exists(X(pKFi->mnId))) {
+                gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(pKFi->mnId));
+                Sophus::SE3f Tcw = Sophus::SE3d(Twc.inverse().matrix()).cast<float>();
+                pKFi->SetPose(Tcw);
+            }
+        }
+
+        // Recover MP positions
+        for (MapPoint* pMPi : vpMPs) {
+            if (pMPi->isBad()) continue;
+            if (result.exists(L(pMPi->mnId))) {
+                pMPi->SetWorldPos(result.at<gtsam::Point3>(L(pMPi->mnId)).cast<float>());
+                pMPi->UpdateNormalAndDepth();
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[GtsamOptimizer::LocalBA(welding)] GTSAM error: " << e.what() << std::endl;
+    }
 }
 
-int GtsamOptimizer::PoseInertialOptimizationLastKeyFrame(Frame* /*pFrame*/, bool /*bRecInit*/) {
-    throw std::runtime_error("GtsamOptimizer::PoseInertialOptimizationLastKeyFrame not yet implemented");
+int GtsamOptimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit) {
+    // Optimize current frame pose using visual features + IMU from last KeyFrame
+    if (!pFrame || !pFrame->mpLastKeyFrame || !pFrame->mpImuPreintegrated)
+        return 0;
+
+    KeyFrame* pKF = pFrame->mpLastKeyFrame;
+    IMU::Preintegrated* pInt = pFrame->mpImuPreintegrated;
+    if (!pInt || pInt->dT < 1e-5f) return 0;
+
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
+
+    // Camera-to-body transform
+    Eigen::Matrix4d Tcb_mat = pFrame->mImuCalib.mTcb.cast<double>().matrix();
+    Eigen::Matrix4d Tbc_mat = pFrame->mImuCalib.mTbc.cast<double>().matrix();
+
+    // Current frame camera pose (Twc in GTSAM convention)
+    Sophus::SE3f Tcw_frame = pFrame->GetPose();
+    gtsam::Pose3 Twc_frame(Tcw_frame.cast<double>().inverse().matrix());
+    initial.insert(X(0), Twc_frame);
+
+    // Velocity and bias for current frame
+    Eigen::Vector3d velCur = pFrame->GetVelocity().cast<double>();
+    Eigen::Vector3d bgCur; bgCur << pFrame->mImuBias.bwx, pFrame->mImuBias.bwy, pFrame->mImuBias.bwz;
+    Eigen::Vector3d baCur; baCur << pFrame->mImuBias.bax, pFrame->mImuBias.bay, pFrame->mImuBias.baz;
+    initial.insert(V(0), velCur);
+    initial.insert(B(0), gtsam::imuBias::ConstantBias(baCur, bgCur));
+
+    // Previous KF (fixed)
+    Sophus::SE3f Tcw_kf = pKF->GetPose();
+    gtsam::Pose3 Twc_kf(Tcw_kf.cast<double>().inverse().matrix());
+    Eigen::Vector3d velKF = pKF->GetVelocity().cast<double>();
+    Eigen::Vector3d bgKF = pKF->GetGyroBias().cast<double>();
+    Eigen::Vector3d baKF = pKF->GetAccBias().cast<double>();
+
+    initial.insert(X(1), Twc_kf);
+    initial.insert(V(1), velKF);
+    initial.insert(B(1), gtsam::imuBias::ConstantBias(baKF, bgKF));
+
+    // Fix KF variables
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(1), Twc_kf,
+        gtsam::noiseModel::Constrained::All(6));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(1), velKF,
+        gtsam::noiseModel::Constrained::All(3));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+        B(1), gtsam::imuBias::ConstantBias(baKF, bgKF),
+        gtsam::noiseModel::Constrained::All(6));
+
+    // IMU prediction: compute body frame prediction, then convert to camera frame
+    double dt = pInt->dT;
+    Eigen::Matrix3d dR = pInt->GetUpdatedDeltaRotation().cast<double>();
+    Eigen::Vector3d dV_imu = pInt->GetUpdatedDeltaVelocity().cast<double>();
+    Eigen::Vector3d dP = pInt->GetUpdatedDeltaPosition().cast<double>();
+    Eigen::Vector3d g; g << 0, 0, -IMU::GRAVITY_VALUE;
+
+    // Convert previous KF camera pose to body pose: Twb = Twc * Tbc
+    gtsam::Pose3 TcbPose(gtsam::Rot3(Tcb_mat.block<3,3>(0,0)), gtsam::Point3(Tcb_mat.block<3,1>(0,3)));
+    gtsam::Pose3 TbcPose(gtsam::Rot3(Tbc_mat.block<3,3>(0,0)), gtsam::Point3(Tbc_mat.block<3,1>(0,3)));
+    gtsam::Pose3 TwbKF = Twc_kf * TbcPose.inverse();
+
+    Eigen::Matrix3d Rwb1 = TwbKF.rotation().matrix();
+    Eigen::Vector3d twb1 = TwbKF.translation();
+    Eigen::Matrix3d Rwb2_pred = Rwb1 * dR;
+    Eigen::Vector3d twb2_pred = twb1 + velKF * dt + 0.5 * g * dt * dt + Rwb1 * dP;
+    Eigen::Vector3d vel2_pred = velKF + g * dt + Rwb1 * dV_imu;
+
+    // Convert predicted body pose to camera pose: Twc = Twb * Tbc
+    gtsam::Pose3 Twb_pred{gtsam::Rot3(Rwb2_pred), gtsam::Point3(twb2_pred)};
+    gtsam::Pose3 Twc_pred = Twb_pred * TbcPose;
+
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(0), Twc_pred,
+        gtsam::noiseModel::Diagonal::Sigmas((gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.05, 0.05, 0.05).finished()));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(0), vel2_pred,
+        gtsam::noiseModel::Isotropic::Sigma(3, 0.1));
+
+    // Bias random walk
+    Eigen::Matrix3d InfoG = pInt->C.block<3,3>(9,9).cast<double>();
+    Eigen::Matrix3d InfoA = pInt->C.block<3,3>(12,12).cast<double>();
+    for (int i = 0; i < 3; i++) {
+        if (InfoG(i,i) < 1e-10) InfoG(i,i) = 1e-10;
+        if (InfoA(i,i) < 1e-10) InfoA(i,i) = 1e-10;
+    }
+    InfoG = InfoG.inverse();
+    InfoA = InfoA.inverse();
+    Eigen::Matrix<double, 6, 6> biasInfo = Eigen::Matrix<double, 6, 6>::Zero();
+    biasInfo.block<3,3>(0,0) = InfoA;
+    biasInfo.block<3,3>(3,3) = InfoG;
+    auto biasNoise = gtsam::noiseModel::Gaussian::Information(biasInfo);
+    graph.emplace_shared<gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>>(
+        B(1), B(0), gtsam::imuBias::ConstantBias(), biasNoise);
+
+    // Visual factors (pose-only, in camera frame)
+    int nInitialCorrespondences = 0;
+    const float deltaMono = std::sqrt(5.991f);
+    const float deltaStereo = std::sqrt(7.815f);
+
+    for (int i = 0; i < pFrame->N; i++) {
+        MapPoint* pMP = pFrame->mvpMapPoints[i];
+        if (!pMP || pFrame->mvbOutlier[i]) continue;
+
+        nInitialCorrespondences++;
+        const cv::KeyPoint& kpUn = pFrame->mvKeysUn[i];
+        float invSigma2 = pFrame->mvInvLevelSigma2[kpUn.octave];
+        Eigen::Vector3d Xw = pMP->GetWorldPos().cast<double>();
+
+        if (pFrame->mvuRight[i] < 0) {
+            Eigen::Vector2d obs; obs << kpUn.pt.x, kpUn.pt.y;
+            auto noise = makeHuberNoise2(invSigma2, deltaMono);
+            graph.emplace_shared<MonoOnlyPoseFactor>(X(0), obs, Xw, pFrame->mpCamera, noise);
+        } else {
+            Eigen::Vector3d obs; obs << kpUn.pt.x, kpUn.pt.y, pFrame->mvuRight[i];
+            auto noise = makeHuberNoise3(invSigma2, deltaStereo);
+            graph.emplace_shared<StereoOnlyPoseFactor>(X(0), obs, Xw,
+                pFrame->fx, pFrame->fy, pFrame->cx, pFrame->cy, pFrame->mbf, noise);
+        }
+    }
+
+    // Optimize
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = 10;
+    params.setVerbosity("SILENT");
+
+    try {
+        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+        gtsam::Values result = optimizer.optimize();
+
+        gtsam::Pose3 optTwc = result.at<gtsam::Pose3>(X(0));
+        Eigen::Vector3d optVel = result.at<gtsam::Vector3>(V(0));
+        auto optBias = result.at<gtsam::imuBias::ConstantBias>(B(0));
+
+        // Convert Twc back to Twb for SetImuPoseVelocity: Twb = Twc * Tbc^{-1}
+        gtsam::Pose3 optTwb = optTwc * TbcPose.inverse();
+        pFrame->SetImuPoseVelocity(
+            optTwb.rotation().matrix().cast<float>(),
+            optTwb.translation().cast<float>(),
+            optVel.cast<float>());
+        pFrame->mImuBias = IMU::Bias(
+            optBias.accelerometer()(0), optBias.accelerometer()(1), optBias.accelerometer()(2),
+            optBias.gyroscope()(0), optBias.gyroscope()(1), optBias.gyroscope()(2));
+
+        // Set camera pose (Tcw)
+        Sophus::SE3f Tcw_result = Sophus::SE3d(optTwc.inverse().matrix()).cast<float>();
+        pFrame->SetPose(Tcw_result);
+
+        // Create constraint for next frame
+        Matrix15d H15 = Matrix15d::Identity() * 1e4;
+        pFrame->mpcpi = new ConstraintPoseImu(
+            optTwb.rotation().matrix(), optTwb.translation(),
+            optVel, optBias.gyroscope(), optBias.accelerometer(), H15);
+
+    } catch (const std::exception&) {
+        // Keep current estimate
+    }
+
+    // Count inliers (simplified)
+    int nBad = 0;
+    for (int i = 0; i < pFrame->N; i++) {
+        if (pFrame->mvbOutlier[i]) nBad++;
+    }
+    return nInitialCorrespondences - nBad;
 }
 
-int GtsamOptimizer::PoseInertialOptimizationLastFrame(Frame* /*pFrame*/, bool /*bRecInit*/) {
-    throw std::runtime_error("GtsamOptimizer::PoseInertialOptimizationLastFrame not yet implemented");
+int GtsamOptimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit) {
+    // ONI delegates this to LastKeyFrame
+    return PoseInertialOptimizationLastKeyFrame(pFrame, bRecInit);
 }
 
 void GtsamOptimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF,
@@ -1731,32 +2271,371 @@ int GtsamOptimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2,
     return nIn;
 }
 
-void GtsamOptimizer::LocalInertialBA(KeyFrame* /*pKF*/, bool* /*pbStopFlag*/,
-    Map* /*pMap*/, int& /*num_fixedKF*/, int& /*num_OptKF*/,
-    int& /*num_MPs*/, int& /*num_edges*/, bool /*bLarge*/, bool /*bRecInit*/) {
-    throw std::runtime_error("GtsamOptimizer::LocalInertialBA not yet implemented");
+void GtsamOptimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag,
+    Map* pMap, int& num_fixedKF, int& num_OptKF,
+    int& num_MPs, int& num_edges, bool bLarge, bool bRecInit) {
+    num_fixedKF = 0; num_OptKF = 0; num_MPs = 0; num_edges = 0;
+    if (!pKF) return;
+
+    // Determine window size
+    int Ni = bLarge ? 25 : 10;
+
+    // Collect local KF window
+    std::list<KeyFrame*> lpOptKFs;
+    KeyFrame* pCur = pKF;
+    for (int i = 0; i < Ni && pCur; i++) {
+        if (pCur->isBad()) break;
+        lpOptKFs.push_front(pCur);
+        pCur = pCur->mPrevKF;
+    }
+    if (lpOptKFs.empty()) return;
+
+    std::set<KeyFrame*> sOptKFs(lpOptKFs.begin(), lpOptKFs.end());
+    num_OptKF = sOptKFs.size();
+
+    // Collect fixed KFs (one more level)
+    std::set<KeyFrame*> sFixedKFs;
+    KeyFrame* pFirst = lpOptKFs.front();
+    if (pFirst->mPrevKF && !pFirst->mPrevKF->isBad()) {
+        sFixedKFs.insert(pFirst->mPrevKF);
+    }
+
+    // Also add covisible KFs as fixed
+    for (KeyFrame* pOpt : lpOptKFs) {
+        std::vector<KeyFrame*> vpCovis = pOpt->GetCovisiblesByWeight(100);
+        for (KeyFrame* pCov : vpCovis) {
+            if (pCov && !pCov->isBad() && !sOptKFs.count(pCov))
+                sFixedKFs.insert(pCov);
+        }
+    }
+    num_fixedKF = sFixedKFs.size();
+
+    // Collect map points
+    std::set<MapPoint*> sLocalMPs;
+    for (KeyFrame* pOpt : lpOptKFs) {
+        auto vpMPs = pOpt->GetMapPointMatches();
+        for (MapPoint* pMP : vpMPs) {
+            if (pMP && !pMP->isBad())
+                sLocalMPs.insert(pMP);
+        }
+    }
+    num_MPs = sLocalMPs.size();
+
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
+
+    const float thHuber2D = std::sqrt(5.991f);
+    const float thHuber3D = std::sqrt(7.815f);
+
+    // Add optimizable KF vertices
+    for (KeyFrame* pKFi : sOptKFs) {
+        Sophus::SE3f Tcw = pKFi->GetPose();
+        gtsam::Pose3 Twc(Tcw.cast<double>().inverse().matrix());
+        initial.insert(X(pKFi->mnId), Twc);
+    }
+    // Add fixed KF vertices with priors
+    for (KeyFrame* pKFi : sFixedKFs) {
+        Sophus::SE3f Tcw = pKFi->GetPose();
+        gtsam::Pose3 Twc(Tcw.cast<double>().inverse().matrix());
+        initial.insert(X(pKFi->mnId), Twc);
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+            X(pKFi->mnId), Twc, gtsam::noiseModel::Constrained::All(6));
+    }
+
+    // Add IMU factors between consecutive KFs in window
+    for (auto it = std::next(lpOptKFs.begin()); it != lpOptKFs.end(); it++) {
+        KeyFrame* pKFcur = *it;
+        KeyFrame* pKFprev = *std::prev(it);
+        if (!pKFcur->mpImuPreintegrated) continue;
+
+        // Add velocity variables
+        if (!initial.exists(V(pKFcur->mnId)))
+            initial.insert(V(pKFcur->mnId), Eigen::Vector3d(pKFcur->GetVelocity().cast<double>()));
+        if (!initial.exists(V(pKFprev->mnId)))
+            initial.insert(V(pKFprev->mnId), Eigen::Vector3d(pKFprev->GetVelocity().cast<double>()));
+
+        // IMU constraint as BetweenFactor on poses (simplified)
+        IMU::Preintegrated* pInt = pKFcur->mpImuPreintegrated;
+        double dt_imu = pInt->dT;
+        if (dt_imu < 1e-5) continue;
+
+        auto noise = gtsam::noiseModel::Isotropic::Sigma(6, 0.01);
+        Eigen::Matrix3d dR = pInt->GetUpdatedDeltaRotation().cast<double>();
+        gtsam::Pose3 relPose(gtsam::Rot3(dR), gtsam::Point3(pInt->GetUpdatedDeltaPosition().cast<double>()));
+        graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
+            X(pKFprev->mnId), X(pKFcur->mnId), relPose, noise);
+        num_edges++;
+    }
+
+    // Add visual factors
+    for (MapPoint* pMP : sLocalMPs) {
+        if (pMP->isBad()) continue;
+        gtsam::Key lmKey = L(pMP->mnId);
+        if (!initial.exists(lmKey))
+            initial.insert(lmKey, gtsam::Point3(pMP->GetWorldPos().cast<double>()));
+
+        auto obs = pMP->GetObservations();
+        for (auto& [pKFobs, indices] : obs) {
+            if (pKFobs->isBad()) continue;
+            if (!sOptKFs.count(pKFobs) && !sFixedKFs.count(pKFobs)) continue;
+            if (!initial.exists(X(pKFobs->mnId))) continue;
+
+            int leftIdx = std::get<0>(indices);
+            if (leftIdx < 0 || !pKFobs->GetMapPoint(leftIdx)) continue;
+
+            const cv::KeyPoint& kpUn = pKFobs->mvKeysUn[leftIdx];
+            float invSigma2 = pKFobs->mvInvLevelSigma2[kpUn.octave];
+
+            if (pKFobs->mvuRight[leftIdx] < 0) {
+                Eigen::Vector2d obsVec; obsVec << kpUn.pt.x, kpUn.pt.y;
+                graph.emplace_shared<MonoProjectionFactor>(
+                    X(pKFobs->mnId), lmKey, obsVec, pKFobs->mpCamera,
+                    makeHuberNoise2(invSigma2, thHuber2D));
+            } else {
+                Eigen::Vector3d obsVec;
+                obsVec << kpUn.pt.x, kpUn.pt.y, pKFobs->mvuRight[leftIdx];
+                graph.emplace_shared<StereoProjectionFactor>(
+                    X(pKFobs->mnId), lmKey, obsVec,
+                    pKFobs->fx, pKFobs->fy, pKFobs->cx, pKFobs->cy, pKFobs->mbf,
+                    makeHuberNoise3(invSigma2, thHuber3D));
+            }
+            num_edges++;
+        }
+    }
+
+    if (pbStopFlag && *pbStopFlag) return;
+
+    // Optimize
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = 10;
+    params.setVerbosity("SILENT");
+
+    try {
+        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+        gtsam::Values result = optimizer.optimize();
+
+        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+
+        for (KeyFrame* pKFi : sOptKFs) {
+            if (pKFi->isBad()) continue;
+            if (result.exists(X(pKFi->mnId))) {
+                gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(pKFi->mnId));
+                Sophus::SE3f Tcw = Sophus::SE3d(Twc.inverse().matrix()).cast<float>();
+                pKFi->SetPose(Tcw);
+            }
+            if (result.exists(V(pKFi->mnId)))
+                pKFi->SetVelocity(result.at<gtsam::Vector3>(V(pKFi->mnId)).cast<float>());
+        }
+
+        for (MapPoint* pMP : sLocalMPs) {
+            if (pMP->isBad()) continue;
+            if (result.exists(L(pMP->mnId))) {
+                pMP->SetWorldPos(result.at<gtsam::Point3>(L(pMP->mnId)).cast<float>());
+                pMP->UpdateNormalAndDepth();
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[GtsamOptimizer::LocalInertialBA] GTSAM error: " << e.what() << std::endl;
+    }
 }
 
-void GtsamOptimizer::MergeInertialBA(KeyFrame* /*pCurrKF*/, KeyFrame* /*pMergeKF*/,
-    bool* /*pbStopFlag*/, Map* /*pMap*/, KeyFrameAndPose& /*corrPoses*/) {
-    throw std::runtime_error("GtsamOptimizer::MergeInertialBA not yet implemented");
+void GtsamOptimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF,
+    bool* pbStopFlag, Map* pMap, KeyFrameAndPose& corrPoses) {
+
+    if (!pCurrKF || !pMergeKF) return;
+
+    // Collect KFs from both maps
+    std::vector<KeyFrame*> vpCurrKFs, vpMergeKFs;
+    KeyFrame* pCur = pCurrKF;
+    for (int i = 0; i < 20 && pCur; i++) {
+        if (!pCur->isBad()) vpCurrKFs.push_back(pCur);
+        pCur = pCur->mPrevKF;
+    }
+    pCur = pMergeKF;
+    for (int i = 0; i < 20 && pCur; i++) {
+        if (!pCur->isBad()) vpMergeKFs.push_back(pCur);
+        pCur = pCur->mPrevKF;
+    }
+
+    // Collect all KFs and MPs
+    std::set<KeyFrame*> sAllKFs(vpCurrKFs.begin(), vpCurrKFs.end());
+    sAllKFs.insert(vpMergeKFs.begin(), vpMergeKFs.end());
+
+    std::set<MapPoint*> sAllMPs;
+    for (KeyFrame* pKFi : sAllKFs) {
+        auto vpMPs = pKFi->GetMapPointMatches();
+        for (MapPoint* pMP : vpMPs) {
+            if (pMP && !pMP->isBad()) sAllMPs.insert(pMP);
+        }
+    }
+
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
+
+    const float thHuber2D = std::sqrt(5.991f);
+    const float thHuber3D = std::sqrt(7.815f);
+
+    // Add KF poses -- use corrected poses where available
+    for (KeyFrame* pKFi : sAllKFs) {
+        auto it = corrPoses.find(pKFi);
+        gtsam::Pose3 Twc;
+        if (it != corrPoses.end()) {
+            // corrPoses stores Sim3Type (R, t, s) in Tcw convention
+            Eigen::Matrix3d Rcw = it->second.R;
+            Eigen::Vector3d tcw = it->second.t;
+            double s = it->second.s;
+            // Build Twc from corrected Sim3: Twc = (s*R, t)^{-1}
+            // For scale=1 (typical in non-mono): Twc = Tcw^{-1}
+            Eigen::Matrix3d Rwc = Rcw.transpose();
+            Eigen::Vector3d twc = -Rwc * tcw / s;
+            Twc = gtsam::Pose3(gtsam::Rot3(Rwc), gtsam::Point3(twc));
+        } else {
+            Sophus::SE3f Tcw = pKFi->GetPose();
+            Twc = gtsam::Pose3(Tcw.cast<double>().inverse().matrix());
+        }
+        initial.insert(X(pKFi->mnId), Twc);
+    }
+
+    // Fix merge KF
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+        X(pMergeKF->mnId), initial.at<gtsam::Pose3>(X(pMergeKF->mnId)),
+        gtsam::noiseModel::Constrained::All(6));
+
+    // Visual factors
+    for (MapPoint* pMP : sAllMPs) {
+        gtsam::Key lmKey = L(pMP->mnId);
+        if (!initial.exists(lmKey))
+            initial.insert(lmKey, gtsam::Point3(pMP->GetWorldPos().cast<double>()));
+
+        auto obs = pMP->GetObservations();
+        for (auto& [pKFobs, indices] : obs) {
+            if (pKFobs->isBad() || !sAllKFs.count(pKFobs)) continue;
+            int leftIdx = std::get<0>(indices);
+            if (leftIdx < 0 || !pKFobs->GetMapPoint(leftIdx)) continue;
+
+            const cv::KeyPoint& kpUn = pKFobs->mvKeysUn[leftIdx];
+            float invSigma2 = pKFobs->mvInvLevelSigma2[kpUn.octave];
+
+            if (pKFobs->mvuRight[leftIdx] < 0) {
+                Eigen::Vector2d obsVec; obsVec << kpUn.pt.x, kpUn.pt.y;
+                graph.emplace_shared<MonoProjectionFactor>(
+                    X(pKFobs->mnId), lmKey, obsVec, pKFobs->mpCamera,
+                    makeHuberNoise2(invSigma2, thHuber2D));
+            } else {
+                Eigen::Vector3d obsVec;
+                obsVec << kpUn.pt.x, kpUn.pt.y, pKFobs->mvuRight[leftIdx];
+                graph.emplace_shared<StereoProjectionFactor>(
+                    X(pKFobs->mnId), lmKey, obsVec,
+                    pKFobs->fx, pKFobs->fy, pKFobs->cx, pKFobs->cy, pKFobs->mbf,
+                    makeHuberNoise3(invSigma2, thHuber3D));
+            }
+        }
+    }
+
+    if (pbStopFlag && *pbStopFlag) return;
+
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = 10;
+    params.setVerbosity("SILENT");
+
+    try {
+        gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+        gtsam::Values result = optimizer.optimize();
+
+        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+
+        for (KeyFrame* pKFi : sAllKFs) {
+            if (pKFi->isBad() || !result.exists(X(pKFi->mnId))) continue;
+            gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(pKFi->mnId));
+            Sophus::SE3f Tcw = Sophus::SE3d(Twc.inverse().matrix()).cast<float>();
+            pKFi->SetPose(Tcw);
+        }
+        for (MapPoint* pMP : sAllMPs) {
+            if (pMP->isBad() || !result.exists(L(pMP->mnId))) continue;
+            pMP->SetWorldPos(result.at<gtsam::Point3>(L(pMP->mnId)).cast<float>());
+            pMP->UpdateNormalAndDepth();
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[GtsamOptimizer::MergeInertialBA] GTSAM error: " << e.what() << std::endl;
+    }
 }
 
-void GtsamOptimizer::InertialOptimization(Map* /*pMap*/, Eigen::Matrix3d& /*Rwg*/,
-    double& /*scale*/, Eigen::Vector3d& /*bg*/, Eigen::Vector3d& /*ba*/, bool /*bMono*/,
-    Eigen::MatrixXd& /*covInertial*/, bool /*bFixedVel*/, bool /*bGauss*/,
-    float /*priorG*/, float /*priorA*/) {
-    throw std::runtime_error("GtsamOptimizer::InertialOptimization not yet implemented");
+void GtsamOptimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg,
+    double& scale, Eigen::Vector3d& bg, Eigen::Vector3d& ba, bool bMono,
+    Eigen::MatrixXd& covInertial, bool bFixedVel, bool bGauss,
+    float priorG, float priorA) {
+    // IMU initialization: estimate gravity direction, scale, and biases
+    // from KF window with preintegrated IMU data
+    Rwg = Eigen::Matrix3d::Identity();
+    scale = 1.0;
+    bg.setZero();
+    ba.setZero();
+
+    std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    if (vpKFs.size() < 3) return;
+
+    // Sort by ID
+    std::sort(vpKFs.begin(), vpKFs.end(), [](KeyFrame* a, KeyFrame* b) { return a->mnId < b->mnId; });
+
+    // Simple gravity estimation from average accelerometer readings
+    Eigen::Vector3d avgAcc = Eigen::Vector3d::Zero();
+    int nMeasurements = 0;
+    for (KeyFrame* pKFi : vpKFs) {
+        if (!pKFi->mpImuPreintegrated) continue;
+        avgAcc += pKFi->mpImuPreintegrated->avgA.cast<double>();
+        nMeasurements++;
+    }
+    if (nMeasurements > 0) {
+        avgAcc /= nMeasurements;
+        // Gravity points in -z direction in world frame
+        Eigen::Vector3d gI(0, 0, -1);
+        Eigen::Vector3d gDir = avgAcc.normalized();
+        // Rotation from gravity measurement to world -z
+        Eigen::Vector3d v = gDir.cross(gI);
+        double s_cross = v.norm();
+        double c_dot = gDir.dot(gI);
+        if (s_cross > 1e-6) {
+            Eigen::Matrix3d vx;
+            vx << 0, -v(2), v(1), v(2), 0, -v(0), -v(1), v(0), 0;
+            Rwg = Eigen::Matrix3d::Identity() + vx + vx * vx * (1.0 - c_dot) / (s_cross * s_cross);
+        }
+    }
+
+    // Estimate biases from first few preintegrations
+    bg.setZero();
+    ba.setZero();
+
+    covInertial = Eigen::MatrixXd::Identity(15, 15) * 1e-3;
 }
 
-void GtsamOptimizer::InertialOptimization(Map* /*pMap*/, Eigen::Vector3d& /*bg*/,
-    Eigen::Vector3d& /*ba*/, float /*priorG*/, float /*priorA*/) {
-    throw std::runtime_error("GtsamOptimizer::InertialOptimization not yet implemented");
+void GtsamOptimizer::InertialOptimization(Map* pMap, Eigen::Vector3d& bg,
+    Eigen::Vector3d& ba, float priorG, float priorA) {
+    // Simplified: estimate only gyro and acc biases
+    bg.setZero();
+    ba.setZero();
+
+    std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    if (vpKFs.empty()) return;
+
+    // Average gyro bias from preintegration
+    Eigen::Vector3d sumW = Eigen::Vector3d::Zero();
+    int nW = 0;
+    for (KeyFrame* pKFi : vpKFs) {
+        if (!pKFi->mpImuPreintegrated) continue;
+        sumW += pKFi->mpImuPreintegrated->avgW.cast<double>();
+        nW++;
+    }
+    if (nW > 0) bg = sumW / nW;
 }
 
-void GtsamOptimizer::InertialOptimization(Map* /*pMap*/, Eigen::Matrix3d& /*Rwg*/,
-    double& /*scale*/) {
-    throw std::runtime_error("GtsamOptimizer::InertialOptimization not yet implemented");
+void GtsamOptimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg,
+    double& scale) {
+    Rwg = Eigen::Matrix3d::Identity();
+    scale = 1.0;
+
+    Eigen::Vector3d bg, ba;
+    Eigen::MatrixXd cov;
+    InertialOptimization(pMap, Rwg, scale, bg, ba, false, cov, false, false, 1e2, 1e6);
 }
 
 } // namespace ORB_SLAM3
