@@ -40,6 +40,13 @@
 namespace ORB_SLAM3
 {
 
+// Helper function to safely construct Sophus::SE3f without triggering isOrthogonal asserts from float casting
+static Sophus::SE3f toSophus(const gtsam::Pose3& pose) {
+    Eigen::Quaternionf q(pose.rotation().toQuaternion().cast<float>());
+    q.normalize(); // Guarantee perfect strict orthogonality
+    return Sophus::SE3f(q, pose.translation().cast<float>());
+}
+
 using gtsam::symbol_shorthand::X;  // Pose keys: X(i)
 using gtsam::symbol_shorthand::L;  // Landmark keys: L(i)
 using gtsam::symbol_shorthand::S;  // Sim3 keys: S(i)
@@ -54,44 +61,56 @@ class MonoOnlyPoseFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
     Eigen::Vector2d measured_;       // observed (u, v)
     Eigen::Vector3d Xw_;             // fixed world point
     GeometricCamera* pCamera_;       // camera model for projection
+    double thHuber2_;
 
 public:
     MonoOnlyPoseFactor(gtsam::Key poseKey,
                        const Eigen::Vector2d& measured,
                        const Eigen::Vector3d& Xw,
                        GeometricCamera* pCam,
-                       const gtsam::SharedNoiseModel& model)
+                       const gtsam::SharedNoiseModel& model,
+                       double thHuber = 2.447651936) // sqrt(5.991)
         : gtsam::NoiseModelFactor1<gtsam::Pose3>(model, poseKey),
-          measured_(measured), Xw_(Xw), pCamera_(pCam) {}
+          measured_(measured), Xw_(Xw), pCamera_(pCam), thHuber2_(thHuber * thHuber) {}
 
     gtsam::Vector evaluateError(const gtsam::Pose3& Twc,
                                  boost::optional<gtsam::Matrix&> H = boost::none) const override {
         gtsam::Matrix36 Hpose;
         Eigen::Vector3d Pc = Twc.transformTo(Xw_, Hpose);
 
-        if (Pc(2) <= 0.0) {
-            // Behind camera -- return zero error to avoid distorting optimization
-            if (H) *H = gtsam::Matrix::Zero(2, 6);
-            return gtsam::Vector2::Zero();
-        }
+        if (std::abs(Pc(2)) < 1e-6) Pc(2) = (Pc(2) >= 0) ? 1e-6 : -1e-6;
 
-        // Project using camera model (takes Eigen::Vector3d, returns Eigen::Vector2d)
         Eigen::Vector2d proj = pCamera_->project(Pc);
         gtsam::Vector2 error = proj - measured_;
 
+        auto isotropicModel = boost::dynamic_pointer_cast<gtsam::noiseModel::Isotropic>(noiseModel_);
+        double invSigma = isotropicModel ? isotropicModel->invsigmas()(0) : 1.0;
+        
+        double chi2 = error.squaredNorm() * (invSigma * invSigma);
+        
+        double weight = 1.0;
+        if (chi2 > thHuber2_) {
+            weight = std::sqrt(thHuber2_ / chi2);
+        }
+        
+        double sqrt_w = std::sqrt(weight);
+        error *= sqrt_w;
+
         if (H) {
-            // projectJac takes Eigen::Vector3d, returns Eigen::Matrix<double,2,3>
             Eigen::Matrix<double, 2, 3> Jproj = pCamera_->projectJac(Pc);
-            *H = Jproj * Hpose;
+            *H = (Jproj * Hpose) * sqrt_w;
         }
 
         return error;
     }
 
-    /// Compute squared error for outlier classification (without noise weighting)
+    /// Compute squared UNROBUSTIFIED error for exact classical outlier classification
     double chi2val(const gtsam::Pose3& Twc) const {
-        gtsam::Vector e = evaluateError(Twc);
-        return e.squaredNorm();
+        gtsam::Matrix36 Hpose;
+        Eigen::Vector3d Pc = Twc.transformTo(Xw_, Hpose);
+        if (std::abs(Pc(2)) < 1e-6) Pc(2) = (Pc(2) >= 0) ? 1e-6 : -1e-6;
+        Eigen::Vector2d proj = pCamera_->project(Pc);
+        return (proj - measured_).squaredNorm();
     }
 };
 
@@ -103,25 +122,24 @@ class StereoOnlyPoseFactor : public gtsam::NoiseModelFactor1<gtsam::Pose3> {
     Eigen::Vector3d measured_;  // (uL, v, uR)
     Eigen::Vector3d Xw_;
     double fx_, fy_, cx_, cy_, bf_;
+    double thHuber2_;
 
 public:
     StereoOnlyPoseFactor(gtsam::Key poseKey,
                           const Eigen::Vector3d& measured,
                           const Eigen::Vector3d& Xw,
                           double fx, double fy, double cx, double cy, double bf,
-                          const gtsam::SharedNoiseModel& model)
+                          const gtsam::SharedNoiseModel& model,
+                          double thHuber = 2.795532149) // sqrt(7.815)
         : gtsam::NoiseModelFactor1<gtsam::Pose3>(model, poseKey),
-          measured_(measured), Xw_(Xw), fx_(fx), fy_(fy), cx_(cx), cy_(cy), bf_(bf) {}
+          measured_(measured), Xw_(Xw), fx_(fx), fy_(fy), cx_(cx), cy_(cy), bf_(bf), thHuber2_(thHuber * thHuber) {}
 
     gtsam::Vector evaluateError(const gtsam::Pose3& Twc,
                                  boost::optional<gtsam::Matrix&> H = boost::none) const override {
         gtsam::Matrix36 Hpose;
         Eigen::Vector3d Pc = Twc.transformTo(Xw_, Hpose);
 
-        if (Pc(2) <= 0.0) {
-            if (H) *H = gtsam::Matrix::Zero(3, 6);
-            return gtsam::Vector3::Zero();
-        }
+        if (std::abs(Pc(2)) < 1e-6) Pc(2) = (Pc(2) >= 0) ? 1e-6 : -1e-6;
 
         double invZ = 1.0 / Pc(2);
         double u = fx_ * Pc(0) * invZ + cx_;
@@ -131,13 +149,26 @@ public:
         gtsam::Vector3 error;
         error << u - measured_(0), v - measured_(1), ur - measured_(2);
 
+        auto isotropicModel = boost::dynamic_pointer_cast<gtsam::noiseModel::Isotropic>(noiseModel_);
+        double invSigma = isotropicModel ? isotropicModel->invsigmas()(0) : 1.0;
+        
+        double chi2 = error.squaredNorm() * (invSigma * invSigma);
+        
+        double weight = 1.0;
+        if (chi2 > thHuber2_) {
+            weight = std::sqrt(thHuber2_ / chi2);
+        }
+        
+        double sqrt_w = std::sqrt(weight);
+        error *= sqrt_w;
+
         if (H) {
             Eigen::Matrix<double, 3, 3> Jproj;
             double invZ2 = invZ * invZ;
             Jproj << fx_ * invZ, 0, -fx_ * Pc(0) * invZ2,
                      0, fy_ * invZ, -fy_ * Pc(1) * invZ2,
                      fx_ * invZ, 0, -(fx_ * Pc(0) - bf_) * invZ2;
-            *H = Jproj * Hpose;
+            *H = (Jproj * Hpose) * sqrt_w;
         }
 
         return error;
@@ -150,14 +181,16 @@ public:
 class MonoProjectionFactor : public gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Point3> {
     Eigen::Vector2d measured_;
     GeometricCamera* pCamera_;
+    double thHuber2_;
 
 public:
     MonoProjectionFactor(gtsam::Key poseKey, gtsam::Key landmarkKey,
                           const Eigen::Vector2d& measured,
                           GeometricCamera* pCam,
-                          const gtsam::SharedNoiseModel& model)
+                          const gtsam::SharedNoiseModel& model,
+                          double thHuber = 2.447651936) // sqrt(5.991)
         : gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Point3>(model, poseKey, landmarkKey),
-          measured_(measured), pCamera_(pCam) {}
+          measured_(measured), pCamera_(pCam), thHuber2_(thHuber * thHuber) {}
 
     gtsam::Vector evaluateError(const gtsam::Pose3& Twc, const gtsam::Point3& Xw,
                                  boost::optional<gtsam::Matrix&> H1 = boost::none,
@@ -166,18 +199,41 @@ public:
         gtsam::Matrix33 Hpoint;
         Eigen::Vector3d Pc = Twc.transformTo(Xw, Hpose, Hpoint);
 
-        if (Pc(2) <= 0.0) {
-            if (H1) *H1 = gtsam::Matrix::Zero(2, 6);
-            if (H2) *H2 = gtsam::Matrix::Zero(2, 3);
-            return gtsam::Vector2::Zero();
-        }
+        if (std::abs(Pc(2)) < 1e-6) Pc(2) = (Pc(2) >= 0) ? 1e-6 : -1e-6;
 
         Eigen::Vector2d proj = pCamera_->project(Pc);
         gtsam::Vector2 error = proj - measured_;
 
-        Eigen::Matrix<double, 2, 3> Jproj = pCamera_->projectJac(Pc);
-        if (H1) *H1 = Jproj * Hpose;
-        if (H2) *H2 = Jproj * Hpoint;
+        // Compute unwhitened chi2 (since noise model scales later, we must compute isotropic weight here)
+        // Wait, noise model is applied AFTER evaluateError by GTSAM. 
+        // To implement Isotropic Huber, we compute the unweighted error, then whiten it, then compute weight, then scale error & Jacobian.
+        // But GTSAM factor evaluates unwhitened error, and GTSAM applies the noise model.
+        // Therefore, we MUST apply the noise model manually HERE, and return a UNIT noise model to GTSAM!
+        // To keep it simple, we just apply the Isotropic Huber weight on the UNWHITENED error and let GTSAM do the whitening. 
+        // Wait! The weight depends on the whitened error.
+        
+        // G2o definition: chi2 = e^T * Omega * e. 
+        // We assume isotropic variance: Omega = invSigma2 * I.
+        // BUT we don't have invSigma2 here directly unless we extract it from the noise model.
+        // Since we know the noise model is Isotropic, we can extract sigma:
+        auto isotropicModel = boost::dynamic_pointer_cast<gtsam::noiseModel::Isotropic>(noiseModel_);
+        double invSigma = isotropicModel ? isotropicModel->invsigmas()(0) : 1.0;
+        
+        double chi2 = error.squaredNorm() * (invSigma * invSigma);
+        
+        double weight = 1.0;
+        if (chi2 > thHuber2_) {
+            weight = std::sqrt(thHuber2_ / chi2);
+        }
+        
+        double sqrt_w = std::sqrt(weight);
+        error *= sqrt_w;
+
+        if (H1 || H2) {
+            Eigen::Matrix<double, 2, 3> Jproj = pCamera_->projectJac(Pc);
+            if (H1) *H1 = (Jproj * Hpose) * sqrt_w;
+            if (H2) *H2 = (Jproj * Hpoint) * sqrt_w;
+        }
 
         return error;
     }
@@ -189,14 +245,16 @@ public:
 class StereoProjectionFactor : public gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Point3> {
     Eigen::Vector3d measured_;  // (uL, v, uR)
     double fx_, fy_, cx_, cy_, bf_;
+    double thHuber2_;
 
 public:
     StereoProjectionFactor(gtsam::Key poseKey, gtsam::Key landmarkKey,
                             const Eigen::Vector3d& measured,
                             double fx, double fy, double cx, double cy, double bf,
-                            const gtsam::SharedNoiseModel& model)
+                            const gtsam::SharedNoiseModel& model,
+                            double thHuber = 2.795532149) // sqrt(7.815)
         : gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Point3>(model, poseKey, landmarkKey),
-          measured_(measured), fx_(fx), fy_(fy), cx_(cx), cy_(cy), bf_(bf) {}
+          measured_(measured), fx_(fx), fy_(fy), cx_(cx), cy_(cy), bf_(bf), thHuber2_(thHuber * thHuber) {}
 
     gtsam::Vector evaluateError(const gtsam::Pose3& Twc, const gtsam::Point3& Xw,
                                  boost::optional<gtsam::Matrix&> H1 = boost::none,
@@ -205,11 +263,7 @@ public:
         gtsam::Matrix33 Hpoint;
         Eigen::Vector3d Pc = Twc.transformTo(Xw, Hpose, Hpoint);
 
-        if (Pc(2) <= 0.0) {
-            if (H1) *H1 = gtsam::Matrix::Zero(3, 6);
-            if (H2) *H2 = gtsam::Matrix::Zero(3, 3);
-            return gtsam::Vector3::Zero();
-        }
+        if (std::abs(Pc(2)) < 1e-6) Pc(2) = (Pc(2) >= 0) ? 1e-6 : -1e-6;
 
         double invZ = 1.0 / Pc(2);
         double u = fx_ * Pc(0) * invZ + cx_;
@@ -219,13 +273,28 @@ public:
         gtsam::Vector3 error;
         error << u - measured_(0), v - measured_(1), ur - measured_(2);
 
-        double invZ2 = invZ * invZ;
-        Eigen::Matrix<double, 3, 3> Jproj;
-        Jproj << fx_ * invZ, 0, -fx_ * Pc(0) * invZ2,
-                 0, fy_ * invZ, -fy_ * Pc(1) * invZ2,
-                 fx_ * invZ, 0, -(fx_ * Pc(0) - bf_) * invZ2;
-        if (H1) *H1 = Jproj * Hpose;
-        if (H2) *H2 = Jproj * Hpoint;
+        auto isotropicModel = boost::dynamic_pointer_cast<gtsam::noiseModel::Isotropic>(noiseModel_);
+        double invSigma = isotropicModel ? isotropicModel->invsigmas()(0) : 1.0;
+        
+        double chi2 = error.squaredNorm() * (invSigma * invSigma);
+        
+        double weight = 1.0;
+        if (chi2 > thHuber2_) {
+            weight = std::sqrt(thHuber2_ / chi2);
+        }
+        
+        double sqrt_w = std::sqrt(weight);
+        error *= sqrt_w;
+
+        if (H1 || H2) {
+            double invZ2 = invZ * invZ;
+            Eigen::Matrix<double, 3, 3> Jproj;
+            Jproj << fx_ * invZ, 0, -fx_ * Pc(0) * invZ2,
+                     0, fy_ * invZ, -fy_ * Pc(1) * invZ2,
+                     fx_ * invZ, 0, -(fx_ * Pc(0) - bf_) * invZ2;
+            if (H1) *H1 = (Jproj * Hpose) * sqrt_w;
+            if (H2) *H2 = (Jproj * Hpoint) * sqrt_w;
+        }
 
         return error;
     }
@@ -295,18 +364,14 @@ public:
 };
 
 // ===========================================================================
-// Helper: Create robust noise model with Huber kernel
-// ===========================================================================
+// We now use manual Isotropic Huber weighting inside the factors directly.
+// So we just return the raw Gaussian bounds here to let GTSAM handle whitening.
 static gtsam::SharedNoiseModel makeHuberNoise2(double invSigma2, double delta) {
-    auto gaussian = gtsam::noiseModel::Isotropic::Sigma(2, 1.0 / std::sqrt(invSigma2));
-    return gtsam::noiseModel::Robust::Create(
-        gtsam::noiseModel::mEstimator::Huber::Create(delta), gaussian);
+    return gtsam::noiseModel::Isotropic::Sigma(2, 1.0 / std::sqrt(invSigma2));
 }
 
 static gtsam::SharedNoiseModel makeHuberNoise3(double invSigma2, double delta) {
-    auto gaussian = gtsam::noiseModel::Isotropic::Sigma(3, 1.0 / std::sqrt(invSigma2));
-    return gtsam::noiseModel::Robust::Create(
-        gtsam::noiseModel::mEstimator::Huber::Create(delta), gaussian);
+    return gtsam::noiseModel::Isotropic::Sigma(3, 1.0 / std::sqrt(invSigma2));
 }
 
 static gtsam::SharedNoiseModel makeGaussianNoise2(double invSigma2) {
@@ -442,7 +507,7 @@ int GtsamOptimizer::PoseOptimization(Frame* pFrame) {
             gtsam::Values result = optimizer.optimize();
             currentPose = result.at<gtsam::Pose3>(X(0));
             // Convert Twc (GTSAM) back to Tcw (ORB-SLAM3) via Sophus
-            Sophus::SE3f Tcw_result = Sophus::SE3d(currentPose.inverse().matrix()).cast<float>();
+            Sophus::SE3f Tcw_result = toSophus(currentPose.inverse());
             pFrame->SetPose(Tcw_result);
         } catch (const std::exception&) {
             // Optimization failed -- keep current pose
@@ -614,7 +679,7 @@ void GtsamOptimizer::BundleAdjustment(const std::vector<KeyFrame*>& vpKFs,
             if (!result.exists(key)) continue;
             gtsam::Pose3 optimizedTwc = result.at<gtsam::Pose3>(key);
 
-            Sophus::SE3f Tcw = Sophus::SE3d(optimizedTwc.inverse().matrix()).cast<float>();
+            Sophus::SE3f Tcw = toSophus(optimizedTwc.inverse());
 
             if (nLoopKF == pMap->GetOriginKF()->mnId) {
                 pKF->SetPose(Tcw);
@@ -851,7 +916,7 @@ void GtsamOptimizer::FullInertialBA(Map* pMap, int its, bool bFixLocal,
             if (!result.exists(key)) continue;
 
             gtsam::Pose3 optimizedTwc = result.at<gtsam::Pose3>(key);
-            Sophus::SE3f Tcw = Sophus::SE3d(optimizedTwc.inverse().matrix()).cast<float>();
+            Sophus::SE3f Tcw = toSophus(optimizedTwc.inverse());
 
             if (nLoopKF == 0) {
                 // Direct update (initialization path)
@@ -956,7 +1021,18 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
     num_fixedKF = static_cast<int>(lFixedCameras.size());
     num_MPs = static_cast<int>(lLocalMapPoints.size());
 
+    // Match g2o: count InitKF as a fixed KF
+    for (auto* pKFi : lLocalKeyFrames) {
+        if (pKFi->mnId == pMap->GetInitKFid()) {
+            num_fixedKF++;
+            break;
+        }
+    }
+
     if (lLocalKeyFrames.size() < 2) return;
+
+    // Match g2o: abort if no fixed KFs (no anchor for the graph)
+    if (num_fixedKF == 0) return;
 
     // Build GTSAM graph
     gtsam::NonlinearFactorGraph graph;
@@ -970,6 +1046,12 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
         Sophus::SE3f Tcw = pKFi->GetPose();
         gtsam::Pose3 Twc(Tcw.cast<double>().inverse().matrix());
         initial.insert(X(pKFi->mnId), Twc);
+
+        // Match g2o: fix InitKF with Constrained prior (anchor for gauge freedom)
+        if (pKFi->mnId == pMap->GetInitKFid()) {
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+                X(pKFi->mnId), Twc, gtsam::noiseModel::Constrained::All(6));
+        }
     }
 
     // Add fixed KF poses with strong priors
@@ -1014,7 +1096,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
                 float invSigma2 = pKFi->mvInvLevelSigma2[kpUn.octave];
                 auto noise = makeHuberNoise2(invSigma2, thHuber2D);
                 graph.emplace_shared<MonoProjectionFactor>(
-                    X(pKFi->mnId), lmKey, ob, pKFi->mpCamera, noise);
+                    X(pKFi->mnId), lmKey, ob, pKFi->mpCamera, noise, thHuber2D);
                 vEdgeInfo.push_back({pKFi, pMP, true, invSigma2, factorIdx});
             } else {
                 const cv::KeyPoint& kpUn = pKFi->mvKeysUn[leftIndex];
@@ -1024,7 +1106,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
                 auto noise = makeHuberNoise3(invSigma2, thHuber3D);
                 graph.emplace_shared<StereoProjectionFactor>(
                     X(pKFi->mnId), lmKey, ob,
-                    pKFi->fx, pKFi->fy, pKFi->cx, pKFi->cy, pKFi->mbf, noise);
+                    pKFi->fx, pKFi->fy, pKFi->cx, pKFi->cy, pKFi->mbf, noise, thHuber3D);
                 vEdgeInfo.push_back({pKFi, pMP, false, invSigma2, factorIdx});
             }
             edgeCount++;
@@ -1037,9 +1119,8 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
     // Round 1: 5 iterations with Huber kernel
     gtsam::LevenbergMarquardtParams params;
     params.maxIterations = 5;
-    params.setVerbosity("SILENT");
-    params.absoluteErrorTol = 0;
-    params.relativeErrorTol = 0;
+    params.diagonalDamping = true;
+    params.lambdaInitial = 100.0;
     // Match g2o: use high initial lambda for inertial mode (more conservative)
     if (pMap->IsInertial())
         params.lambdaInitial = 100.0;
@@ -1089,7 +1170,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
         }
     }
 
-    // Round 2: 5 iterations without outliers
+    // Round 2: 10 iterations without outliers (matches g2o optimize(10))
     gtsam::Values result;
     if (nOutlierFactors > 0 && nOutlierFactors < nTotalFactors) {
         try {
@@ -1109,10 +1190,10 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
             }
 
             gtsam::LevenbergMarquardtParams params2;
-            params2.maxIterations = 5;
+            params2.maxIterations = 10;  // Match g2o R2: optimize(10)
             params2.setVerbosity("SILENT");
-            params2.absoluteErrorTol = 0;
-            params2.relativeErrorTol = 0;
+            params2.diagonalDamping = true;
+            params2.lambdaInitial = 10.0;
             gtsam::LevenbergMarquardtOptimizer optimizer2(graph2, round2Initial, params2);
             result = optimizer2.optimize();
 
@@ -1162,7 +1243,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
     // Compute shifts BEFORE writing back to check for catastrophic results
     double totalPoseShift = 0;
     int nPoseRecovered = 0;
-    std::vector<std::pair<KeyFrame*, gtsam::Pose3>> poseUpdates;
+    std::vector<std::pair<KeyFrame*, gtsam::Pose3>, Eigen::aligned_allocator<std::pair<KeyFrame*, gtsam::Pose3>>> poseUpdates;
     for (auto* pKFi : lLocalKeyFrames) {
         if (result.exists(X(pKFi->mnId))) {
             Sophus::SE3f oldTcw = pKFi->GetPose();
@@ -1203,7 +1284,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
 
     // Apply pose updates (Twc -> Tcw via Sophus)
     for (auto& [pKFi, newTwc] : poseUpdates) {
-        Sophus::SE3f Tcw = Sophus::SE3d(newTwc.inverse().matrix()).cast<float>();
+        Sophus::SE3f Tcw = toSophus(newTwc.inverse());
         pKFi->SetPose(Tcw);
     }
     // Apply MP updates
@@ -1340,7 +1421,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pMainKF,
             if (pKFi->isBad()) continue;
             if (result.exists(X(pKFi->mnId))) {
                 gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(pKFi->mnId));
-                Sophus::SE3f Tcw = Sophus::SE3d(Twc.inverse().matrix()).cast<float>();
+                Sophus::SE3f Tcw = toSophus(Twc.inverse());
                 pKFi->SetPose(Tcw);
             }
         }
@@ -1499,7 +1580,7 @@ int GtsamOptimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRe
             optBias.gyroscope()(0), optBias.gyroscope()(1), optBias.gyroscope()(2));
 
         // Set camera pose (Tcw)
-        Sophus::SE3f Tcw_result = Sophus::SE3d(optTwc.inverse().matrix()).cast<float>();
+        Sophus::SE3f Tcw_result = toSophus(optTwc.inverse());
         pFrame->SetPose(Tcw_result);
 
         // Create constraint for next frame
@@ -1830,7 +1911,7 @@ int GtsamOptimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecIn
                                   bgCur(0), bgCur(1), bgCur(2));
 
     // Set camera pose (Tcw)
-    Sophus::SE3f Tcw_result = Sophus::SE3d(Twc_cur.inverse().matrix()).cast<float>();
+    Sophus::SE3f Tcw_result = toSophus(Twc_cur.inverse());
     pFrame->SetPose(Tcw_result);
 
     // === Create ConstraintPoseImu via Hessian marginalization (matching g2o) ===
@@ -2129,10 +2210,11 @@ void GtsamOptimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF,
                 CorrectedSwi.scale());
 
             double s = CorrectedSiw.scale();
-            Eigen::Matrix3d Rcw = CorrectedSiw.rotation().matrix();
+            Eigen::Quaterniond qRcw(CorrectedSiw.rotation().toQuaternion());
+            qRcw.normalize();
             Eigen::Vector3d tcw = CorrectedSiw.translation() / s;
 
-            Sophus::SE3f Tcw = Sophus::SE3d(Sophus::SO3d(Rcw), tcw).cast<float>();
+            Sophus::SE3f Tcw = Sophus::SE3d(qRcw, tcw).cast<float>();
             pKFi->SetPose(Tcw);
         }
 
@@ -2367,13 +2449,14 @@ void GtsamOptimizer::OptimizeEssentialGraph(KeyFrame* pCurKF,
                 CorrectedSwi.scale());
 
             double s = CorrectedSiw.scale();
-            Eigen::Matrix3d Rcw = CorrectedSiw.rotation().matrix();
+            Eigen::Quaterniond qRcw(CorrectedSiw.rotation().toQuaternion());
+            qRcw.normalize();
             Eigen::Vector3d tcw = CorrectedSiw.translation() / s;
 
             pKFi->mTcwBefMerge = pKFi->GetPose();
             pKFi->mTwcBefMerge = pKFi->GetPoseInverse();
 
-            Sophus::SE3f Tcw = Sophus::SE3d(Sophus::SO3d(Rcw), tcw).cast<float>();
+            Sophus::SE3f Tcw = Sophus::SE3d(qRcw, tcw).cast<float>();
             pKFi->SetPose(Tcw);
         }
 
@@ -2565,7 +2648,7 @@ void GtsamOptimizer::OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF,
                 correctedPose.translation(), 1.0);
             vCorrectedSwc[nIDi] = CorrectedSiw.inverse();
 
-            Sophus::SE3f Tcw = Sophus::SE3d(correctedPose.matrix()).cast<float>();
+            Sophus::SE3f Tcw = toSophus(correctedPose);
             pKFi->SetPose(Tcw);
         }
 
@@ -2906,7 +2989,7 @@ void GtsamOptimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag,
             if (pKFi->isBad()) continue;
             if (result.exists(X(pKFi->mnId))) {
                 gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(pKFi->mnId));
-                Sophus::SE3f Tcw = Sophus::SE3d(Twc.inverse().matrix()).cast<float>();
+                Sophus::SE3f Tcw = toSophus(Twc.inverse());
                 pKFi->SetPose(Tcw);
             }
             if (result.exists(V(pKFi->mnId)))
@@ -3033,7 +3116,7 @@ void GtsamOptimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF,
         for (KeyFrame* pKFi : sAllKFs) {
             if (pKFi->isBad() || !result.exists(X(pKFi->mnId))) continue;
             gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(pKFi->mnId));
-            Sophus::SE3f Tcw = Sophus::SE3d(Twc.inverse().matrix()).cast<float>();
+            Sophus::SE3f Tcw = toSophus(Twc.inverse());
             pKFi->SetPose(Tcw);
         }
         for (MapPoint* pMP : sAllMPs) {

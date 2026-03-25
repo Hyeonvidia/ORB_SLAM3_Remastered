@@ -1476,6 +1476,45 @@ void G2oOptimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* p
         }
     }
 
+    // Compute shifts BEFORE writing back to establish baseline for g2o
+    double totalPoseShift = 0;
+    int nPoseRecovered = 0;
+    for(std::list<KeyFrame*>::iterator lit=lLocalKeyFrames.begin(); lit!=lLocalKeyFrames.end(); lit++)
+    {
+        KeyFrame* pKFi = *lit;
+        g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKFi->mnId));
+        if (vSE3) {
+            Sophus::SE3f oldTcw = pKFi->GetPose();
+            Eigen::Vector3d oldPos = oldTcw.cast<double>().inverse().translation();
+            g2o::SE3Quat SE3quat = vSE3->estimate();
+            Eigen::Vector3d newPos = SE3quat.inverse().translation();
+            totalPoseShift += (newPos - oldPos).norm();
+            nPoseRecovered++;
+        }
+    }
+
+    double totalMPShift = 0;
+    int nMPRecovered = 0;
+    for(std::list<MapPoint*>::iterator lit=lLocalMapPoints.begin(); lit!=lLocalMapPoints.end(); lit++)
+    {
+        MapPoint* pMP = *lit;
+        g2o::VertexSBAPointXYZ* vPoint = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pMP->mnId+maxKFid+1));
+        if (vPoint) {
+            Eigen::Vector3d oldPos = pMP->GetWorldPos().cast<double>();
+            Eigen::Vector3d newPos = vPoint->estimate();
+            totalMPShift += (newPos - oldPos).norm();
+            nMPRecovered++;
+        }
+    }
+
+    double avgPoseShift = nPoseRecovered > 0 ? totalPoseShift / nPoseRecovered : 0;
+    double avgMPShift = nMPRecovered > 0 ? totalMPShift / nMPRecovered : 0;
+    std::cout << "[LBA-SHIFT] avgPoseShift=" << avgPoseShift 
+              << " avgMPShift=" << avgMPShift 
+              << " nKF=" << nPoseRecovered 
+              << " nMP=" << nMPRecovered 
+              << " erased=" << vToErase.size() << std::endl;
+
     // Recover optimized data
     //Keyframes
     for(std::list<KeyFrame*>::iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++)
