@@ -51,3 +51,6 @@ Thumbs.db
 *.osa
 borrar/
 my_settings.txt
+
+# Test Logs
+*.log
