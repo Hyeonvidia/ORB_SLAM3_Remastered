@@ -1039,6 +1039,9 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
     params.setVerbosity("SILENT");
     params.absoluteErrorTol = 0;
     params.relativeErrorTol = 0;
+    // Match g2o: use high initial lambda for inertial mode (more conservative)
+    if (pMap->IsInertial())
+        params.lambdaInitial = 100.0;
 
     gtsam::Values round1Result;
     try {
@@ -1189,20 +1192,23 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
     // Get Map Mutex — matches g2o LBA pattern
     std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
 
-    // Erase outlier observations from the map (g2o-equivalent)
-    if (!vToErase.empty()) {
-        for (auto& [pKFi, pMPi] : vToErase) {
-            pKFi->EraseMapPointMatch(pMPi);
-            pMPi->EraseObservation(pKFi);
-        }
-    }
-
     // Guard: discard catastrophic LBA results
+    // IMPORTANT: outlier erasure happens INSIDE the else branch so that
+    // catastrophic results don't cause mass observation deletion
     if (avgMPShift > 0.5) {
         std::cerr << "[LBA-GUARD] DISCARDED avgPoseShift=" << avgPoseShift
                   << " avgMPShift=" << avgMPShift << " (>0.5m threshold)"
-                  << " erased=" << vToErase.size() << std::endl;
+                  << " wouldErase=" << vToErase.size() << std::endl;
     } else {
+        // Erase outlier observations from the map (g2o-equivalent)
+        // Only erase when LBA result is accepted (not catastrophic)
+        if (!vToErase.empty()) {
+            for (auto& [pKFi, pMPi] : vToErase) {
+                pKFi->EraseMapPointMatch(pMPi);
+                pMPi->EraseObservation(pKFi);
+            }
+        }
+
         // Apply pose updates (Twc -> Tcw via Sophus)
         for (auto& [pKFi, newTwc] : poseUpdates) {
             Sophus::SE3f Tcw = Sophus::SE3d(newTwc.inverse().matrix()).cast<float>();
