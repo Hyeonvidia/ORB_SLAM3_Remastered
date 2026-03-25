@@ -8,6 +8,7 @@
 #include "KeyFrame.hpp"
 #include "MapPoint.hpp"
 #include "Map.hpp"
+#include "Optimizer.hpp"
 #include "GeometricCamera.hpp"
 
 #include <gtsam/geometry/Pose3.h>
@@ -1842,10 +1843,124 @@ int GtsamOptimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecIn
     Sophus::SE3f Tcw_result = Sophus::SE3d(Twc_cur.inverse().matrix()).cast<float>();
     pFrame->SetPose(Tcw_result);
 
-    // === Create ConstraintPoseImu for next frame (simplified Hessian prior) ===
-    // Use a diagonal information matrix as a simplified approximation
-    // of the full Hessian marginalization from g2o
-    Matrix15d H15 = Matrix15d::Identity() * 1e4;
+    // === Create ConstraintPoseImu via Hessian marginalization (matching g2o) ===
+    // Build the final round's graph with only inlier visual factors for Hessian extraction
+    // Variable ordering (g2o convention):
+    //   [0-5]:   prev pose     [6-8]:  prev vel     [9-11]:  prev bg    [12-14]: prev ba
+    //   [15-20]: cur pose      [21-23]: cur vel      [24-26]: cur bg     [27-29]: cur ba
+    Matrix15d H15;
+    try {
+        // Reconstruct clean graph for Hessian: IMU + bias + prior + inlier visual factors
+        gtsam::NonlinearFactorGraph hGraph;
+        gtsam::Values hValues;
+
+        hValues.insert(X(0), Twc_cur);
+        hValues.insert(V(0), velCur);
+        hValues.insert(B(0), gtsam::imuBias::ConstantBias(baCur, bgCur));
+        hValues.insert(X(1), Twc_prev);
+        hValues.insert(V(1), velPrev);
+        hValues.insert(B(1), gtsam::imuBias::ConstantBias(baPrev, bgPrev));
+
+        // Prior on previous frame (same as last optimization round)
+        if (pFp->mpcpi) {
+            hGraph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(1), Twc_prev,
+                gtsam::noiseModel::Diagonal::Sigmas(
+                    (gtsam::Vector(6) << 0.001, 0.001, 0.001, 0.001, 0.001, 0.001).finished()));
+            hGraph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(1), velPrev,
+                gtsam::noiseModel::Isotropic::Sigma(3, 0.001));
+            hGraph.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+                B(1), gtsam::imuBias::ConstantBias(baPrev, bgPrev),
+                gtsam::noiseModel::Isotropic::Sigma(6, 0.01));
+        } else {
+            hGraph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(1), Twc_prev,
+                gtsam::noiseModel::Constrained::All(6));
+            hGraph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(1), velPrev,
+                gtsam::noiseModel::Constrained::All(3));
+            hGraph.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+                B(1), gtsam::imuBias::ConstantBias(baPrev, bgPrev),
+                gtsam::noiseModel::Constrained::All(6));
+        }
+
+        // IMU prediction prior
+        hGraph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(0), Twc_pred,
+            gtsam::noiseModel::Diagonal::Sigmas(
+                (gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.05, 0.05, 0.05).finished()));
+        hGraph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(0), vel2_pred,
+            gtsam::noiseModel::Isotropic::Sigma(3, 0.1));
+
+        // Bias random walk
+        Eigen::Matrix3d InfoGh = pFrame->mpImuPreintegrated->C.block<3,3>(9,9).cast<double>();
+        Eigen::Matrix3d InfoAh = pFrame->mpImuPreintegrated->C.block<3,3>(12,12).cast<double>();
+        for (int d = 0; d < 3; d++) {
+            if (InfoGh(d,d) < 1e-10) InfoGh(d,d) = 1e-10;
+            if (InfoAh(d,d) < 1e-10) InfoAh(d,d) = 1e-10;
+        }
+        Eigen::Matrix<double, 6, 6> bInfoH = Eigen::Matrix<double, 6, 6>::Zero();
+        bInfoH.block<3,3>(0,0) = InfoAh.inverse();
+        bInfoH.block<3,3>(3,3) = InfoGh.inverse();
+        hGraph.emplace_shared<gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>>(
+            B(1), B(0), gtsam::imuBias::ConstantBias(),
+            gtsam::noiseModel::Gaussian::Information(bInfoH));
+
+        // Inlier visual factors only (Gaussian noise, no robust kernel)
+        for (auto& mo : monoObs) {
+            if (pFrame->mvbOutlier[mo.idx]) continue;
+            auto noise = makeGaussianNoise2(mo.invSigma2);
+            hGraph.emplace_shared<MonoOnlyPoseFactor>(X(0), mo.obs, mo.Xw, mo.pCam, noise);
+        }
+        for (auto& so : stereoObs) {
+            if (pFrame->mvbOutlier[so.idx]) continue;
+            auto noise = makeGaussianNoise3(so.invSigma2);
+            hGraph.emplace_shared<StereoOnlyPoseFactor>(X(0), so.obs, so.Xw,
+                pFrame->fx, pFrame->fy, pFrame->cx, pFrame->cy, pFrame->mbf, noise);
+        }
+
+        // Linearize and extract Hessian with specific variable ordering
+        // Order: X(1), V(1), B(1), X(0), V(0), B(0)
+        // This maps to g2o layout: prev_state(15) | cur_state(15)
+        gtsam::Ordering ordering;
+        ordering.push_back(X(1));  // prev pose [0-5]
+        ordering.push_back(V(1));  // prev vel  [6-8]
+        ordering.push_back(B(1));  // prev bias [9-14]  (6D: acc+gyro)
+        ordering.push_back(X(0));  // cur pose  [15-20]
+        ordering.push_back(V(0));  // cur vel   [21-23]
+        ordering.push_back(B(0));  // cur bias  [24-29]
+
+        auto linearGraph = hGraph.linearize(hValues);
+        auto augmentedH = linearGraph->augmentedHessian(ordering);
+
+        // augmentedH is (n+1) x (n+1) with the last row/col being the RHS
+        // We need the top-left 30x30 as our Hessian
+        int totalDim = 6 + 3 + 6 + 6 + 3 + 6;  // 30
+        Eigen::Matrix<double, 30, 30> H30 = augmentedH.block(0, 0, totalDim, totalDim);
+
+        // Marginalize previous frame states (rows/cols 0-14) using Schur complement
+        Eigen::MatrixXd Hmarginalized = Optimizer::Marginalize(H30, 0, 14);
+
+        // Extract 15x15 block for current frame
+        H15 = Hmarginalized.block<15,15>(15, 15);
+
+        // Ensure symmetric and positive semi-definite
+        H15 = 0.5 * (H15 + H15.transpose());
+
+        // Clamp extreme eigenvalues for numerical stability
+        Eigen::SelfAdjointEigenSolver<Matrix15d> eigSolver(H15);
+        if (eigSolver.info() == Eigen::Success) {
+            Eigen::Matrix<double, 15, 1> eigVals = eigSolver.eigenvalues();
+            bool needFix = false;
+            for (int i = 0; i < 15; i++) {
+                if (eigVals(i) < 0) { eigVals(i) = 0; needFix = true; }
+            }
+            if (needFix) {
+                H15 = eigSolver.eigenvectors() * eigVals.asDiagonal()
+                      * eigSolver.eigenvectors().transpose();
+            }
+        }
+    } catch (const std::exception&) {
+        // Fallback to simplified diagonal prior if Hessian extraction fails
+        H15 = Matrix15d::Identity() * 1e4;
+    }
+
     pFrame->mpcpi = new ConstraintPoseImu(
         optTwb.rotation().matrix(), optTwb.translation(),
         velCur, bgCur, baCur, H15);
