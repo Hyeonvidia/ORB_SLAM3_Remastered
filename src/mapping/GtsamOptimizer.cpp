@@ -981,8 +981,17 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
             X(pKFi->mnId), Twc, priorNoise);
     }
 
-    // Add MPs and projection factors
+    // Add MPs and projection factors — track KF-MP pairs for outlier erasure
+    struct EdgeInfo {
+        KeyFrame* pKF;
+        MapPoint* pMP;
+        bool isMono;         // true = mono (2-DOF), false = stereo (3-DOF)
+        float invSigma2;
+        size_t factorIdx;    // index in graph
+    };
+    std::vector<EdgeInfo> vEdgeInfo;
     int edgeCount = 0;
+
     for (auto* pMP : lLocalMapPoints) {
         gtsam::Key lmKey = L(pMP->mnId);
         initial.insert(lmKey, gtsam::Point3(pMP->GetWorldPos().cast<double>()));
@@ -996,6 +1005,8 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
             const int leftIndex = std::get<0>(indices);
             if (leftIndex == -1) continue;
 
+            size_t factorIdx = graph.size();  // index of the factor about to be added
+
             if (pKFi->mvuRight[leftIndex] < 0) {
                 const cv::KeyPoint& kpUn = pKFi->mvKeysUn[leftIndex];
                 Eigen::Vector2d ob; ob << kpUn.pt.x, kpUn.pt.y;
@@ -1003,6 +1014,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
                 auto noise = makeHuberNoise2(invSigma2, thHuber2D);
                 graph.emplace_shared<MonoProjectionFactor>(
                     X(pKFi->mnId), lmKey, ob, pKFi->mpCamera, noise);
+                vEdgeInfo.push_back({pKFi, pMP, true, invSigma2, factorIdx});
             } else {
                 const cv::KeyPoint& kpUn = pKFi->mvKeysUn[leftIndex];
                 Eigen::Vector3d ob;
@@ -1012,6 +1024,7 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
                 graph.emplace_shared<StereoProjectionFactor>(
                     X(pKFi->mnId), lmKey, ob,
                     pKFi->fx, pKFi->fy, pKFi->cx, pKFi->cy, pKFi->mbf, noise);
+                vEdgeInfo.push_back({pKFi, pMP, false, invSigma2, factorIdx});
             }
             edgeCount++;
         }
@@ -1116,6 +1129,32 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
         std::cerr << "[LBA-OPT] R1-only outliers=" << nOutlierFactors << "/" << nTotalFactors << std::endl;
     }
 
+    // Classify outliers and collect observations to erase (g2o-equivalent)
+    // GTSAM factor->error() = 0.5 * chi2, so chi2 = 2 * error
+    std::vector<std::pair<KeyFrame*,MapPoint*>> vToErase;
+    for (auto& ei : vEdgeInfo) {
+        if (ei.pMP->isBad()) continue;
+        auto factor = graph[ei.factorIdx];
+        if (!factor) continue;
+
+        double error = factor->error(result);
+        double chi2 = 2.0 * error;  // GTSAM error = 0.5 * ||e||^2_Sigma
+        double threshold = ei.isMono ? 5.991 : 7.815;
+
+        // Also check depth positivity for the projection
+        bool depthOK = true;
+        if (result.exists(X(ei.pKF->mnId)) && result.exists(L(ei.pMP->mnId))) {
+            gtsam::Pose3 Twc = result.at<gtsam::Pose3>(X(ei.pKF->mnId));
+            gtsam::Point3 Xw = result.at<gtsam::Point3>(L(ei.pMP->mnId));
+            Eigen::Vector3d Pc = Twc.transformTo(Xw);
+            if (Pc(2) <= 0.0) depthOK = false;
+        }
+
+        if (chi2 > threshold || !depthOK) {
+            vToErase.push_back(std::make_pair(ei.pKF, ei.pMP));
+        }
+    }
+
     // Compute shifts BEFORE writing back to check for catastrophic results
     double totalPoseShift = 0;
     int nPoseRecovered = 0;
@@ -1147,10 +1186,22 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
     double avgMPShift = nMPRecovered > 0 ? totalMPShift / nMPRecovered : 0;
     double avgPoseShift = nPoseRecovered > 0 ? totalPoseShift / nPoseRecovered : 0;
 
+    // Get Map Mutex — matches g2o LBA pattern
+    std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+
+    // Erase outlier observations from the map (g2o-equivalent)
+    if (!vToErase.empty()) {
+        for (auto& [pKFi, pMPi] : vToErase) {
+            pKFi->EraseMapPointMatch(pMPi);
+            pMPi->EraseObservation(pKFi);
+        }
+    }
+
     // Guard: discard catastrophic LBA results
     if (avgMPShift > 0.5) {
         std::cerr << "[LBA-GUARD] DISCARDED avgPoseShift=" << avgPoseShift
-                  << " avgMPShift=" << avgMPShift << " (>0.5m threshold)" << std::endl;
+                  << " avgMPShift=" << avgMPShift << " (>0.5m threshold)"
+                  << " erased=" << vToErase.size() << std::endl;
     } else {
         // Apply pose updates (Twc -> Tcw via Sophus)
         for (auto& [pKFi, newTwc] : poseUpdates) {
@@ -1165,7 +1216,8 @@ void GtsamOptimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag,
         if (nPoseRecovered > 0 || nMPRecovered > 0) {
             std::cerr << "[LBA-SHIFT] avgPoseShift=" << avgPoseShift
                       << " avgMPShift=" << avgMPShift
-                      << " nKF=" << nPoseRecovered << " nMP=" << nMPRecovered << std::endl;
+                      << " nKF=" << nPoseRecovered << " nMP=" << nMPRecovered
+                      << " erased=" << vToErase.size() << std::endl;
         }
     }
 
@@ -1472,8 +1524,331 @@ int GtsamOptimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRe
 }
 
 int GtsamOptimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit) {
-    // ONI delegates this to LastKeyFrame
-    return PoseInertialOptimizationLastKeyFrame(pFrame, bRecInit);
+    // Proper 2-frame (prev Frame + current Frame) optimization with IMU constraint.
+    // Uses mpImuPreintegratedFrame (Frame-to-Frame preintegration, not KF-to-Frame).
+    // Mirrors g2o PoseInertialOptimizationLastFrame structure.
+    if (!pFrame || !pFrame->mpPrevFrame || !pFrame->mpImuPreintegratedFrame)
+        return PoseInertialOptimizationLastKeyFrame(pFrame, bRecInit);
+
+    Frame* pFp = pFrame->mpPrevFrame;
+    IMU::Preintegrated* pInt = pFrame->mpImuPreintegratedFrame;
+    if (!pInt || pInt->dT < 1e-5f)
+        return PoseInertialOptimizationLastKeyFrame(pFrame, bRecInit);
+
+    // Camera-to-body transform
+    Eigen::Matrix4d Tbc_mat = pFrame->mImuCalib.mTbc.cast<double>().matrix();
+    gtsam::Pose3 TbcPose(gtsam::Rot3(Tbc_mat.block<3,3>(0,0)), gtsam::Point3(Tbc_mat.block<3,1>(0,3)));
+
+    int nInitialMonoCorrespondences = 0;
+    int nInitialStereoCorrespondences = 0;
+    const int N = pFrame->N;
+    const float deltaMono = std::sqrt(5.991f);
+    const float deltaStereo = std::sqrt(7.815f);
+
+    // Collect observations + track indices for per-round outlier filtering
+    struct MonoObs {
+        int idx;
+        Eigen::Vector2d obs;
+        Eigen::Vector3d Xw;
+        float invSigma2;
+        GeometricCamera* pCam;
+    };
+    struct StereoObs {
+        int idx;
+        Eigen::Vector3d obs;
+        Eigen::Vector3d Xw;
+        float invSigma2;
+    };
+
+    std::vector<MonoObs> monoObs;
+    std::vector<StereoObs> stereoObs;
+    monoObs.reserve(N);
+    stereoObs.reserve(N);
+
+    {
+        std::unique_lock<std::mutex> lock(MapPoint::mGlobalMutex);
+        for (int i = 0; i < N; i++) {
+            MapPoint* pMP = pFrame->mvpMapPoints[i];
+            if (!pMP) continue;
+
+            if (pFrame->mvuRight[i] < 0) {
+                nInitialMonoCorrespondences++;
+                pFrame->mvbOutlier[i] = false;
+                const cv::KeyPoint& kpUn = pFrame->mvKeysUn[i];
+                Eigen::Vector2d ob; ob << kpUn.pt.x, kpUn.pt.y;
+                monoObs.push_back({i, ob, pMP->GetWorldPos().cast<double>(),
+                                   pFrame->mvInvLevelSigma2[kpUn.octave], pFrame->mpCamera});
+            } else {
+                nInitialStereoCorrespondences++;
+                pFrame->mvbOutlier[i] = false;
+                const cv::KeyPoint& kpUn = pFrame->mvKeysUn[i];
+                Eigen::Vector3d ob;
+                ob << kpUn.pt.x, kpUn.pt.y, pFrame->mvuRight[i];
+                stereoObs.push_back({i, ob, pMP->GetWorldPos().cast<double>(),
+                                     pFrame->mvInvLevelSigma2[kpUn.octave]});
+            }
+        }
+    }
+
+    int nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
+
+    // === Build previous frame body state ===
+    Sophus::SE3f Tcw_prev = pFp->GetPose();
+    gtsam::Pose3 Twc_prev(Tcw_prev.cast<double>().inverse().matrix());
+    gtsam::Pose3 Twb_prev = Twc_prev * TbcPose.inverse();
+    Eigen::Vector3d velPrev = pFp->GetVelocity().cast<double>();
+    Eigen::Vector3d bgPrev; bgPrev << pFp->mImuBias.bwx, pFp->mImuBias.bwy, pFp->mImuBias.bwz;
+    Eigen::Vector3d baPrev; baPrev << pFp->mImuBias.bax, pFp->mImuBias.bay, pFp->mImuBias.baz;
+
+    // === IMU prediction: prev body -> current body ===
+    double dt = pInt->dT;
+    Eigen::Matrix3d dR = pInt->GetUpdatedDeltaRotation().cast<double>();
+    Eigen::Vector3d dV_imu = pInt->GetUpdatedDeltaVelocity().cast<double>();
+    Eigen::Vector3d dP = pInt->GetUpdatedDeltaPosition().cast<double>();
+    Eigen::Vector3d g; g << 0, 0, -IMU::GRAVITY_VALUE;
+
+    Eigen::Matrix3d Rwb1 = Twb_prev.rotation().matrix();
+    Eigen::Vector3d twb1 = Twb_prev.translation();
+    Eigen::Matrix3d Rwb2_pred = Rwb1 * dR;
+    Eigen::Vector3d twb2_pred = twb1 + velPrev * dt + 0.5 * g * dt * dt + Rwb1 * dP;
+    Eigen::Vector3d vel2_pred = velPrev + g * dt + Rwb1 * dV_imu;
+
+    gtsam::Pose3 Twb_pred{gtsam::Rot3(Rwb2_pred), gtsam::Point3(twb2_pred)};
+    gtsam::Pose3 Twc_pred = Twb_pred * TbcPose;
+
+    // === 4-round optimization with outlier filtering ===
+    const float chi2Mono[4] = {5.991f, 5.991f, 5.991f, 5.991f};
+    const float chi2Stereo[4] = {15.6f, 9.8f, 7.815f, 7.815f};
+    const int its[4] = {10, 10, 10, 10};
+
+    // Current frame initial estimate
+    Sophus::SE3f Tcw_cur = pFrame->GetPose();
+    gtsam::Pose3 Twc_cur(Tcw_cur.cast<double>().inverse().matrix());
+    Eigen::Vector3d velCur = pFrame->GetVelocity().cast<double>();
+    Eigen::Vector3d bgCur; bgCur << pFrame->mImuBias.bwx, pFrame->mImuBias.bwy, pFrame->mImuBias.bwz;
+    Eigen::Vector3d baCur; baCur << pFrame->mImuBias.bax, pFrame->mImuBias.bay, pFrame->mImuBias.baz;
+
+    int nBad = 0;
+    int nBadMono = 0, nBadStereo = 0;
+    int nInliersMono = 0, nInliersStereo = 0;
+
+    for (int round = 0; round < 4; round++) {
+        gtsam::NonlinearFactorGraph graph;
+        gtsam::Values initial;
+
+        // Current frame: pose(X0), vel(V0), bias(B0)
+        initial.insert(X(0), Twc_cur);
+        initial.insert(V(0), velCur);
+        initial.insert(B(0), gtsam::imuBias::ConstantBias(baCur, bgCur));
+
+        // Previous frame: pose(X1), vel(V1), bias(B1)
+        initial.insert(X(1), Twc_prev);
+        initial.insert(V(1), velPrev);
+        initial.insert(B(1), gtsam::imuBias::ConstantBias(baPrev, bgPrev));
+
+        // Prior on previous frame from mpcpi (marginalization info from previous optimization)
+        if (pFp->mpcpi) {
+            // Prior on previous frame state with information from marginalization
+            auto prevPosePrior = gtsam::noiseModel::Diagonal::Sigmas(
+                (gtsam::Vector(6) << 0.001, 0.001, 0.001, 0.001, 0.001, 0.001).finished());
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(1), Twc_prev, prevPosePrior);
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(1), velPrev,
+                gtsam::noiseModel::Isotropic::Sigma(3, 0.001));
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+                B(1), gtsam::imuBias::ConstantBias(baPrev, bgPrev),
+                gtsam::noiseModel::Isotropic::Sigma(6, 0.01));
+        } else {
+            // Fix previous frame if no prior info available
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(1), Twc_prev,
+                gtsam::noiseModel::Constrained::All(6));
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(1), velPrev,
+                gtsam::noiseModel::Constrained::All(3));
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+                B(1), gtsam::imuBias::ConstantBias(baPrev, bgPrev),
+                gtsam::noiseModel::Constrained::All(6));
+        }
+
+        // IMU-predicted pose prior on current frame
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(X(0), Twc_pred,
+            gtsam::noiseModel::Diagonal::Sigmas(
+                (gtsam::Vector(6) << 0.01, 0.01, 0.01, 0.05, 0.05, 0.05).finished()));
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(V(0), vel2_pred,
+            gtsam::noiseModel::Isotropic::Sigma(3, 0.1));
+
+        // Bias random walk constraint between frames
+        Eigen::Matrix3d InfoG = pFrame->mpImuPreintegrated->C.block<3,3>(9,9).cast<double>();
+        Eigen::Matrix3d InfoA = pFrame->mpImuPreintegrated->C.block<3,3>(12,12).cast<double>();
+        for (int d = 0; d < 3; d++) {
+            if (InfoG(d,d) < 1e-10) InfoG(d,d) = 1e-10;
+            if (InfoA(d,d) < 1e-10) InfoA(d,d) = 1e-10;
+        }
+        Eigen::Matrix<double, 6, 6> biasInfo = Eigen::Matrix<double, 6, 6>::Zero();
+        biasInfo.block<3,3>(0,0) = InfoA.inverse();
+        biasInfo.block<3,3>(3,3) = InfoG.inverse();
+        graph.emplace_shared<gtsam::BetweenFactor<gtsam::imuBias::ConstantBias>>(
+            B(1), B(0), gtsam::imuBias::ConstantBias(),
+            gtsam::noiseModel::Gaussian::Information(biasInfo));
+
+        // Visual factors (excluding outliers from previous round)
+        for (auto& mo : monoObs) {
+            if (pFrame->mvbOutlier[mo.idx] && round > 0) continue;
+
+            gtsam::SharedNoiseModel noise;
+            if (round < 2) {
+                noise = makeHuberNoise2(mo.invSigma2, deltaMono);
+            } else {
+                noise = makeGaussianNoise2(mo.invSigma2);
+            }
+            graph.emplace_shared<MonoOnlyPoseFactor>(X(0), mo.obs, mo.Xw, mo.pCam, noise);
+        }
+
+        for (auto& so : stereoObs) {
+            if (pFrame->mvbOutlier[so.idx] && round > 0) continue;
+
+            gtsam::SharedNoiseModel noise;
+            if (round < 2) {
+                noise = makeHuberNoise3(so.invSigma2, deltaStereo);
+            } else {
+                noise = makeGaussianNoise3(so.invSigma2);
+            }
+            graph.emplace_shared<StereoOnlyPoseFactor>(X(0), so.obs, so.Xw,
+                pFrame->fx, pFrame->fy, pFrame->cx, pFrame->cy, pFrame->mbf, noise);
+        }
+
+        // Optimize
+        gtsam::LevenbergMarquardtParams params;
+        params.maxIterations = its[round];
+        params.setVerbosity("SILENT");
+        params.absoluteErrorTol = 0;
+        params.relativeErrorTol = 0;
+
+        try {
+            gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+            gtsam::Values result = optimizer.optimize();
+
+            Twc_cur = result.at<gtsam::Pose3>(X(0));
+            velCur = result.at<gtsam::Vector3>(V(0));
+            auto optBias = result.at<gtsam::imuBias::ConstantBias>(B(0));
+            bgCur = optBias.gyroscope();
+            baCur = optBias.accelerometer();
+
+            // Also update prev frame estimates if optimized
+            Twc_prev = result.at<gtsam::Pose3>(X(1));
+            velPrev = result.at<gtsam::Vector3>(V(1));
+        } catch (const std::exception&) {
+            break;
+        }
+
+        // Classify inliers/outliers
+        nBadMono = 0; nBadStereo = 0;
+        nInliersMono = 0; nInliersStereo = 0;
+
+        float chi2close = 1.5f * chi2Mono[round];
+        for (auto& mo : monoObs) {
+            MonoOnlyPoseFactor f(X(0), mo.obs, mo.Xw, mo.pCam,
+                                 gtsam::noiseModel::Unit::Create(2));
+            double chi2 = f.chi2val(Twc_cur) * mo.invSigma2;
+            bool bClose = pFrame->mvpMapPoints[mo.idx] &&
+                          pFrame->mvpMapPoints[mo.idx]->mTrackDepth < 10.f;
+
+            if ((chi2 > chi2Mono[round] && !bClose) || (bClose && chi2 > chi2close)) {
+                pFrame->mvbOutlier[mo.idx] = true;
+                nBadMono++;
+            } else {
+                pFrame->mvbOutlier[mo.idx] = false;
+                nInliersMono++;
+            }
+        }
+
+        for (auto& so : stereoObs) {
+            Eigen::Vector3d Pc = Twc_cur.transformTo(so.Xw);
+            if (Pc(2) <= 0) {
+                pFrame->mvbOutlier[so.idx] = true;
+                nBadStereo++;
+                continue;
+            }
+            double invZ = 1.0 / Pc(2);
+            double u  = pFrame->fx * Pc(0) * invZ + pFrame->cx;
+            double v  = pFrame->fy * Pc(1) * invZ + pFrame->cy;
+            double ur = u - pFrame->mbf * invZ;
+            Eigen::Vector3d err;
+            err << u - so.obs(0), v - so.obs(1), ur - so.obs(2);
+            double chi2 = err.squaredNorm() * so.invSigma2;
+            if (chi2 > chi2Stereo[round]) {
+                pFrame->mvbOutlier[so.idx] = true;
+                nBadStereo++;
+            } else {
+                pFrame->mvbOutlier[so.idx] = false;
+                nInliersStereo++;
+            }
+        }
+
+        nBad = nBadMono + nBadStereo;
+    }
+
+    int nInliers = nInliersMono + nInliersStereo;
+
+    // Recovery: if too few inliers, try with relaxed thresholds (g2o-equivalent)
+    if (nInliers < 30 && !bRecInit) {
+        nBad = 0;
+        const float chi2MonoOut = 18.f;
+        const float chi2StereoOut = 24.f;
+
+        for (auto& mo : monoObs) {
+            MonoOnlyPoseFactor f(X(0), mo.obs, mo.Xw, mo.pCam,
+                                 gtsam::noiseModel::Unit::Create(2));
+            double chi2 = f.chi2val(Twc_cur) * mo.invSigma2;
+            if (chi2 < chi2MonoOut) {
+                pFrame->mvbOutlier[mo.idx] = false;
+            } else {
+                nBad++;
+            }
+        }
+
+        for (auto& so : stereoObs) {
+            Eigen::Vector3d Pc = Twc_cur.transformTo(so.Xw);
+            if (Pc(2) <= 0) { nBad++; continue; }
+            double invZ = 1.0 / Pc(2);
+            double u  = pFrame->fx * Pc(0) * invZ + pFrame->cx;
+            double v  = pFrame->fy * Pc(1) * invZ + pFrame->cy;
+            double ur = u - pFrame->mbf * invZ;
+            Eigen::Vector3d err;
+            err << u - so.obs(0), v - so.obs(1), ur - so.obs(2);
+            double chi2 = err.squaredNorm() * so.invSigma2;
+            if (chi2 < chi2StereoOut) {
+                pFrame->mvbOutlier[so.idx] = false;
+            } else {
+                nBad++;
+            }
+        }
+    }
+
+    // === Recover optimized state ===
+    gtsam::Pose3 optTwb = Twc_cur * TbcPose.inverse();
+    pFrame->SetImuPoseVelocity(
+        optTwb.rotation().matrix().cast<float>(),
+        optTwb.translation().cast<float>(),
+        velCur.cast<float>());
+    pFrame->mImuBias = IMU::Bias(baCur(0), baCur(1), baCur(2),
+                                  bgCur(0), bgCur(1), bgCur(2));
+
+    // Set camera pose (Tcw)
+    Sophus::SE3f Tcw_result = Sophus::SE3d(Twc_cur.inverse().matrix()).cast<float>();
+    pFrame->SetPose(Tcw_result);
+
+    // === Create ConstraintPoseImu for next frame (simplified Hessian prior) ===
+    // Use a diagonal information matrix as a simplified approximation
+    // of the full Hessian marginalization from g2o
+    Matrix15d H15 = Matrix15d::Identity() * 1e4;
+    pFrame->mpcpi = new ConstraintPoseImu(
+        optTwb.rotation().matrix(), optTwb.translation(),
+        velCur, bgCur, baCur, H15);
+
+    // Clean up previous frame's mpcpi
+    delete pFp->mpcpi;
+    pFp->mpcpi = nullptr;
+
+    return nInitialCorrespondences - nBad;
 }
 
 void GtsamOptimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF,
