@@ -3060,6 +3060,8 @@ bool Tracking::TrackLocalMap()
     {
         if((mnMatchesInliers<15 && mpAtlas->isImuInitialized())||(mnMatchesInliers<50 && !mpAtlas->isImuInitialized()))
         {
+            std::cerr << "[TLM] FAIL: mnMatchesInliers=" << mnMatchesInliers 
+                      << " threshold=" << (mpAtlas->isImuInitialized() ? 15 : 50) << std::endl;
             return false;
         }
         else

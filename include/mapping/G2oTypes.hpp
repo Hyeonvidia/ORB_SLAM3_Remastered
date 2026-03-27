@@ -65,6 +65,7 @@ Eigen::Matrix3d InverseRightJacobianSO3(const double x, const double y, const do
 
 template<typename T = double>
 Eigen::Matrix<T,3,3> NormalizeRotation(const Eigen::Matrix<T,3,3> &R) {
+    if (!R.allFinite()) return Eigen::Matrix<T,3,3>::Identity();
     Eigen::JacobiSVD<Eigen::Matrix<T,3,3>> svd(R,Eigen::ComputeFullU | Eigen::ComputeFullV);
     return svd.matrixU() * svd.matrixV().transpose();
 }
@@ -204,6 +205,7 @@ public:
     void oplusImpl(const double* update_) override {
         Eigen::Vector3d uv;
         uv << update_[0], update_[1], update_[2];
+        if (!uv.allFinite()) return;
         setEstimate(estimate()+uv);
     }
 };
@@ -225,6 +227,7 @@ public:
     void oplusImpl(const double* update_) override {
         Eigen::Vector3d ubg;
         ubg << update_[0], update_[1], update_[2];
+        if (!ubg.allFinite()) return;
         setEstimate(estimate()+ubg);
     }
 };
@@ -247,6 +250,7 @@ public:
     void oplusImpl(const double* update_) override {
         Eigen::Vector3d uba;
         uba << update_[0], update_[1], update_[2];
+        if (!uba.allFinite()) return;
         setEstimate(estimate()+uba);
     }
 };
@@ -262,6 +266,7 @@ public:
 
     void Update(const double *pu)
     {
+        if (!std::isfinite(pu[0]) || !std::isfinite(pu[1])) return;
         Rwg=Rwg*ExpSO3(pu[0],pu[1],0.0);
     }
 
@@ -311,6 +316,7 @@ public:
     }
 
     void oplusImpl(const double *update_) override {
+        if (!std::isfinite(*update_)) return;
         setEstimate(estimate()*exp(*update_));
     }
 };
@@ -333,6 +339,7 @@ public:
         }
 
     void oplusImpl(const double* update_) override {
+        if (!std::isfinite(*update_)) return;
         _estimate.Update(update_);
         updateCache();
     }

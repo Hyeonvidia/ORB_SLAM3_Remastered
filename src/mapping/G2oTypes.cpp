@@ -194,6 +194,7 @@ void ImuCamPose::Update(const double *pu)
     Eigen::Vector3d ur, ut;
     ur << pu[0], pu[1], pu[2];
     ut << pu[3], pu[4], pu[5];
+    if (!ur.allFinite() || !ut.allFinite()) return;
 
     // Update body pose
     twb += Rwb * ut;
@@ -224,6 +225,7 @@ void ImuCamPose::UpdateW(const double *pu)
     Eigen::Vector3d ur, ut;
     ur << pu[0], pu[1], pu[2];
     ut << pu[3], pu[4], pu[5];
+    if (!ur.allFinite() || !ut.allFinite()) return;
 
 
     const Eigen::Matrix3d dR = ExpSO3(ur);
@@ -781,6 +783,7 @@ Eigen::Matrix3d ExpSO3(const Eigen::Vector3d &w)
 
 Eigen::Matrix3d ExpSO3(const double x, const double y, const double z)
 {
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) return Eigen::Matrix3d::Identity();
     const double d2 = x*x+y*y+z*z;
     const double d = sqrt(d2);
     Eigen::Matrix3d W;
@@ -799,6 +802,7 @@ Eigen::Matrix3d ExpSO3(const double x, const double y, const double z)
 
 Eigen::Vector3d LogSO3(const Eigen::Matrix3d &R)
 {
+    if(!R.allFinite()) return Eigen::Vector3d::Zero();
     const double tr = R(0,0)+R(1,1)+R(2,2);
     Eigen::Vector3d w;
     w << (R(2,1)-R(1,2))/2, (R(0,2)-R(2,0))/2, (R(1,0)-R(0,1))/2;

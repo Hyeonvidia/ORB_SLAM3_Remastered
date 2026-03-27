@@ -1174,8 +1174,10 @@ bool LocalMapping::isFinished()
 
 void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 {
-    if (mbResetRequested)
+    if (mbResetRequested) {
+        std::cerr << "[InitIMU] ABORT: reset requested" << std::endl;
         return;
+    }
 
     float minTime;
     int nMinKF;
@@ -1191,8 +1193,10 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     }
 
 
-    if(mpAtlas->KeyFramesInMap()<nMinKF)
+    if(mpAtlas->KeyFramesInMap()<nMinKF) {
+        std::cerr << "[InitIMU] ABORT: KFs=" << mpAtlas->KeyFramesInMap() << " < " << nMinKF << std::endl;
         return;
+    }
 
     // Retrieve all keyframe in temporal order
     std::list<KeyFrame*> lpKF;
@@ -1205,13 +1209,18 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     lpKF.push_front(pKF);
     std::vector<KeyFrame*> vpKF(lpKF.begin(),lpKF.end());
 
-    if(vpKF.size()<nMinKF)
+    if(vpKF.size()<nMinKF) {
+        std::cerr << "[InitIMU] ABORT: vpKF chain=" << vpKF.size() << " < " << nMinKF << std::endl;
         return;
+    }
 
     mFirstTs=vpKF.front()->mTimeStamp;
-    if(mpCurrentKeyFrame->mTimeStamp-mFirstTs<minTime)
+    if(mpCurrentKeyFrame->mTimeStamp-mFirstTs<minTime) {
+        std::cerr << "[InitIMU] ABORT: dt=" << (mpCurrentKeyFrame->mTimeStamp-mFirstTs) << " < " << minTime << " (KFs=" << vpKF.size() << ")" << std::endl;
         return;
+    }
 
+    std::cerr << "[InitIMU] PASSED all checks: KFs=" << vpKF.size() << " dt=" << (mpCurrentKeyFrame->mTimeStamp-mFirstTs) << " — INITIALIZING IMU" << std::endl;
     bInitializing = true;
 
     while(CheckNewKeyFrames())
@@ -1243,13 +1252,23 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
             (*itKF)->mPrevKF->SetVelocity(_vel);
         }
 
-        dirG = dirG/dirG.norm();
+        float dirG_norm = dirG.norm();
+        if(dirG_norm < 1e-5f) {
+            bInitializing = false;
+            return;
+        }
+        dirG = dirG/dirG_norm;
         Eigen::Vector3f gI(0.0f, 0.0f, -1.0f);
         Eigen::Vector3f v = gI.cross(dirG);
         const float nv = v.norm();
-        const float cosg = gI.dot(dirG);
+        float cosg = gI.dot(dirG);
+        if (cosg > 1.0f) cosg = 1.0f;
+        else if (cosg < -1.0f) cosg = -1.0f;
         const float ang = acos(cosg);
-        Eigen::Vector3f vzg = v*ang/nv;
+        Eigen::Vector3f vzg = Eigen::Vector3f::Zero();
+        if(nv > 1e-6f) {
+            vzg = v*ang/nv;
+        }
         Rwg = Sophus::SO3f::exp(vzg).matrix();
         mRwg = Rwg.cast<double>();
         mTinit = mpCurrentKeyFrame->mTimeStamp-mFirstTs;
@@ -1270,9 +1289,12 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
+    std::cerr << "[InitIMU] InertialOpt: scale=" << mScale 
+              << " bg=" << mbg.transpose() << " ba=" << mba.transpose() << std::endl;
+
     if (mScale<1e-1)
     {
-        std::cout << "scale too small" << std::endl;
+        std::cerr << "[InitIMU] ABORT: scale too small (" << mScale << ")" << std::endl;
         bInitializing=false;
         return;
     }
@@ -1305,10 +1327,12 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     std::chrono::steady_clock::time_point t4 = std::chrono::steady_clock::now();
     if (bFIBA)
     {
+        std::cerr << "[InitIMU] Running FullInertialBA..." << std::endl;
         if (priorA!=0.f)
             Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId, nullptr, true, priorG, priorA);
         else
             Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId, nullptr, false);
+        std::cerr << "[InitIMU] FullInertialBA completed" << std::endl;
     }
 
     std::chrono::steady_clock::time_point t5 = std::chrono::steady_clock::now();

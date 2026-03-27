@@ -32,6 +32,7 @@ namespace IMU
 const float eps = 1e-4;
 
 Eigen::Matrix3f NormalizeRotation(const Eigen::Matrix3f &R){
+    if (!R.allFinite()) return Eigen::Matrix3f::Identity();
     Eigen::JacobiSVD<Eigen::Matrix3f> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
     return svd.matrixU() * svd.matrixV().transpose();
 }
@@ -285,7 +286,9 @@ Eigen::Matrix3f Preintegrated::GetDeltaRotation(const Bias &b_)
     std::unique_lock<std::mutex> lock(mMutex);
     Eigen::Vector3f dbg;
     dbg << b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz;
-    return NormalizeRotation(dR * Sophus::SO3f::exp(JRg * dbg).matrix());
+    Eigen::Vector3f omega = JRg * dbg;
+    if(!omega.allFinite()) return NormalizeRotation(dR);
+    return NormalizeRotation(dR * Sophus::SO3f::exp(omega).matrix());
 }
 
 Eigen::Vector3f Preintegrated::GetDeltaVelocity(const Bias &b_)
@@ -294,7 +297,9 @@ Eigen::Vector3f Preintegrated::GetDeltaVelocity(const Bias &b_)
     Eigen::Vector3f dbg, dba;
     dbg << b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz;
     dba << b_.bax-b.bax,b_.bay-b.bay,b_.baz-b.baz;
-    return dV + JVg * dbg + JVa * dba;
+    Eigen::Vector3f result = dV + JVg * dbg + JVa * dba;
+    if(!result.allFinite()) return dV;
+    return result;
 }
 
 Eigen::Vector3f Preintegrated::GetDeltaPosition(const Bias &b_)
@@ -303,25 +308,33 @@ Eigen::Vector3f Preintegrated::GetDeltaPosition(const Bias &b_)
     Eigen::Vector3f dbg, dba;
     dbg << b_.bwx-b.bwx,b_.bwy-b.bwy,b_.bwz-b.bwz;
     dba << b_.bax-b.bax,b_.bay-b.bay,b_.baz-b.baz;
-    return dP + JPg * dbg + JPa * dba;
+    Eigen::Vector3f result = dP + JPg * dbg + JPa * dba;
+    if(!result.allFinite()) return dP;
+    return result;
 }
 
 Eigen::Matrix3f Preintegrated::GetUpdatedDeltaRotation()
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    return NormalizeRotation(dR * Sophus::SO3f::exp(JRg*db.head(3)).matrix());
+    Eigen::Vector3f omega = JRg * db.head(3);
+    if(!db.allFinite() || !omega.allFinite()) return NormalizeRotation(dR);
+    return NormalizeRotation(dR * Sophus::SO3f::exp(omega).matrix());
 }
 
 Eigen::Vector3f Preintegrated::GetUpdatedDeltaVelocity()
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    return dV + JVg * db.head(3) + JVa * db.tail(3);
+    Eigen::Vector3f result = dV + JVg * db.head(3) + JVa * db.tail(3);
+    if(!db.allFinite() || !result.allFinite()) return dV;
+    return result;
 }
 
 Eigen::Vector3f Preintegrated::GetUpdatedDeltaPosition()
 {
     std::unique_lock<std::mutex> lock(mMutex);
-    return dP + JPg*db.head(3) + JPa*db.tail(3);
+    Eigen::Vector3f result = dP + JPg*db.head(3) + JPa*db.tail(3);
+    if(!db.allFinite() || !result.allFinite()) return dP;
+    return result;
 }
 
 Eigen::Matrix3f Preintegrated::GetOriginalDeltaRotation() {
