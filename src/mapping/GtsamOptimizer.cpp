@@ -30,6 +30,7 @@
 #include "core/Sim3Type.hpp"
 #include "ImuTypes.hpp"
 #include "G2oTypes.hpp"  // for ConstraintPoseImu, Matrix15d, EdgeInertialGS, etc.
+#include "InertialGravityScaleFactor.hpp"
 
 // g2o headers for InertialOptimization (uses same g2o factor graph as G2oOptimizer)
 #include "g2o/core/block_solver.h"
@@ -3349,134 +3350,139 @@ void GtsamOptimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg,
     Eigen::MatrixXd& covInertial, bool bFixedVel, bool bGauss,
     float priorG, float priorA) {
     // -------------------------------------------------------------------------
-    // Full g2o-based inertial optimization (identical to G2oOptimizer).
-    // Estimates gravity direction, scale, velocities, and biases from
-    // fixed camera poses + IMU preintegration.
+    // Full inertial optimization: estimates gravity direction, scale,
+    // velocities, and biases from fixed camera poses + IMU preintegration.
+    // GTSAM-native implementation replacing g2o EdgeInertialGS.
     // -------------------------------------------------------------------------
-    Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
-    int its = 200;
+    Verbose::PrintMess("inertial optimization (GTSAM)", Verbose::VERBOSITY_NORMAL);
+    const int its = 200;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
 
-    // Setup g2o optimizer
-    g2o::SparseOptimizer optimizer;
-    g2o::BlockSolverX::LinearSolverType* linearSolver;
-    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
-    g2o::BlockSolverX* solver_ptr = new g2o::BlockSolverX(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-    if (priorG != 0.f)
-        solver->setUserLambdaInit(1e3);
-    optimizer.setAlgorithm(solver);
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
 
-    // Set KeyFrame vertices (fixed poses, optimizable velocities)
+    // GTSAM symbol helpers: V=velocity, G=gyroBias, A=accBias, D=gravDir, S=scale
+    using gtsam::symbol_shorthand::V;
+    auto G_key = gtsam::Symbol('G', 0);
+    auto A_key = gtsam::Symbol('A', 0);
+    auto D_key = gtsam::Symbol('D', 0);
+    auto S_key = gtsam::Symbol('S', 0);
+
+    // ---- Velocity vertices ----
     for (size_t i = 0; i < vpKFs.size(); i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid) continue;
-        VertexPose* VP = new VertexPose(pKFi);
-        VP->setId(pKFi->mnId);
-        VP->setFixed(true);
-        optimizer.addVertex(VP);
-
-        VertexVelocity* VV = new VertexVelocity(pKFi);
-        VV->setId(maxKFid + (pKFi->mnId) + 1);
-        VV->setFixed(bFixedVel);
-        optimizer.addVertex(VV);
+        Eigen::Vector3d vel = pKFi->GetVelocity().cast<double>();
+        initial.insert(V(pKFi->mnId), vel);
+        if (bFixedVel) {
+            graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+                V(pKFi->mnId), vel, gtsam::noiseModel::Constrained::All(3));
+        }
     }
 
-    // Biases (shared across all KFs)
-    VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
-    VG->setId(maxKFid * 2 + 2);
-    VG->setFixed(bFixedVel);
-    optimizer.addVertex(VG);
-    VertexAccBias* VA = new VertexAccBias(vpKFs.front());
-    VA->setId(maxKFid * 2 + 3);
-    VA->setFixed(bFixedVel);
-    optimizer.addVertex(VA);
+    // ---- Shared bias vertices ----
+    Eigen::Vector3d bg0 = vpKFs.front()->GetGyroBias().cast<double>();
+    Eigen::Vector3d ba0 = vpKFs.front()->GetAccBias().cast<double>();
+    initial.insert(G_key, bg0);
+    initial.insert(A_key, ba0);
+    if (bFixedVel) {
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+            G_key, bg0, gtsam::noiseModel::Constrained::All(3));
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+            A_key, ba0, gtsam::noiseModel::Constrained::All(3));
+    }
 
-    // Bias priors
-    Eigen::Vector3f bprior;
-    bprior.setZero();
-    EdgePriorAcc* epa = new EdgePriorAcc(bprior);
-    epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-    double infoPriorA = priorA;
-    epa->setInformation(infoPriorA * Eigen::Matrix3d::Identity());
-    optimizer.addEdge(epa);
-    EdgePriorGyro* epg = new EdgePriorGyro(bprior);
-    epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-    double infoPriorG = priorG;
-    epg->setInformation(infoPriorG * Eigen::Matrix3d::Identity());
-    optimizer.addEdge(epg);
+    // ---- Bias priors ----
+    Eigen::Vector3d bprior = Eigen::Vector3d::Zero();
+    auto priorNoiseA = gtsam::noiseModel::Isotropic::Sigma(3, 1.0 / std::sqrt(priorA));
+    auto priorNoiseG = gtsam::noiseModel::Isotropic::Sigma(3, 1.0 / std::sqrt(priorG));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(A_key, bprior, priorNoiseA);
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(G_key, bprior, priorNoiseG);
 
-    // Gravity direction and scale vertices
-    VertexGDir* VGDir = new VertexGDir(Rwg);
-    VGDir->setId(maxKFid * 2 + 4);
-    VGDir->setFixed(false);
-    optimizer.addVertex(VGDir);
-    VertexScale* VS = new VertexScale(scale);
-    VS->setId(maxKFid * 2 + 5);
-    VS->setFixed(!bMono); // Fixed for stereo
-    optimizer.addVertex(VS);
+    // ---- Gravity direction (Rot3) and scale (Vector1) ----
+    initial.insert(D_key, gtsam::Rot3(Rwg));
+    initial.insert(S_key, gtsam::Vector1(scale));
+    if (!bMono) {
+        // Stereo: fix scale
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector1>>(
+            S_key, gtsam::Vector1(scale), gtsam::noiseModel::Constrained::All(1));
+    }
 
-    // IMU edges with gravity and scale
+    // ---- IMU factors ----
     for (size_t i = 0; i < vpKFs.size(); i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mPrevKF && pKFi->mnId <= maxKFid) {
             if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
                 continue;
-            if (!pKFi->mpImuPreintegrated)
-                std::cout << "Not preintegrated measurement" << std::endl;
+            if (!pKFi->mpImuPreintegrated) continue;
 
             pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-            g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid + (pKFi->mPrevKF->mnId) + 1);
-            g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-            g2o::HyperGraph::Vertex* VV2 = optimizer.vertex(maxKFid + (pKFi->mnId) + 1);
-            g2o::HyperGraph::Vertex* VG_v = optimizer.vertex(maxKFid * 2 + 2);
-            g2o::HyperGraph::Vertex* VA_v = optimizer.vertex(maxKFid * 2 + 3);
-            g2o::HyperGraph::Vertex* VGDir_v = optimizer.vertex(maxKFid * 2 + 4);
-            g2o::HyperGraph::Vertex* VS_v = optimizer.vertex(maxKFid * 2 + 5);
-            if (!VP1 || !VV1 || !VG_v || !VA_v || !VP2 || !VV2 || !VGDir_v || !VS_v)
+
+            if (!initial.exists(V(pKFi->mPrevKF->mnId)) || !initial.exists(V(pKFi->mnId)))
                 continue;
 
-            EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-            ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-            ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-            ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG_v));
-            ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA_v));
-            ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-            ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-            ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir_v));
-            ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS_v));
-            optimizer.addEdge(ei);
+            // Extract fixed body poses
+            Eigen::Matrix3d Rwb1, Rwb2;
+            Eigen::Vector3d twb1, twb2;
+            {
+                Sophus::SE3f Tcw1 = pKFi->mPrevKF->GetPose();
+                Sophus::SE3f Tbc = pKFi->mImuCalib.mTbc;
+                Sophus::SE3f Twb1 = Tcw1.inverse() * Tbc.inverse();
+                Rwb1 = Twb1.rotationMatrix().cast<double>();
+                twb1 = Twb1.translation().cast<double>();
+            }
+            {
+                Sophus::SE3f Tcw2 = pKFi->GetPose();
+                Sophus::SE3f Tbc = pKFi->mImuCalib.mTbc;
+                Sophus::SE3f Twb2 = Tcw2.inverse() * Tbc.inverse();
+                Rwb2 = Twb2.rotationMatrix().cast<double>();
+                twb2 = Twb2.translation().cast<double>();
+            }
+
+            // Build information matrix from preintegration covariance
+            IMU::Preintegrated* pInt = pKFi->mpImuPreintegrated;
+            Eigen::Matrix<double,9,9> Info = pInt->C.block<9,9>(0,0).cast<double>().inverse();
+            Info = (Info + Info.transpose()) / 2;
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double,9,9>> es(Info);
+            Eigen::Matrix<double,9,1> eigs = es.eigenvalues();
+            for (int j = 0; j < 9; j++)
+                if (eigs[j] < 1e-12) eigs[j] = 0;
+            Info = es.eigenvectors() * eigs.asDiagonal() * es.eigenvectors().transpose();
+            auto noiseModel = gtsam::noiseModel::Gaussian::Information(Info);
+
+            graph.emplace_shared<InertialGSFactor>(
+                V(pKFi->mPrevKF->mnId), V(pKFi->mnId),
+                G_key, A_key, D_key, S_key,
+                Rwb1, twb1, Rwb2, twb2,
+                pInt, noiseModel);
         }
     }
 
-    // Optimize
-    optimizer.setVerbose(false);
-    optimizer.initializeOptimization();
-    optimizer.optimize(its);
+    // ---- Optimize ----
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = its;
+    if (priorG != 0.f) params.lambdaInitial = 1e3;
+    params.lambdaUpperBound = 1e10;
+    gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+    gtsam::Values result = optimizer.optimize();
 
-    // Recover optimized data
-    scale = VS->estimate();
-    VG = static_cast<VertexGyroBias*>(optimizer.vertex(maxKFid * 2 + 2));
-    VA = static_cast<VertexAccBias*>(optimizer.vertex(maxKFid * 2 + 3));
-    Vector6d vb;
-    vb << VG->estimate(), VA->estimate();
-    bg << VG->estimate();
-    ba << VA->estimate();
-    scale = VS->estimate();
+    // ---- Recover results ----
+    bg = result.at<gtsam::Vector3>(G_key);
+    ba = result.at<gtsam::Vector3>(A_key);
+    scale = result.at<gtsam::Vector1>(S_key)(0);
+    Rwg = result.at<gtsam::Rot3>(D_key).matrix();
 
-    IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
-    Rwg = VGDir->estimate().Rwg;
+    IMU::Bias b(ba[0], ba[1], ba[2], bg[0], bg[1], bg[2]);
 
-    // Update keyframe velocities and biases
+    // ---- Update KF velocities and biases ----
     const int N = vpKFs.size();
     for (size_t i = 0; i < N; i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid) continue;
+        if (!result.exists(V(pKFi->mnId))) continue;
 
-        VertexVelocity* VV = static_cast<VertexVelocity*>(optimizer.vertex(maxKFid + (pKFi->mnId) + 1));
-        Eigen::Vector3d Vw = VV->estimate();
+        Eigen::Vector3d Vw = result.at<gtsam::Vector3>(V(pKFi->mnId));
         pKFi->SetVelocity(Vw.cast<float>());
 
         if ((pKFi->GetGyroBias() - bg.cast<float>()).norm() > 0.01) {
@@ -3493,119 +3499,120 @@ void GtsamOptimizer::InertialOptimization(Map* pMap, Eigen::Vector3d& bg,
     Eigen::Vector3d& ba, float priorG, float priorA) {
     // -------------------------------------------------------------------------
     // Bias-only inertial optimization (gravity/scale fixed).
-    // Identical to G2oOptimizer version.
+    // GTSAM-native implementation.
     // -------------------------------------------------------------------------
-    int its = 200;
+    const int its = 200;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
 
-    g2o::SparseOptimizer optimizer;
-    g2o::BlockSolverX::LinearSolverType* linearSolver;
-    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
-    g2o::BlockSolverX* solver_ptr = new g2o::BlockSolverX(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-    solver->setUserLambdaInit(1e3);
-    optimizer.setAlgorithm(solver);
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
 
+    using gtsam::symbol_shorthand::V;
+    auto G_key = gtsam::Symbol('G', 0);
+    auto A_key = gtsam::Symbol('A', 0);
+    auto D_key = gtsam::Symbol('D', 0);
+    auto S_key = gtsam::Symbol('S', 0);
+
+    // ---- Velocity vertices (free) ----
     for (size_t i = 0; i < vpKFs.size(); i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid) continue;
-        VertexPose* VP = new VertexPose(pKFi);
-        VP->setId(pKFi->mnId);
-        VP->setFixed(true);
-        optimizer.addVertex(VP);
-
-        VertexVelocity* VV = new VertexVelocity(pKFi);
-        VV->setId(maxKFid + (pKFi->mnId) + 1);
-        VV->setFixed(false);
-        optimizer.addVertex(VV);
+        Eigen::Vector3d vel = pKFi->GetVelocity().cast<double>();
+        initial.insert(V(pKFi->mnId), vel);
     }
 
-    // Biases
-    VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
-    VG->setId(maxKFid * 2 + 2);
-    VG->setFixed(false);
-    optimizer.addVertex(VG);
-    VertexAccBias* VA = new VertexAccBias(vpKFs.front());
-    VA->setId(maxKFid * 2 + 3);
-    VA->setFixed(false);
-    optimizer.addVertex(VA);
+    // ---- Shared bias vertices (free) ----
+    Eigen::Vector3d bg0 = vpKFs.front()->GetGyroBias().cast<double>();
+    Eigen::Vector3d ba0 = vpKFs.front()->GetAccBias().cast<double>();
+    initial.insert(G_key, bg0);
+    initial.insert(A_key, ba0);
 
-    // Bias priors
-    Eigen::Vector3f bprior;
-    bprior.setZero();
-    EdgePriorAcc* epa = new EdgePriorAcc(bprior);
-    epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-    epa->setInformation(priorA * Eigen::Matrix3d::Identity());
-    optimizer.addEdge(epa);
-    EdgePriorGyro* epg = new EdgePriorGyro(bprior);
-    epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-    epg->setInformation(priorG * Eigen::Matrix3d::Identity());
-    optimizer.addEdge(epg);
+    // ---- Bias priors ----
+    Eigen::Vector3d bprior = Eigen::Vector3d::Zero();
+    auto priorNoiseA = gtsam::noiseModel::Isotropic::Sigma(3, 1.0 / std::sqrt(priorA));
+    auto priorNoiseG = gtsam::noiseModel::Isotropic::Sigma(3, 1.0 / std::sqrt(priorG));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(A_key, bprior, priorNoiseA);
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(G_key, bprior, priorNoiseG);
 
-    // Gravity and scale (fixed)
-    VertexGDir* VGDir = new VertexGDir(Eigen::Matrix3d::Identity());
-    VGDir->setId(maxKFid * 2 + 4);
-    VGDir->setFixed(true);
-    optimizer.addVertex(VGDir);
-    VertexScale* VS = new VertexScale(1.0);
-    VS->setId(maxKFid * 2 + 5);
-    VS->setFixed(true);
-    optimizer.addVertex(VS);
+    // ---- Gravity direction + scale (FIXED) ----
+    initial.insert(D_key, gtsam::Rot3::Identity());
+    initial.insert(S_key, gtsam::Vector1(1.0));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Rot3>>(
+        D_key, gtsam::Rot3::Identity(), gtsam::noiseModel::Constrained::All(3));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector1>>(
+        S_key, gtsam::Vector1(1.0), gtsam::noiseModel::Constrained::All(1));
 
-    // IMU edges
+    // ---- IMU factors ----
     for (size_t i = 0; i < vpKFs.size(); i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mPrevKF && pKFi->mnId <= maxKFid) {
             if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
                 continue;
+            if (!pKFi->mpImuPreintegrated) continue;
+
             pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-            g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid + (pKFi->mPrevKF->mnId) + 1);
-            g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-            g2o::HyperGraph::Vertex* VV2 = optimizer.vertex(maxKFid + (pKFi->mnId) + 1);
-            g2o::HyperGraph::Vertex* VG_v = optimizer.vertex(maxKFid * 2 + 2);
-            g2o::HyperGraph::Vertex* VA_v = optimizer.vertex(maxKFid * 2 + 3);
-            g2o::HyperGraph::Vertex* VGDir_v = optimizer.vertex(maxKFid * 2 + 4);
-            g2o::HyperGraph::Vertex* VS_v = optimizer.vertex(maxKFid * 2 + 5);
-            if (!VP1 || !VV1 || !VG_v || !VA_v || !VP2 || !VV2 || !VGDir_v || !VS_v)
+
+            if (!initial.exists(V(pKFi->mPrevKF->mnId)) || !initial.exists(V(pKFi->mnId)))
                 continue;
 
-            EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-            ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-            ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-            ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG_v));
-            ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA_v));
-            ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-            ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-            ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir_v));
-            ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS_v));
-            optimizer.addEdge(ei);
+            Eigen::Matrix3d Rwb1, Rwb2;
+            Eigen::Vector3d twb1, twb2;
+            {
+                Sophus::SE3f Tcw1 = pKFi->mPrevKF->GetPose();
+                Sophus::SE3f Tbc = pKFi->mImuCalib.mTbc;
+                Sophus::SE3f Twb1 = Tcw1.inverse() * Tbc.inverse();
+                Rwb1 = Twb1.rotationMatrix().cast<double>();
+                twb1 = Twb1.translation().cast<double>();
+            }
+            {
+                Sophus::SE3f Tcw2 = pKFi->GetPose();
+                Sophus::SE3f Tbc = pKFi->mImuCalib.mTbc;
+                Sophus::SE3f Twb2 = Tcw2.inverse() * Tbc.inverse();
+                Rwb2 = Twb2.rotationMatrix().cast<double>();
+                twb2 = Twb2.translation().cast<double>();
+            }
+
+            IMU::Preintegrated* pInt = pKFi->mpImuPreintegrated;
+            Eigen::Matrix<double,9,9> Info = pInt->C.block<9,9>(0,0).cast<double>().inverse();
+            Info = (Info + Info.transpose()) / 2;
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double,9,9>> es(Info);
+            Eigen::Matrix<double,9,1> eigs = es.eigenvalues();
+            for (int j = 0; j < 9; j++)
+                if (eigs[j] < 1e-12) eigs[j] = 0;
+            Info = es.eigenvectors() * eigs.asDiagonal() * es.eigenvectors().transpose();
+            auto noiseModel = gtsam::noiseModel::Gaussian::Information(Info);
+
+            graph.emplace_shared<InertialGSFactor>(
+                V(pKFi->mPrevKF->mnId), V(pKFi->mnId),
+                G_key, A_key, D_key, S_key,
+                Rwb1, twb1, Rwb2, twb2,
+                pInt, noiseModel);
         }
     }
 
-    optimizer.setVerbose(false);
-    optimizer.initializeOptimization();
-    optimizer.optimize(its);
+    // ---- Optimize ----
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = its;
+    params.lambdaInitial = 1e3;
+    params.lambdaUpperBound = 1e10;
+    gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+    gtsam::Values result = optimizer.optimize();
 
-    // Recover biases
-    VG = static_cast<VertexGyroBias*>(optimizer.vertex(maxKFid * 2 + 2));
-    VA = static_cast<VertexAccBias*>(optimizer.vertex(maxKFid * 2 + 3));
-    Vector6d vb;
-    vb << VG->estimate(), VA->estimate();
-    bg << VG->estimate();
-    ba << VA->estimate();
+    // ---- Recover biases ----
+    bg = result.at<gtsam::Vector3>(G_key);
+    ba = result.at<gtsam::Vector3>(A_key);
 
-    IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
+    IMU::Bias b(ba[0], ba[1], ba[2], bg[0], bg[1], bg[2]);
 
-    // Update KF velocities and biases
+    // ---- Update KF velocities and biases ----
     const int N = vpKFs.size();
     for (size_t i = 0; i < N; i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid) continue;
+        if (!result.exists(V(pKFi->mnId))) continue;
 
-        VertexVelocity* VV = static_cast<VertexVelocity*>(optimizer.vertex(maxKFid + (pKFi->mnId) + 1));
-        Eigen::Vector3d Vw = VV->estimate();
+        Eigen::Vector3d Vw = result.at<gtsam::Vector3>(V(pKFi->mnId));
         pKFi->SetVelocity(Vw.cast<float>());
 
         if ((pKFi->GetGyroBias() - bg.cast<float>()).norm() > 0.01) {
@@ -3622,95 +3629,104 @@ void GtsamOptimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d& Rwg,
     double& scale) {
     // -------------------------------------------------------------------------
     // Scale refinement: optimize only gravity direction + scale.
-    // Uses GaussNewton with Huber kernel. Identical to G2oOptimizer.
+    // All other variables (poses, velocities, biases) are fixed.
+    // GTSAM-native implementation.
     // -------------------------------------------------------------------------
-    int its = 10;
+    const int its = 10;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
 
-    g2o::SparseOptimizer optimizer;
-    g2o::BlockSolverX::LinearSolverType* linearSolver;
-    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
-    g2o::BlockSolverX* solver_ptr = new g2o::BlockSolverX(linearSolver);
-    g2o::OptimizationAlgorithmGaussNewton* solver = new g2o::OptimizationAlgorithmGaussNewton(solver_ptr);
-    optimizer.setAlgorithm(solver);
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values initial;
 
-    // All KF variables fixed
+    using gtsam::symbol_shorthand::V;
+    auto G_key = gtsam::Symbol('G', 0);
+    auto A_key = gtsam::Symbol('A', 0);
+    auto D_key = gtsam::Symbol('D', 0);
+    auto S_key = gtsam::Symbol('S', 0);
+
+    // ---- All KF variables: fixed velocities, per-KF fixed biases ----
+    Eigen::Vector3d bg0 = vpKFs.front()->GetGyroBias().cast<double>();
+    Eigen::Vector3d ba0 = vpKFs.front()->GetAccBias().cast<double>();
+
     for (size_t i = 0; i < vpKFs.size(); i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mnId > maxKFid) continue;
-        VertexPose* VP = new VertexPose(pKFi);
-        VP->setId(pKFi->mnId);
-        VP->setFixed(true);
-        optimizer.addVertex(VP);
-
-        VertexVelocity* VV = new VertexVelocity(pKFi);
-        VV->setId(maxKFid + 1 + (pKFi->mnId));
-        VV->setFixed(true);
-        optimizer.addVertex(VV);
-
-        // Per-KF fixed biases
-        VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
-        VG->setId(2 * (maxKFid + 1) + (pKFi->mnId));
-        VG->setFixed(true);
-        optimizer.addVertex(VG);
-        VertexAccBias* VA = new VertexAccBias(vpKFs.front());
-        VA->setId(3 * (maxKFid + 1) + (pKFi->mnId));
-        VA->setFixed(true);
-        optimizer.addVertex(VA);
+        Eigen::Vector3d vel = pKFi->GetVelocity().cast<double>();
+        initial.insert(V(pKFi->mnId), vel);
+        graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+            V(pKFi->mnId), vel, gtsam::noiseModel::Constrained::All(3));
     }
 
-    // Gravity and scale (optimizable)
-    VertexGDir* VGDir = new VertexGDir(Rwg);
-    VGDir->setId(4 * (maxKFid + 1));
-    VGDir->setFixed(false);
-    optimizer.addVertex(VGDir);
-    VertexScale* VS = new VertexScale(scale);
-    VS->setId(4 * (maxKFid + 1) + 1);
-    VS->setFixed(false);
-    optimizer.addVertex(VS);
+    // Shared fixed biases
+    initial.insert(G_key, bg0);
+    initial.insert(A_key, ba0);
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+        G_key, bg0, gtsam::noiseModel::Constrained::All(3));
+    graph.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+        A_key, ba0, gtsam::noiseModel::Constrained::All(3));
 
-    // IMU edges with Huber kernel
+    // ---- Gravity direction + scale (FREE) ----
+    initial.insert(D_key, gtsam::Rot3(Rwg));
+    initial.insert(S_key, gtsam::Vector1(scale));
+
+    // ---- IMU factors with Huber kernel ----
     for (size_t i = 0; i < vpKFs.size(); i++) {
         KeyFrame* pKFi = vpKFs[i];
         if (pKFi->mPrevKF && pKFi->mnId <= maxKFid) {
             if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
                 continue;
-
-            g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VV1 = optimizer.vertex((maxKFid + 1) + pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-            g2o::HyperGraph::Vertex* VV2 = optimizer.vertex((maxKFid + 1) + pKFi->mnId);
-            g2o::HyperGraph::Vertex* VG_v = optimizer.vertex(2 * (maxKFid + 1) + pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VA_v = optimizer.vertex(3 * (maxKFid + 1) + pKFi->mPrevKF->mnId);
-            g2o::HyperGraph::Vertex* VGDir_v = optimizer.vertex(4 * (maxKFid + 1));
-            g2o::HyperGraph::Vertex* VS_v = optimizer.vertex(4 * (maxKFid + 1) + 1);
-            if (!VP1 || !VV1 || !VG_v || !VA_v || !VP2 || !VV2 || !VGDir_v || !VS_v)
+            if (!pKFi->mpImuPreintegrated) continue;
+            if (!initial.exists(V(pKFi->mPrevKF->mnId)) || !initial.exists(V(pKFi->mnId)))
                 continue;
 
-            EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-            ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-            ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-            ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG_v));
-            ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA_v));
-            ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-            ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-            ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir_v));
-            ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS_v));
-            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-            ei->setRobustKernel(rk);
-            rk->setDelta(1.f);
-            optimizer.addEdge(ei);
+            Eigen::Matrix3d Rwb1, Rwb2;
+            Eigen::Vector3d twb1, twb2;
+            {
+                Sophus::SE3f Tcw1 = pKFi->mPrevKF->GetPose();
+                Sophus::SE3f Tbc = pKFi->mImuCalib.mTbc;
+                Sophus::SE3f Twb1 = Tcw1.inverse() * Tbc.inverse();
+                Rwb1 = Twb1.rotationMatrix().cast<double>();
+                twb1 = Twb1.translation().cast<double>();
+            }
+            {
+                Sophus::SE3f Tcw2 = pKFi->GetPose();
+                Sophus::SE3f Tbc = pKFi->mImuCalib.mTbc;
+                Sophus::SE3f Twb2 = Tcw2.inverse() * Tbc.inverse();
+                Rwb2 = Twb2.rotationMatrix().cast<double>();
+                twb2 = Twb2.translation().cast<double>();
+            }
+
+            IMU::Preintegrated* pInt = pKFi->mpImuPreintegrated;
+            Eigen::Matrix<double,9,9> Info = pInt->C.block<9,9>(0,0).cast<double>().inverse();
+            Info = (Info + Info.transpose()) / 2;
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double,9,9>> es(Info);
+            Eigen::Matrix<double,9,1> eigs = es.eigenvalues();
+            for (int j = 0; j < 9; j++)
+                if (eigs[j] < 1e-12) eigs[j] = 0;
+            Info = es.eigenvectors() * eigs.asDiagonal() * es.eigenvectors().transpose();
+            auto baseNoise = gtsam::noiseModel::Gaussian::Information(Info);
+            auto robustNoise = gtsam::noiseModel::Robust::Create(
+                gtsam::noiseModel::mEstimator::Huber::Create(1.0), baseNoise);
+
+            graph.emplace_shared<InertialGSFactor>(
+                V(pKFi->mPrevKF->mnId), V(pKFi->mnId),
+                G_key, A_key, D_key, S_key,
+                Rwb1, twb1, Rwb2, twb2,
+                pInt, robustNoise);
         }
     }
 
-    optimizer.setVerbose(false);
-    optimizer.initializeOptimization();
-    optimizer.optimize(its);
+    // ---- Optimize ----
+    gtsam::LevenbergMarquardtParams params;
+    params.maxIterations = its;
+    params.lambdaUpperBound = 1e10;
+    gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial, params);
+    gtsam::Values result = optimizer.optimize();
 
-    // Recover scale and gravity
-    scale = VS->estimate();
-    Rwg = VGDir->estimate().Rwg;
+    // ---- Recover scale and gravity ----
+    scale = result.at<gtsam::Vector1>(S_key)(0);
+    Rwg = result.at<gtsam::Rot3>(D_key).matrix();
 }
 
 } // namespace ORB_SLAM3
