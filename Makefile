@@ -75,7 +75,7 @@ build_abtest:
 	$(DOCKER_EXEC) "cd /workspace && rm -rf build && mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DWITH_GTSAM=ON -DABTEST_MODE=ON && make -j8"
 
 kitti_stereo_gtsam:
-	$(DOCKER_RUN) "cd /workspace && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_gtsam.log"
+	$(DOCKER_RUN) "cd /workspace && unset DISPLAY && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_gtsam.log"
 
 kitti_stereo_abtest:
-	$(DOCKER_RUN) "cd /workspace && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_abtest.log"
+	$(DOCKER_RUN) "cd /workspace && unset DISPLAY && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_abtest.log"
