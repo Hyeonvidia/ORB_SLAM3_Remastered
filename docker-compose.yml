@@ -92,6 +92,30 @@ services:
         ./bin/stereo_euroc Vocabulary/ORBvoc.txt examples/Stereo/EuRoC.yaml /datasets/EuRoc/MH01 examples/Stereo/EuRoC_TimeStamps/MH01.txt
       "
 
+  # ==========================================================================
+  # run-kitti: Build + run KITTI with viewer (docker compose run --rm run-kitti)
+  # ==========================================================================
+  run-kitti:
+    image: orb-slam3-remastered:dev
+    volumes:
+      - .:/workspace
+      - ../Datasets:/datasets:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ccache:/ccache
+    working_dir: /workspace
+    environment:
+      - LD_LIBRARY_PATH=/workspace/lib:/usr/local/lib
+      - DISPLAY=host.docker.internal:0
+      - XDG_RUNTIME_DIR=/tmp
+      - CCACHE_DIR=/ccache
+    command: >
+      bash -c "
+        ldconfig &&
+        bash scripts/build.sh > /dev/null 2>&1 &&
+        echo '=== Running Stereo KITTI with Viewer ===' &&
+        ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00
+      "
+
 volumes:
   ccache:
     name: orb-slam3-ccache
