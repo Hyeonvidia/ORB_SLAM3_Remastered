@@ -1,4 +1,4 @@
-.PHONY: help up down restart attach build euroc_mono euroc_mono_inertial euroc_stereo euroc_stereo_inertial kitti_mono kitti_stereo build_gtsam build_abtest kitti_stereo_gtsam kitti_stereo_abtest
+.PHONY: help up down restart attach build euroc_mono euroc_mono_inertial euroc_stereo euroc_stereo_inertial kitti_mono kitti_stereo build_gtsam build_abtest kitti_stereo_gtsam kitti_stereo_abtest euroc_stereo_inertial_gtsam
 
 DOCKER_EXEC = docker compose exec dev bash -c
 DOCKER_RUN = docker compose run --rm dev bash -c
@@ -79,3 +79,6 @@ kitti_stereo_gtsam:
 
 kitti_stereo_abtest:
 	$(DOCKER_RUN) "cd /workspace && unset DISPLAY && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_abtest.log"
+
+euroc_stereo_inertial_gtsam:
+	$(DOCKER_RUN) "cd /workspace && unset DISPLAY && $(LD_LIB) ./bin/stereo_inertial_euroc Vocabulary/ORBvoc.txt examples/Stereo-Inertial/EuRoC.yaml /datasets/EuRoc/MH01 examples/Stereo-Inertial/EuRoC_TimeStamps/MH01.txt 2>&1 | tee /workspace/euroc_si_gtsam.log"
