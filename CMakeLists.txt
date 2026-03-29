@@ -12,6 +12,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 option(BUILD_TESTS "Build unit tests" ON)
 option(WITH_GTSAM "Build with GTSAM optimizer backend" OFF)
+option(ABTEST_MODE "Enable A/B testing (g2o primary, GTSAM reference)" OFF)
 
 # Compiler flags — NO -march=native for arm64 portability
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -O3")
@@ -36,6 +37,10 @@ if(WITH_GTSAM)
     find_package(GTSAM REQUIRED)
     message(STATUS "GTSAM: found (version ${GTSAM_VERSION})")
     add_definitions(-DWITH_GTSAM)
+    if(ABTEST_MODE)
+        add_definitions(-DABTEST_MODE)
+        message(STATUS "A/B Test mode: g2o primary, GTSAM reference")
+    endif()
 endif()
 
 # Find installed third-party libraries (built by scripts/build_third_party.sh)

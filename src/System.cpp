@@ -52,9 +52,20 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
 {
     // Initialize optimizer backend
 #ifdef WITH_GTSAM
-    Optimizer::SetBackend(std::make_unique<GtsamOptimizer>());  // GTSAM only
+  #ifdef ABTEST_MODE
+    // A/B Test: g2o primary (used), GTSAM reference (comparison logging only)
+    Optimizer::SetBackend(std::make_unique<ABTestOptimizer>(
+        std::make_unique<G2oOptimizer>(),
+        std::make_unique<GtsamOptimizer>()));
+    std::cout << "[Optimizer] A/B Test mode: g2o primary, GTSAM reference" << std::endl;
+  #else
+    // GTSAM only
+    Optimizer::SetBackend(std::make_unique<GtsamOptimizer>());
+    std::cout << "[Optimizer] GTSAM-only mode" << std::endl;
+  #endif
 #else
     Optimizer::SetBackend(std::make_unique<G2oOptimizer>());
+    std::cout << "[Optimizer] g2o-only mode" << std::endl;
 #endif
 
     // Output welcome message

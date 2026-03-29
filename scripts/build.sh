@@ -18,7 +18,7 @@ fi
 
 cd "${WORKSPACE}"
 rm -rf build && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DWITH_GTSAM=${WITH_GTSAM:-OFF} -DABTEST_MODE=${ABTEST_MODE:-OFF}
 make -j${NPROC}
 
 echo "=== BUILD SUCCESS ==="

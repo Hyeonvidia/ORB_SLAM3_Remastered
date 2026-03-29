@@ -1,4 +1,4 @@
-.PHONY: help up down restart attach build euroc_mono euroc_mono_inertial euroc_stereo euroc_stereo_inertial kitti_mono kitti_stereo
+.PHONY: help up down restart attach build euroc_mono euroc_mono_inertial euroc_stereo euroc_stereo_inertial kitti_mono kitti_stereo build_gtsam build_abtest kitti_stereo_gtsam kitti_stereo_abtest
 
 DOCKER_EXEC = docker compose exec dev bash -c
 DOCKER_RUN = docker compose run --rm dev bash -c
@@ -23,6 +23,12 @@ help:
 	@echo "KITTI Dataset (Sequence 00):"
 	@echo "  make kitti_mono"
 	@echo "  make kitti_stereo"
+	@echo ""
+	@echo "GTSAM-specific:"
+	@echo "  make build_gtsam          - Build with GTSAM-only backend"
+	@echo "  make build_abtest         - Build with A/B test (g2o+GTSAM)"
+	@echo "  make kitti_stereo_gtsam   - Run KITTI stereo with GTSAM"
+	@echo "  make kitti_stereo_abtest  - Run KITTI stereo with A/B test"
 	@echo "--------------------------------------------------------"
 
 up:
@@ -60,3 +66,16 @@ kitti_mono:
 
 kitti_stereo:
 	$(DOCKER_RUN) "cd /workspace && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00"
+
+# GTSAM-specific targets
+build_gtsam:
+	$(DOCKER_EXEC) "cd /workspace && rm -rf build && mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DWITH_GTSAM=ON && make -j8"
+
+build_abtest:
+	$(DOCKER_EXEC) "cd /workspace && rm -rf build && mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DWITH_GTSAM=ON -DABTEST_MODE=ON && make -j8"
+
+kitti_stereo_gtsam:
+	$(DOCKER_RUN) "cd /workspace && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_gtsam.log"
+
+kitti_stereo_abtest:
+	$(DOCKER_RUN) "cd /workspace && $(LD_LIB) ./bin/stereo_kitti Vocabulary/ORBvoc.txt examples/Stereo/KITTI00-02.yaml /datasets/kitti_dataset/data_odometry_gray/dataset/sequences/00 2>&1 | tee /workspace/kitti_abtest.log"
