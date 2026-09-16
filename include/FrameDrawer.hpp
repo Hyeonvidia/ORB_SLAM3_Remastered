@@ -20,7 +20,6 @@
 #ifndef FRAMEDRAWER_H
 #define FRAMEDRAWER_H
 
-#include "Tracking.hpp"
 #include "MapPoint.hpp"
 #include "Atlas.hpp"
 

@@ -23,7 +23,6 @@
 #include "Map.hpp"
 #include "MapPoint.hpp"
 #include "KeyFrame.hpp"
-#include "LoopClosing.hpp"
 #include "Frame.hpp"
 
 #include <math.h>
@@ -41,11 +40,11 @@
 #include <map>
 #include <set>
 #include <vector>
+#include "LoopClosing.hpp"
 
 namespace ORB_SLAM3
 {
 
-class LoopClosing;
 
 class Optimizer
 {

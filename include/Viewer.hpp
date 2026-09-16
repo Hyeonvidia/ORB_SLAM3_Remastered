@@ -20,15 +20,12 @@
 #ifndef VIEWER_H
 #define VIEWER_H
 
-#include "FrameDrawer.hpp"
-#include "MapDrawer.hpp"
-#include "Tracking.hpp"
-#include "System.hpp"
-#include "Settings.hpp"
 
 #include <mutex>
 
 #include <string>
+#include <Eigen/Core>
+#include <opencv2/core/core.hpp>
 
 namespace ORB_SLAM3
 {

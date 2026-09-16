@@ -24,10 +24,7 @@
 #include <list>
 #include <set>
 
-#include "KeyFrame.hpp"
-#include "Frame.hpp"
 #include "ORBVocabulary.hpp"
-#include "Map.hpp"
 
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/vector.hpp>
@@ -36,6 +33,7 @@
 #include<mutex>
 
 #include <map>
+#include <Eigen/Core>
 
 
 namespace ORB_SLAM3

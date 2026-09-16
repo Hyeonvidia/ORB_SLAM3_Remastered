@@ -29,6 +29,10 @@
 #include <mutex>
 #include <set>
 #include <vector>
+#include "KeyFrame.hpp"
+#include "Map.hpp"
+#include "MapPoint.hpp"
+#include "ORBVocabulary.hpp"
 
 namespace ORB_SLAM3
 {

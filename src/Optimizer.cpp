@@ -50,6 +50,8 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "LoopClosing.hpp"
+#include "Verbose.hpp"
 
 namespace ORB_SLAM3
 {

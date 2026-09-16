@@ -18,6 +18,7 @@
 
 
 #include "Map.hpp"
+#include "KeyFrameDatabase.hpp"
 
 #include<mutex>
 
@@ -27,6 +28,9 @@
 #include <set>
 #include <tuple>
 #include <vector>
+#include "GeometricCamera.hpp"
+#include "KeyFrame.hpp"
+#include "MapPoint.hpp"
 
 namespace ORB_SLAM3
 {

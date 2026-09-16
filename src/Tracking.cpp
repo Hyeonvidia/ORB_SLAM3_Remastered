@@ -46,6 +46,11 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "LocalMapping.hpp"
+#include "LoopClosing.hpp"
+#include "System.hpp"
+#include "Verbose.hpp"
+#include "Viewer.hpp"
 
 
 

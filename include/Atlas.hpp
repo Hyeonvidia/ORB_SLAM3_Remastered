@@ -19,12 +19,7 @@
 #ifndef ATLAS_H
 #define ATLAS_H
 
-#include "Map.hpp"
-#include "MapPoint.hpp"
-#include "KeyFrame.hpp"
 #include "GeometricCamera.hpp"
-#include "Pinhole.hpp"
-#include "KannalaBrandt8.hpp"
 
 #include <set>
 #include <mutex>
@@ -33,16 +28,17 @@
 
 #include <map>
 #include <vector>
+#include "Frame.hpp"
+#include "KeyFrame.hpp"
+#include "Map.hpp"
+#include "MapPoint.hpp"
+#include "ORBVocabulary.hpp"
 
 
 namespace ORB_SLAM3
 {
 class Viewer;
-class Map;
-class MapPoint;
-class KeyFrame;
 class KeyFrameDatabase;
-class Frame;
 class KannalaBrandt8;
 class Pinhole;
 

@@ -37,6 +37,8 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "Tracking.hpp"
+#include "Verbose.hpp"
 
 namespace ORB_SLAM3
 {

@@ -24,6 +24,9 @@
 #include <istream>
 #include <ostream>
 #include <vector>
+#include "Frame.hpp"
+#include "GeometricCamera.hpp"
+#include "KeyFrame.hpp"
 namespace ORB_SLAM3
 {
 

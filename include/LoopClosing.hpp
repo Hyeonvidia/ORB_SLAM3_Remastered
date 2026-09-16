@@ -21,12 +21,9 @@
 #define LOOPCLOSING_H
 
 #include "KeyFrame.hpp"
-#include "LocalMapping.hpp"
 #include "Atlas.hpp"
 #include "ORBVocabulary.hpp"
-#include "Tracking.hpp"
 
-#include "KeyFrameDatabase.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <thread>

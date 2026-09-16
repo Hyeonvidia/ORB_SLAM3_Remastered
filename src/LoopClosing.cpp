@@ -38,6 +38,11 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "KeyFrameDatabase.hpp"
+#include "LocalMapping.hpp"
+#include "System.hpp"
+#include "Tracking.hpp"
+#include "Verbose.hpp"
 
 
 namespace ORB_SLAM3

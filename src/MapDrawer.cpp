@@ -27,6 +27,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "Map.hpp"
+#include "Settings.hpp"
 
 namespace ORB_SLAM3
 {

@@ -32,6 +32,10 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include "MapDrawer.hpp"
+#include "Settings.hpp"
+#include "System.hpp"
+#include "Tracking.hpp"
 
 namespace ORB_SLAM3
 {

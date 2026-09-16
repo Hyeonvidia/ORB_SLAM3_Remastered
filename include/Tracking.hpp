@@ -23,19 +23,12 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
-#include "Viewer.hpp"
-#include "FrameDrawer.hpp"
-#include "Atlas.hpp"
-#include "LocalMapping.hpp"
-#include "LoopClosing.hpp"
 #include "Frame.hpp"
 #include "ORBVocabulary.hpp"
 #include "KeyFrameDatabase.hpp"
 #include "ORBextractor.hpp"
 #include "MapDrawer.hpp"
-#include "System.hpp"
 #include "ImuTypes.hpp"
-#include "Settings.hpp"
 
 #include "GeometricCamera.hpp"
 

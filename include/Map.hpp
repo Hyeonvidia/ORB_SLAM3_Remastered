@@ -20,8 +20,6 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include "MapPoint.hpp"
-#include "KeyFrame.hpp"
 
 #include <set>
 #include <pangolin/pangolin.h>
@@ -33,6 +31,8 @@
 #include <map>
 #include <string>
 #include <vector>
+#include "GeometricCamera.hpp"
+#include "ORBVocabulary.hpp"
 
 
 namespace ORB_SLAM3

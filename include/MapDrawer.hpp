@@ -23,7 +23,6 @@
 #include"Atlas.hpp"
 #include"MapPoint.hpp"
 #include"KeyFrame.hpp"
-#include "Settings.hpp"
 #include<pangolin/pangolin.h>
 
 #include<mutex>

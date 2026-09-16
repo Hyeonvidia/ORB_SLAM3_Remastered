@@ -17,6 +17,7 @@
 */
 
 #include "KeyFrame.hpp"
+#include "KeyFrameDatabase.hpp"
 #include "Converter.hpp"
 #include "ImuTypes.hpp"
 #include<mutex>
@@ -31,6 +32,10 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "GeometricCamera.hpp"
+#include "Map.hpp"
+#include "MapPoint.hpp"
+#include "Frame.hpp"
 
 namespace ORB_SLAM3
 {

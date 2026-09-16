@@ -28,6 +28,8 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include "Map.hpp"
+#include "Frame.hpp"
 
 
 namespace ORB_SLAM3

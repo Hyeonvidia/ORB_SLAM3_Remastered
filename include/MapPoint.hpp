@@ -20,9 +20,6 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
-#include "KeyFrame.hpp"
-#include "Frame.hpp"
-#include "Map.hpp"
 #include "Converter.hpp"
 
 #include "SerializationUtils.hpp"

@@ -28,6 +28,7 @@
 #include <set>
 #include <tuple>
 #include <vector>
+#include "Map.hpp"
 
 namespace ORB_SLAM3
 {

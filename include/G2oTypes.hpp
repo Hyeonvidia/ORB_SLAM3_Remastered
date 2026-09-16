@@ -31,8 +31,6 @@
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
 
-#include "Frame.hpp"
-#include "KeyFrame.hpp"
 
 #include"Converter.hpp"
 #include <math.h>
@@ -40,6 +38,7 @@
 #include <istream>
 #include <ostream>
 #include <vector>
+#include "ImuTypes.hpp"
 
 namespace ORB_SLAM3
 {

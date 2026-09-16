@@ -21,9 +21,6 @@
 #define LOCALMAPPING_H
 
 #include "KeyFrame.hpp"
-#include "Atlas.hpp"
-#include "LoopClosing.hpp"
-#include "Tracking.hpp"
 #include "KeyFrameDatabase.hpp"
 #include "Settings.hpp"
 
