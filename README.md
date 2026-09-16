@@ -174,11 +174,11 @@ quietly wrong if the frame or the alignment group is chosen carelessly.
 ## Watching the viewer live from macOS
 
 ```bash
-./tools/monitor.sh --x11 euroc stereo-inertial V203   # a window on your desktop
-./tools/monitor.sh euroc stereo-inertial V203         # or over Screen Sharing
+./tools/monitor.sh euroc stereo-inertial V203          # a window on your desktop
+./tools/monitor.sh --vnc euroc stereo-inertial V203    # or over Screen Sharing
 ```
 
-`--x11` puts a real window on the macOS desktop through XQuartz, and the mouse
+A real window opens on the macOS desktop through XQuartz, and the mouse
 works — toggling a menu checkbox moves the map-point pixel count between 638, 0
 and 970, and a drag orbits the view. There is no window manager inside the
 nested server, so input focus is PointerRoot: whatever is under the pointer gets
@@ -196,7 +196,7 @@ split instead, without a rebuild:
 ORBSLAM3R_MAP_VIEW_FRACTION=0.85 ./tools/monitor.sh --x11 euroc stereo MH01
 ```
 
-### Why `--x11` goes through a nested X server
+### Why it goes through a nested X server
 
 Pointing the viewer straight at XQuartz gives a window that appears with the
 right title and size and then stays blank. Rendering is not the problem — a

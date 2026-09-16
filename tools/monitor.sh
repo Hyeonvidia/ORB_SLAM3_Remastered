@@ -7,10 +7,13 @@
 #   ./tools/monitor.sh tum rgbd
 #
 # TWO WAYS TO SEE IT
-#   --vnc   (default)  the container renders to its own Xvfb and x11vnc exports
-#                      the screen; macOS opens it with Screen Sharing. This is
-#                      the path that is verified to work.
-#   --x11              a real window on the macOS desktop, via a nested X server.
+#   --x11   (default)  a real window on the macOS desktop, through a nested X
+#                      server. Nothing to connect to, no password, and the mouse
+#                      works. Needs XQuartz, which this script starts and
+#                      authorises for you.
+#   --vnc              the container renders to its own Xvfb and x11vnc exports
+#                      the screen; macOS opens it with Screen Sharing. Use it
+#                      when XQuartz is not installed, or from a remote machine.
 #
 # WHY --x11 GOES THROUGH XEPHYR RATHER THAN STRAIGHT TO XQUARTZ
 #   Pointing the viewer at XQuartz directly gets you a window that appears with
@@ -47,7 +50,7 @@ cd "$ROOT"
 
 PORT=5900
 OPEN=1
-MODE=vnc
+MODE=x11
 VNC_PASSWORD="${ORBSLAM3R_VNC_PASSWORD:-orbslam3r}"
 ARGS=()
 while [ $# -gt 0 ]; do
@@ -134,7 +137,11 @@ if [ "$MODE" = x11 ]; then
     open -a XQuartz
     for _ in $(seq 1 30); do pgrep -qx Xquartz 2>/dev/null && break; sleep 1; done
   fi
-  pgrep -qx Xquartz 2>/dev/null || { echo "XQuartz did not start; try --vnc" >&2; exit 1; }
+  pgrep -qx Xquartz 2>/dev/null || {
+    echo "XQuartz is not available. Install it, or use Screen Sharing instead:" >&2
+    echo "  $0 --vnc $*" >&2
+    exit 1
+  }
   # The container connects over TCP, so the X server has to allow it.
   /opt/X11/bin/xhost +localhost >/dev/null 2>&1 || true
 
