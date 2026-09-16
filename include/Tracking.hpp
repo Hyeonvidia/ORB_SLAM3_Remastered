@@ -39,6 +39,7 @@
 #include <list>
 #include <string>
 #include <vector>
+#include <memory>
 
 namespace ORB_SLAM3
 {
@@ -256,8 +257,10 @@ protected:
     LoopClosing* mpLoopClosing;
 
     //ORB
-    ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
-    ORBextractor* mpIniORBextractor;
+    // Tracking owns the extractors; Frame only borrows them, and a Frame
+    // never outlives the Tracking that made it.
+    std::unique_ptr<ORBextractor> mpORBextractorLeft, mpORBextractorRight;
+    std::unique_ptr<ORBextractor> mpIniORBextractor;
 
     //BoW
     ORBVocabulary* mpORBVocabulary;
