@@ -19,6 +19,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Xvfb, every toolkit places its window at +0+0, so screenshots of one window
 # capture whatever is stacked on top of it. Moving and raising windows is the
 # only way to capture them cleanly.
+#
+# x11vnc exports the Xvfb screen over VNC. That is how the viewer is watched
+# live from macOS: XQuartz cannot host it (its indirect GLX offers only OpenGL
+# 1.4, and Pangolin finds no usable fbConfig), but macOS ships a VNC client, so
+# rendering stays in the container on llvmpipe and only pixels cross over.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gdb \
         less \
@@ -29,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         file \
         bash-completion \
         xdotool \
+        x11vnc \
     && rm -rf /var/lib/apt/lists/*
 
 # ccache keeps incremental rebuilds of the SLAM library cheap across container

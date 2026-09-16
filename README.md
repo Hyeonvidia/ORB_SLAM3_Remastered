@@ -149,23 +149,42 @@ Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) and
 Builds clean on GCC 13.3 / C++17: `libORB_SLAM3.so` plus twelve dataset example
 binaries, zero errors and zero undefined symbols.
 
-All four sensor configurations run EuRoC MH01 end to end:
+69 runs across EuRoC, KITTI and TUM RGB-D all complete, and are scored with the
+alignment and ground-truth frame each configuration actually calls for:
 
-| Configuration | ATE RMSE | ORB-SLAM3 paper, MH01 |
-|---|---:|---:|
-| monocular | **0.0170 m** | ~0.016 m |
-| stereo | **0.0351 m** | ~0.035 m |
-| monocular-inertial | **0.0841 m** | ~0.062 m |
-| stereo-inertial | **0.0436 m** | ~0.037 m |
+| Dataset | Runs | Median ATE | Median ATE / path |
+|---|---:|---:|---:|
+| EuRoC (11 seq × 4 configs) | 44 | **0.043 m** | — |
+| KITTI odometry 00–10 (mono + stereo) | 22 | 3.09 m | **0.204 %** |
+| TUM RGB-D fr1_desk | 3 | **0.017 m** | — |
+
+KITTI stereo alone lands between 0.03 % and 0.59 % of path length (median
+0.09 %). Monocular is far worse there, as expected: no metric scale over
+kilometre-long drives, with the 2.5 km highway sequence 01 the known failure at
+11.6 %.
 
 ```bash
-./tools/run_euroc.sh stereo-inertial MH01
-./tools/eval_euroc.sh MH01
+./tools/run_all.sh                                   # the whole matrix
+./docker/run.sh -- python3 /workspace/tools/eval_all.py   # score it
 ```
 
-Single runs, scored with the alignment and ground-truth frame each configuration
-actually calls for — see [docs/PORTING.md](docs/PORTING.md), which explains the
-two ways that evaluation goes quietly wrong.
+[docs/PORTING.md](docs/PORTING.md) explains the two ways this evaluation goes
+quietly wrong if the frame or the alignment group is chosen carelessly.
+
+## Watching the viewer live from macOS
+
+```bash
+./tools/monitor.sh euroc stereo MH01
+```
+
+Runs the sequence with the viewer on and opens it in Screen Sharing. Rendering
+stays in the container on Mesa's llvmpipe and x11vnc exports the screen; only
+pixels cross over, on a port published to 127.0.0.1 only.
+
+Forwarding X11 to XQuartz does **not** work for this viewer: XQuartz is
+reachable, but its indirect GLX offers only OpenGL 1.4 and Pangolin then finds
+no usable framebuffer config (`No matching fbConfigs or visuals found`). That is
+a limit of XQuartz's GLX, not of the container.
 
 Not ported: the RealSense examples (need librealsense2, unavailable for
 linux/arm64 here and with no camera reachable from a container) and the ROS

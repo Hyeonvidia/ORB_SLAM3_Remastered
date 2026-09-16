@@ -15,9 +15,17 @@ residual translation error.
 
   ./tools/evaluate_ate.py estimate.txt groundtruth.txt --scale
 
-Both files are whitespace- or comma-separated `timestamp tx ty tz ...`; any
-further columns (quaternion, covariance) are ignored, and `#` comments are
-skipped.  Timestamps in nanoseconds are detected and converted.
+Two input layouts are recognised, per file:
+
+  TUM    `timestamp tx ty tz [qx qy qz qw ...]` -- any further columns ignored.
+         Timestamps in nanoseconds are detected and converted to seconds.
+  KITTI  twelve numbers per line, a 3x4 row-major pose matrix, no timestamps.
+         Translation is columns 3, 7 and 11. Used by the odometry ground truth
+         (data_odometry_poses) and by SaveTrajectoryKITTI, i.e. stereo_kitti.
+
+A KITTI-format file carries no time, so timestamps come from the sequence's
+times.txt via --times / --gt-times. Without one, the line index is used, which
+is exact when estimate and ground truth have one row per frame.
 """
 import argparse
 import sys
@@ -25,7 +33,7 @@ import sys
 import numpy as np
 
 
-def load(path):
+def read_rows(path):
     rows = []
     with open(path) as f:
         for line in f:
@@ -35,15 +43,51 @@ def load(path):
             parts = line.replace(",", " ").split()
             if len(parts) < 4:
                 continue
-            rows.append([float(x) for x in parts[:4]])
+            rows.append([float(x) for x in parts])
     if not rows:
         sys.exit(f"no poses in {path}")
-    data = np.asarray(rows)
-    t, xyz = data[:, 0], data[:, 1:4]
-    # EuRoC writes nanoseconds; anything this large is not seconds.
-    if np.median(t) > 1e12:
-        t = t * 1e-9
-    return t, xyz
+    return rows
+
+
+def read_times(path):
+    values = []
+    for line in open(path):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            values.append(float(line.split()[0]))
+    return np.asarray(values)
+
+
+def load(path, times_path=None):
+    rows = read_rows(path)
+    widths = {len(r) for r in rows}
+
+    # A KITTI pose line is exactly twelve numbers and has no timestamp column.
+    is_kitti = widths == {12}
+    if is_kitti:
+        data = np.asarray(rows)
+        xyz = data[:, [3, 7, 11]]
+    else:
+        data = np.asarray([r[:4] for r in rows])
+        xyz = data[:, 1:4]
+
+    if is_kitti:
+        if times_path:
+            t = read_times(times_path)
+            if len(t) < len(xyz):
+                sys.exit(f"{times_path} has {len(t)} times for {len(xyz)} poses in {path}")
+            t = t[: len(xyz)]
+        else:
+            # No clock: index as time. Exact when both files are one row per
+            # frame, which is how the KITTI odometry set is laid out.
+            t = np.arange(len(xyz), dtype=float)
+    else:
+        t = data[:, 0]
+        # EuRoC writes nanoseconds; anything this large is not seconds.
+        if np.median(t) > 1e12:
+            t = t * 1e-9
+
+    return t, xyz, "KITTI" if is_kitti else "TUM"
 
 
 def associate(t_est, t_gt, max_difference):
@@ -103,10 +147,19 @@ def main():
                     help="association window in seconds (default 0.02)")
     ap.add_argument("--save-aligned", metavar="PATH",
                     help="write the aligned estimate for plotting")
+    ap.add_argument("--times", metavar="PATH",
+                    help="times.txt supplying timestamps for a KITTI-format estimate")
+    ap.add_argument("--gt-times", metavar="PATH",
+                    help="times.txt supplying timestamps for KITTI-format ground truth")
     args = ap.parse_args()
 
-    t_est, xyz_est = load(args.estimate)
-    t_gt, xyz_gt = load(args.groundtruth)
+    t_est, xyz_est, fmt_est = load(args.estimate, args.times)
+    t_gt, xyz_gt, fmt_gt = load(args.groundtruth, args.gt_times)
+
+    # With both sides indexed by frame number, a 0.02 s window would match
+    # nothing; the useful tolerance there is half a frame.
+    if fmt_est == "KITTI" and fmt_gt == "KITTI" and not (args.times or args.gt_times):
+        args.max_difference = max(args.max_difference, 0.5)
     pairs = associate(t_est, t_gt, args.max_difference)
     if len(pairs) < 3:
         sys.exit(f"only {len(pairs)} pose pairs matched; nothing to evaluate")
@@ -118,8 +171,8 @@ def main():
     aligned = (s * (R @ src.T)).T + t
     err = np.linalg.norm(aligned - dst, axis=1)
 
-    print(f"estimate            : {args.estimate}")
-    print(f"ground truth        : {args.groundtruth}")
+    print(f"estimate            : {args.estimate}  [{fmt_est}]")
+    print(f"ground truth        : {args.groundtruth}  [{fmt_gt}]")
     print(f"estimate poses      : {len(t_est)}")
     print(f"ground-truth poses  : {len(t_gt)}")
     print(f"matched pairs       : {len(pairs)}")

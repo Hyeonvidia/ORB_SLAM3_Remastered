@@ -128,6 +128,8 @@ namespace ORB_SLAM3 {
     }
 
     Settings::Settings(const std::string &configFile, const int& sensor) :
+    calibration1_(nullptr), calibration2_(nullptr),
+    originalCalib1_(nullptr), originalCalib2_(nullptr),
     bNeedToUndistort_(false), bNeedToRectify_(false), bNeedToResize1_(false), bNeedToResize2_(false) {
         sensor_ = sensor;
 
@@ -554,6 +556,14 @@ namespace ORB_SLAM3 {
         }
 
         if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO){
+            // A rectified rig has no second calibration -- readCamera2
+            // reads only Stereo.b for it -- so there is nothing to print
+            // here but the baseline.
+            if(settings.originalCalib2_ == nullptr){
+                output << "\t-Camera 2: rectified rig, baseline "
+                       << settings.b_ << " m" << std::endl;
+            }
+            else{
             output << "\t-Camera 2 parameters (";
             if(settings.cameraType_ == Settings::PinHole || settings.cameraType_ ==  Settings::Rectified){
                 output << "Pinhole";
@@ -566,6 +576,7 @@ namespace ORB_SLAM3 {
                 output << " " << settings.originalCalib2_->getParameter(i);
             }
             output << " ]" << std::endl;
+            }
 
             if(!settings.vPinHoleDistorsion2_.empty()){
                 output << "\t-Camera 1 distortion parameters: [ ";

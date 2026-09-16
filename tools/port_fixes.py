@@ -517,10 +517,126 @@ def fix_unmatched_glend(text, path):
     return text.replace(old, new, 1), 1
 
 
+# ---------------------------------------------------------------------------
+def fix_rectified_stereo_crash(text, path):
+    """Stop Settings::operator<< dereferencing a camera that does not exist.
+
+    A pre-rectified stereo rig has ONE calibration plus a baseline -- there is
+    no second camera to describe. Settings::readCamera2 reflects that: it fills
+    calibration2_/originalCalib2_ for cameraType_ PinHole and KannalaBrandt8,
+    but for Rectified it only reads Stereo.b and leaves both untouched.
+
+    operator<< then does this for any stereo sensor, unconditionally:
+
+        for(size_t i = 0; i < settings.originalCalib2_->size(); i++)
+
+    and the Settings constructor's init list covers only the four bool flags,
+    so originalCalib2_ is not merely null -- it is uninitialised. The
+    dereference is a wild pointer read and the process dies with SIGSEGV
+    inside the System constructor, before a single frame is read.
+
+    That makes every pre-rectified stereo configuration unusable, which is
+    exactly what ORB-SLAM3's own KITTI stereo settings files are
+    (Camera.type: "Rectified"): all of Examples/Stereo/KITTI*.yaml crash on
+    startup. Confirmed under gdb on sequences 03-10.
+
+    Two changes: the pointers start as nullptr, and the printer reports the
+    baseline for a rectified rig instead of a camera that was never read.
+    """
+    if path.name != "Settings.cpp":
+        return text, 0
+
+    n = 0
+
+    old = (
+        "    Settings::Settings(const std::string &configFile, const int& sensor) :\n"
+        "    bNeedToUndistort_(false), bNeedToRectify_(false), bNeedToResize1_(false), bNeedToResize2_(false) {"
+    )
+    new = (
+        "    Settings::Settings(const std::string &configFile, const int& sensor) :\n"
+        "    calibration1_(nullptr), calibration2_(nullptr),\n"
+        "    originalCalib1_(nullptr), originalCalib2_(nullptr),\n"
+        "    bNeedToUndistort_(false), bNeedToRectify_(false), bNeedToResize1_(false), bNeedToResize2_(false) {"
+    )
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    old = (
+        "        if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO){\n"
+        "            output << \"\\t-Camera 2 parameters (\";\n"
+        "            if(settings.cameraType_ == Settings::PinHole || settings.cameraType_ ==  Settings::Rectified){\n"
+        "                output << \"Pinhole\";\n"
+        "            }\n"
+        "            else{\n"
+        "                output << \"Kannala-Brandt\";\n"
+        "            }\n"
+        "            output << \"\" << \": [\";\n"
+        "            for(size_t i = 0; i < settings.originalCalib2_->size(); i++){\n"
+        "                output << \" \" << settings.originalCalib2_->getParameter(i);\n"
+        "            }\n"
+        "            output << \" ]\" << std::endl;\n"
+    )
+    new = (
+        "        if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO){\n"
+        "            // A rectified rig has no second calibration -- readCamera2\n"
+        "            // reads only Stereo.b for it -- so there is nothing to print\n"
+        "            // here but the baseline.\n"
+        "            if(settings.originalCalib2_ == nullptr){\n"
+        "                output << \"\\t-Camera 2: rectified rig, baseline \"\n"
+        "                       << settings.b_ << \" m\" << std::endl;\n"
+        "            }\n"
+        "            else{\n"
+        "            output << \"\\t-Camera 2 parameters (\";\n"
+        "            if(settings.cameraType_ == Settings::PinHole || settings.cameraType_ ==  Settings::Rectified){\n"
+        "                output << \"Pinhole\";\n"
+        "            }\n"
+        "            else{\n"
+        "                output << \"Kannala-Brandt\";\n"
+        "            }\n"
+        "            output << \"\" << \": [\";\n"
+        "            for(size_t i = 0; i < settings.originalCalib2_->size(); i++){\n"
+        "                output << \" \" << settings.originalCalib2_->getParameter(i);\n"
+        "            }\n"
+        "            output << \" ]\" << std::endl;\n"
+        "            }\n"
+    )
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    return text, n
+
+
+# ---------------------------------------------------------------------------
+def fix_kitti_stereo_viewpoint(text, path):
+    """Make Viewer.ViewpointY a real number in the KITTI 00-02 stereo settings.
+
+    Settings::readParameter demands a real for this field and calls exit(-1)
+    with "Viewer.ViewpointY parameter must be a real number, aborting..." when
+    it finds an integer. Examples/Stereo/KITTI00-02.yaml writes
+
+        Viewer.ViewpointY: -100
+
+    where every other settings file writes a decimal (the monocular KITTI file
+    has -10.0). So sequences 00-02 refuse to start in stereo, for a reason
+    entirely separate from the rectified-stereo crash.
+    """
+    if path.name != "KITTI00-02.yaml" or "Stereo" not in str(path):
+        return text, 0
+    old = "Viewer.ViewpointY: -100\n"
+    new = "Viewer.ViewpointY: -100.0\n"
+    if old not in text:
+        return text, 0
+    return text.replace(old, new, 1), 1
+
+
 FIXES = [
     ("COMPILEDWITHC11 guards", drop_compiledwithc11_guards),
     ("viewer single-window layout", fix_viewer_layout),
     ("unmatched glEnd in MapDrawer", fix_unmatched_glend),
+    ("rectified-stereo startup crash", fix_rectified_stereo_crash),
+    ("KITTI00-02 stereo ViewpointY", fix_kitti_stereo_viewpoint),
     ("viewer env switch", make_viewer_switchable),
     ("g2o solver ownership", fix_g2o_solver_ownership),
     ("mnFullBAIdx bool -> int", fix_full_ba_generation_counter),
@@ -538,7 +654,7 @@ def main():
 
     for target in ("include", "src", "Examples"):
         for f in sorted((ROOT / target).rglob("*")):
-            if not f.is_file() or f.suffix not in {".h", ".hpp", ".cpp"}:
+            if not f.is_file() or f.suffix not in {".h", ".hpp", ".cpp", ".yaml"}:
                 continue
             original = f.read_text(encoding="utf-8", errors="replace")
             text = original
