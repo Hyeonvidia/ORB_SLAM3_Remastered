@@ -1,0 +1,44 @@
+--- upstream/types/types_sba.cpp  (blob 91d45e766137, closest ancestor)
++++ orbslam3/types/types_sba.cpp
+@@ -27,22 +27,30 @@
+ #include "types_sba.h"
+ #include <iostream>
+ 
+-#include "g2o/core/factory.h"
+-#include "g2o/stuff/macros.h"
+-
+ namespace g2o {
+ 
+   using namespace std;
+ 
+-  G2O_REGISTER_TYPE_GROUP(sba);
+ 
+-  G2O_REGISTER_TYPE(VERTEX_CAM, VertexCam);
+-  G2O_REGISTER_TYPE(VERTEX_XYZ, VertexPointXYZ);
+-  G2O_REGISTER_TYPE(VERTEX_INTRINSICS, VertexIntrinsics);
++  VertexSBAPointXYZ::VertexSBAPointXYZ() : BaseVertex<3, Vector3d>()
++  {
++  }
+ 
+-  G2O_REGISTER_TYPE(EDGE_PROJECT_P2MC, EdgeProjectP2MC);
+-  G2O_REGISTER_TYPE(EDGE_PROJECT_P2SC, EdgeProjectP2SC);
+-  G2O_REGISTER_TYPE(EDGE_CAM, EdgeSBACam);
+-  G2O_REGISTER_TYPE(EDGE_SCALE, EdgeSBAScale);
++  bool VertexSBAPointXYZ::read(std::istream& is)
++  {
++    Vector3d lv;
++    for (int i=0; i<3; i++)
++      is >> _estimate[i];
++    return true;
++  }
++
++  bool VertexSBAPointXYZ::write(std::ostream& os) const
++  {
++    Vector3d lv=estimate();
++    for (int i=0; i<3; i++){
++      os << lv[i] << " ";
++    }
++    return os.good();
++  }
+ 
+ } // end namespace

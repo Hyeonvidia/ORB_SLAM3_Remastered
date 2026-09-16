@@ -1,0 +1,25 @@
+--- upstream/core/sparse_optimizer.cpp  (blob b88465124f2f, closest ancestor)
++++ orbslam3/core/sparse_optimizer.cpp
+@@ -38,10 +38,10 @@
+ #include "batch_stats.h"
+ #include "hyper_graph_action.h"
+ #include "robust_kernel.h"
+-#include "g2o/stuff/timeutil.h"
+-#include "g2o/stuff/macros.h"
+-#include "g2o/stuff/misc.h"
+-#include "g2o/config.h"
++#include "../stuff/timeutil.h"
++#include "../stuff/macros.h"
++#include "../stuff/misc.h"
++#include "../../config.h"
+ 
+ namespace g2o{
+   using namespace std;
+@@ -418,6 +418,7 @@
+     return cjIterations;
+   }
+ 
++
+   void SparseOptimizer::update(const double* update)
+   {
+     // update the graph by calling oplus on the vertices

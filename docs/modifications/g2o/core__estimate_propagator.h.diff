@@ -1,0 +1,29 @@
+--- upstream/core/estimate_propagator.h  (blob 76c07f918353, closest ancestor)
++++ orbslam3/core/estimate_propagator.h
+@@ -47,7 +47,7 @@
+    *
+    * You may derive an own one, if necessary. The default is to return initialEstimatePossible(from, to) for the edge.
+    */
+-  class EstimatePropagatorCost {
++  class  EstimatePropagatorCost {
+     public:
+       EstimatePropagatorCost (SparseOptimizer* graph);
+       virtual double operator()(OptimizableGraph::Edge* edge, const OptimizableGraph::VertexSet& from, OptimizableGraph::Vertex* to_) const;
+@@ -62,7 +62,7 @@
+    * Initialize your graph along odometry edges. An odometry edge is assumed to connect vertices
+    * whose IDs only differs by one.
+    */
+-  class EstimatePropagatorCostOdometry : public EstimatePropagatorCost {
++  class  EstimatePropagatorCostOdometry : public EstimatePropagatorCost {
+     public:
+       EstimatePropagatorCostOdometry(SparseOptimizer* graph);
+       virtual double operator()(OptimizableGraph::Edge* edge, const OptimizableGraph::VertexSet& from_, OptimizableGraph::Vertex* to_) const;
+@@ -72,7 +72,7 @@
+   /**
+    * \brief propagation of an initial guess
+    */
+-  class EstimatePropagator {
++  class  EstimatePropagator {
+     public:
+ 
+       /**

@@ -1,0 +1,104 @@
+# =============================================================================
+# orbslam3r/base  —  OS + toolchain + system libraries
+#
+# Layer 1 of 3.  Contains everything that comes from apt and therefore changes
+# only when the OS/toolchain baseline moves.  No project code, no submodules,
+# so this layer stays cached across virtually every rebuild.
+#
+#   base  ->  thirdparty  ->  dev
+# =============================================================================
+ARG UBUNTU_VERSION=24.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+LABEL org.opencontainers.image.title="orbslam3r-base"
+LABEL org.opencontainers.image.description="Ubuntu + toolchain + system deps for ORB_SLAM3_Remastered"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Seoul
+
+# --- toolchain -------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        g++ \
+        gcc \
+        cmake \
+        ninja-build \
+        make \
+        pkg-config \
+        ccache \
+        git \
+        ca-certificates \
+        curl \
+        wget \
+        unzip \
+        tar \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- core math / vision / serialization ------------------------------------
+# Eigen 3.4.x, OpenCV 4.6.x on 24.04 — both satisfy ORB-SLAM3's minimums
+# (Eigen >= 3.1.0, OpenCV >= 3.0).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libeigen3-dev \
+        libopencv-dev \
+        libboost-serialization-dev \
+        libboost-filesystem-dev \
+        libboost-system-dev \
+        libssl-dev \
+        libsuitesparse-dev \
+        libspdlog-dev \
+        libfmt-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Pangolin windowing / GL backends --------------------------------------
+# Both X11 (for XQuartz forwarding from macOS) and EGL/Wayland are installed so
+# one image can serve the headless and the GUI run modes.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1-mesa-dev \
+        libglu1-mesa-dev \
+        libegl1-mesa-dev \
+        libglew-dev \
+        libepoxy-dev \
+        libwayland-dev \
+        libxkbcommon-dev \
+        wayland-protocols \
+        libx11-dev \
+        libxrandr-dev \
+        libxinerama-dev \
+        libxcursor-dev \
+        libxi-dev \
+        libxext-dev \
+        libjpeg-dev \
+        libpng-dev \
+        libtiff-dev \
+        libavcodec-dev \
+        libavutil-dev \
+        libavformat-dev \
+        libswscale-dev \
+        libavdevice-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- software GL + X11 clients, for headless rendering and GUI debugging ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libosmesa6-dev \
+        xvfb \
+        mesa-utils \
+        x11-apps \
+        x11-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- evaluation tooling (trajectory alignment / RMS ATE) -------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-numpy \
+        python3-matplotlib \
+        python3-scipy \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- install prefix shared by every third-party dependency -----------------
+ENV ORBSLAM3R_PREFIX=/opt/orbslam3r
+ENV CMAKE_PREFIX_PATH=${ORBSLAM3R_PREFIX}
+ENV LD_LIBRARY_PATH=${ORBSLAM3R_PREFIX}/lib
+ENV PATH=/usr/lib/ccache:${ORBSLAM3R_PREFIX}/bin:${PATH}
+RUN mkdir -p ${ORBSLAM3R_PREFIX}
+
+WORKDIR /workspace

@@ -1,0 +1,15 @@
+--- upstream/core/parameter_container.cpp  (blob 2ea696fa91d0, closest ancestor)
++++ orbslam3/core/parameter_container.cpp
+@@ -31,9 +31,9 @@
+ #include "factory.h"
+ #include "parameter.h"
+ 
+-#include "g2o/stuff/macros.h"
+-#include "g2o/stuff/color_macros.h"
+-#include "g2o/stuff/string_tools.h"
++#include "../stuff/macros.h"
++#include "../stuff/color_macros.h"
++#include "../stuff/string_tools.h"
+ 
+ namespace g2o {
+ 

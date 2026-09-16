@@ -1,0 +1,29 @@
+--- upstream/core/base_multi_edge.h  (blob dbf2de22903d, closest ancestor)
++++ orbslam3/core/base_multi_edge.h
+@@ -35,7 +35,7 @@
+ 
+ #include "base_edge.h"
+ #include "robust_kernel.h"
+-#include "g2o/config.h"
++#include "../../config.h"
+ 
+ namespace g2o {
+ 
+@@ -55,7 +55,7 @@
+        * \brief helper for mapping the Hessian memory of the upper triangular block
+        */
+       struct HessianHelper {
+-        Map<MatrixXd> matrix;     ///< the mapped memory
++        Eigen::Map<MatrixXd> matrix;     ///< the mapped memory
+         bool transposed;          ///< the block has to be transposed
+         HessianHelper() : matrix(0, 0, 0), transposed(false) {}
+       };
+@@ -66,7 +66,7 @@
+       typedef MatrixXd::MapType JacobianType;
+       typedef typename BaseEdge<D,E>::ErrorVector ErrorVector;
+       typedef typename BaseEdge<D,E>::InformationType InformationType;
+-      typedef Map<MatrixXd, MatrixXd::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockType;
++      typedef Eigen::Map<MatrixXd, MatrixXd::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockType;
+ 
+       BaseMultiEdge() : BaseEdge<D,E>()
+       {

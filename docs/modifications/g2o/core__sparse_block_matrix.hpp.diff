@@ -1,0 +1,35 @@
+--- upstream/core/sparse_block_matrix.hpp  (blob 48adb830d434, closest ancestor)
++++ orbslam3/core/sparse_block_matrix.hpp
+@@ -239,8 +239,8 @@
+     }
+ 
+     // map the memory by Eigen
+-    Map<VectorXd> destVec(dest, rows());
+-    const Map<const VectorXd> srcVec(src, cols());
++    Eigen::Map<VectorXd> destVec(dest, rows());
++    const Eigen::Map<const VectorXd> srcVec(src, cols());
+ 
+     for (size_t i=0; i<_blockCols.size(); ++i){
+       int srcOffset = i ? _colBlockIndices[i-1] : 0;
+@@ -263,8 +263,8 @@
+     }
+ 
+     // map the memory by Eigen
+-    Map<VectorXd> destVec(dest, rows());
+-    const Map<const VectorXd> srcVec(src, cols());
++    Eigen::Map<VectorXd> destVec(dest, rows());
++    const Eigen::Map<const VectorXd> srcVec(src, cols());
+ 
+     for (size_t i=0; i<_blockCols.size(); ++i){
+       int srcOffset = colBaseOfBlock(i);
+@@ -291,8 +291,8 @@
+     }
+ 
+     // map the memory by Eigen
+-    Map<VectorXd> destVec(dest, destSize);
+-    Map<const VectorXd> srcVec(src, rows());
++    Eigen::Map<VectorXd> destVec(dest, destSize);
++    Eigen::Map<const VectorXd> srcVec(src, rows());
+ 
+ #   ifdef G2O_OPENMP
+ #   pragma omp parallel for default (shared) schedule(dynamic, 10)

@@ -1,0 +1,13 @@
+--- upstream/solvers/linear_solver_dense.h  (blob 698de9f45f62, closest ancestor)
++++ orbslam3/solvers/linear_solver_dense.h
+@@ -28,8 +28,8 @@
+ #ifndef G2O_LINEAR_SOLVER_DENSE_H
+ #define G2O_LINEAR_SOLVER_DENSE_H
+ 
+-#include "g2o/core/linear_solver.h"
+-#include "g2o/core/batch_stats.h"
++#include "../core/linear_solver.h"
++#include "../core/batch_stats.h"
+ 
+ #include <vector>
+ #include <utility>

@@ -1,0 +1,19 @@
+--- upstream/core/optimization_algorithm_dogleg.h  (blob a0d50cc0bb8c, closest ancestor)
++++ orbslam3/core/optimization_algorithm_dogleg.h
+@@ -28,7 +28,6 @@
+ #define G2O_OPTIMIZATION_ALGORITHM_DOGLEG_H
+ 
+ #include "optimization_algorithm_with_hessian.h"
+-#include "g2o_core_api.h"
+ 
+ namespace g2o {
+ 
+@@ -37,7 +36,7 @@
+   /**
+    * \brief Implementation of Powell's Dogleg Algorithm
+    */
+-  class G2O_CORE_API OptimizationAlgorithmDogleg : public OptimizationAlgorithmWithHessian
++  class  OptimizationAlgorithmDogleg : public OptimizationAlgorithmWithHessian
+   {
+     public:
+       /** \brief type of the step to take */

@@ -1,0 +1,19 @@
+--- upstream/core/robust_kernel.h  (blob faa8d2514748, closest ancestor)
++++ orbslam3/core/robust_kernel.h
+@@ -34,7 +34,6 @@
+ #endif
+ #include <Eigen/Core>
+ 
+-#include "g2o_core_api.h"
+ 
+ namespace g2o {
+ 
+@@ -49,7 +48,7 @@
+    *
+    * chi^2 = sum_{e} rho( e^T Omega e )
+    */
+-  class G2O_CORE_API RobustKernel
++  class  RobustKernel
+   {
+     public:
+       RobustKernel();

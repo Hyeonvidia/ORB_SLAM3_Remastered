@@ -1,0 +1,14 @@
+ORB_SLAM3_Remastered — third-party dependency manifest
+generated: 2026-09-16T03:59:48Z
+
+SUBMODULE              UPSTREAM                                       PINNED TAG         COMMIT
+---------              --------                                       ----------         ------
+thirdparty/g2o         https://github.com/RainerKuemmerle/g2o.git     20241228_git       eec325a1
+thirdparty/Sophus      https://github.com/strasdat/Sophus.git         1.24.6             d0b7315a
+thirdparty/DBoW2       https://github.com/dorian3d/DBoW2.git          v1.1-free          96d4276
+thirdparty/DLib        https://github.com/dorian3d/DLib.git           v1.1-free          6cacd64
+thirdparty/Pangolin    https://github.com/stevenlovegrove/Pangolin.git v0.9.6             3667bb76
+reference/ORB_SLAM3    https://github.com/UZ-SLAMLab/ORB_SLAM3.git    v1.0-release       0df83dd
+
+All entries above are UNMODIFIED upstream checkouts.
+ORB-SLAM3's changes to them live in vendor_ext/ — see docs/WRAPPERS.md.

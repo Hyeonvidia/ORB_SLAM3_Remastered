@@ -1,0 +1,19 @@
+--- upstream/core/optimization_algorithm_with_hessian.h  (blob 5e57ef969ecf, closest ancestor)
++++ orbslam3/core/optimization_algorithm_with_hessian.h
+@@ -28,7 +28,6 @@
+ #define G2O_OPTIMIZATION_ALGORITHM_WITH_HESSIAN_H
+ 
+ #include "optimization_algorithm.h"
+-#include "g2o_core_api.h"
+ 
+ namespace g2o {
+ 
+@@ -37,7 +36,7 @@
+   /**
+    * \brief Base for solvers operating on the approximated Hessian, e.g., Gauss-Newton, Levenberg
+    */
+-  class G2O_CORE_API OptimizationAlgorithmWithHessian : public OptimizationAlgorithm
++  class  OptimizationAlgorithmWithHessian : public OptimizationAlgorithm
+   {
+     public:
+       explicit OptimizationAlgorithmWithHessian(Solver* solver);

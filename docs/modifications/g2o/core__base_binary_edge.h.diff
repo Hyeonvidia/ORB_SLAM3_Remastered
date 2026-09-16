@@ -1,0 +1,22 @@
+--- upstream/core/base_binary_edge.h  (blob 041c2c6612cd, closest ancestor)
++++ orbslam3/core/base_binary_edge.h
+@@ -32,7 +32,7 @@
+ 
+ #include "base_edge.h"
+ #include "robust_kernel.h"
+-#include "g2o/config.h"
++#include "../../config.h"
+ 
+ namespace g2o {
+ 
+@@ -56,8 +56,8 @@
+       typedef typename BaseEdge<D,E>::ErrorVector ErrorVector;
+       typedef typename BaseEdge<D,E>::InformationType InformationType;
+ 
+-      typedef Map<Matrix<double, Di, Dj>, Matrix<double, Di, Dj>::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockType;
+-      typedef Map<Matrix<double, Dj, Di>, Matrix<double, Dj, Di>::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockTransposedType;
++      typedef Eigen::Map<Matrix<double, Di, Dj>, Matrix<double, Di, Dj>::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockType;
++      typedef Eigen::Map<Matrix<double, Dj, Di>, Matrix<double, Dj, Di>::Flags & AlignedBit ? Aligned : Unaligned > HessianBlockTransposedType;
+ 
+       BaseBinaryEdge() : BaseEdge<D,E>(),
+       _hessianRowMajor(false),

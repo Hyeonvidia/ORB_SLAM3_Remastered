@@ -1,0 +1,11 @@
+--- upstream/core/hyper_graph_action.cpp  (blob 41095d424532, closest ancestor)
++++ orbslam3/core/hyper_graph_action.cpp
+@@ -26,7 +26,7 @@
+ 
+ #include "hyper_graph_action.h"
+ #include "optimizable_graph.h"
+-#include "g2o/stuff/macros.h"
++#include "../stuff/macros.h"
+ 
+ 
+ #include <iostream>

@@ -1,0 +1,18 @@
+[submodule "thirdparty/g2o"]
+	path = thirdparty/g2o
+	url = https://github.com/RainerKuemmerle/g2o.git
+[submodule "thirdparty/Sophus"]
+	path = thirdparty/Sophus
+	url = https://github.com/strasdat/Sophus.git
+[submodule "thirdparty/DBoW2"]
+	path = thirdparty/DBoW2
+	url = https://github.com/dorian3d/DBoW2.git
+[submodule "thirdparty/DLib"]
+	path = thirdparty/DLib
+	url = https://github.com/dorian3d/DLib.git
+[submodule "thirdparty/Pangolin"]
+	path = thirdparty/Pangolin
+	url = https://github.com/stevenlovegrove/Pangolin.git
+[submodule "reference/ORB_SLAM3"]
+	path = reference/ORB_SLAM3
+	url = https://github.com/UZ-SLAMLab/ORB_SLAM3.git

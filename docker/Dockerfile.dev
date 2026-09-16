@@ -1,0 +1,47 @@
+# =============================================================================
+# orbslam3r/dev  —  interactive development / algorithm-test container
+#
+# Layer 3 of 3.  Adds debugging tools and the runtime entrypoint on top of the
+# dependency layer.  The project source is NOT baked in: it is bind-mounted at
+# /workspace so an edit on the host is visible in the container immediately.
+#
+#   base  ->  thirdparty  ->  dev
+# =============================================================================
+ARG THIRDPARTY_IMAGE=orbslam3r/thirdparty:24.04
+FROM ${THIRDPARTY_IMAGE}
+
+LABEL org.opencontainers.image.title="orbslam3r-dev"
+LABEL org.opencontainers.image.description="Interactive dev/test container for ORB_SLAM3_Remastered"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gdb \
+        less \
+        vim-tiny \
+        nano \
+        tmux \
+        htop \
+        file \
+        bash-completion \
+    && rm -rf /var/lib/apt/lists/*
+
+# ccache keeps incremental rebuilds of the SLAM library cheap across container
+# restarts when /root/.ccache is mounted as a named volume.
+ENV CCACHE_DIR=/root/.ccache
+ENV CCACHE_MAXSIZE=5G
+
+# Display strategy:
+#   headless -> entrypoint starts Xvfb on :99 so Pangolin can be linked and
+#               even run offscreen; the viewer is normally disabled instead.
+#   x11      -> DISPLAY is supplied by the caller (XQuartz on macOS) and the
+#               entrypoint leaves it alone.
+ENV ORBSLAM3R_DISPLAY_MODE=headless
+ENV XVFB_RESOLUTION=1600x1200x24
+
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/bash"]

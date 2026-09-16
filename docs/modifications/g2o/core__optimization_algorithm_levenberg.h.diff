@@ -1,0 +1,27 @@
+--- upstream/core/optimization_algorithm_levenberg.h  (blob 17ff26f0874c, closest ancestor)
++++ orbslam3/core/optimization_algorithm_levenberg.h
+@@ -28,14 +28,13 @@
+ #define G2O_SOLVER_LEVENBERG_H
+ 
+ #include "optimization_algorithm_with_hessian.h"
+-#include "g2o_core_api.h"
+ 
+ namespace g2o {
+ 
+   /**
+    * \brief Implementation of the Levenberg Algorithm
+    */
+-  class G2O_CORE_API OptimizationAlgorithmLevenberg : public OptimizationAlgorithmWithHessian
++  class  OptimizationAlgorithmLevenberg : public OptimizationAlgorithmWithHessian
+   {
+     public:
+       /**
+@@ -76,6 +75,8 @@
+       double _goodStepUpperScale; ///< upper bound for lambda decrease if a good LM step
+       double _ni;
+       int _levenbergIterations;   ///< the numer of levenberg iterations performed to accept the last step
++      //RAUL
++      int _nBad;
+ 
+       /**
+        * helper for Levenberg, this function computes the initial damping factor, if the user did not

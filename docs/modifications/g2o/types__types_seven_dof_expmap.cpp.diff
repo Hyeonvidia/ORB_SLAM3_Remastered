@@ -1,0 +1,108 @@
+--- upstream/types/types_seven_dof_expmap.cpp  (blob 22d9e74b2484, closest ancestor)
++++ orbslam3/types/types_seven_dof_expmap.cpp
+@@ -26,27 +26,12 @@
+ 
+ #include "types_seven_dof_expmap.h"
+ 
+-#include "g2o/core/factory.h"
+-#include "g2o/stuff/macros.h"
+-
+ namespace g2o {
+ 
+-  G2O_USE_TYPE_GROUP(sba);
+-  
+-  G2O_REGISTER_TYPE_GROUP(sim3);
+-
+-    G2O_REGISTER_TYPE(VERTEX_SIM3:EXPMAP, VertexSim3Expmap);
+-    G2O_REGISTER_TYPE(EDGE_SIM3:EXPMAP, EdgeSim3);
+-    G2O_REGISTER_TYPE(EDGE_PROJECT_SIM3_XYZ:EXPMAP, EdgeSim3ProjectXYZ);
+-  
+   VertexSim3Expmap::VertexSim3Expmap() : BaseVertex<7, Sim3>()
+   {
+     _marginalized=false;
+     _fix_scale = false;
+-    _principle_point[0] = 0;
+-    _principle_point[1] = 0;
+-    _focal_length[0] = 1;
+-    _focal_length[1] = 1;
+   }
+ 
+ 
+@@ -71,11 +56,11 @@
+ 
+     for (int i=0; i<2; i++)
+     {
+-      is >> _focal_length[i];
+-    }
+-    for (int i=0; i<2; i++)
+-    {
+-      is >> _principle_point[i];
++      is >> _focal_length1[i];
++    }
++    for (int i=0; i<2; i++)
++    {
++      is >> _principle_point1[i];
+     }
+ 
+     setEstimate(Sim3(cam2world).inverse());
+@@ -91,11 +76,11 @@
+     }
+     for (int i=0; i<2; i++)
+     {
+-      os << _focal_length[i] << " ";
+-    }
+-    for (int i=0; i<2; i++)
+-    {
+-      os << _principle_point[i] << " ";
++      os << _focal_length1[i] << " ";
++    }
++    for (int i=0; i<2; i++)
++    {
++      os << _principle_point1[i] << " ";
+     }
+     return os.good();
+   }
+@@ -170,6 +155,43 @@
+     }
+     return os.good();
+   }
++
++/**InverseSim3ProjectXYZ*/
++
++  EdgeInverseSim3ProjectXYZ::EdgeInverseSim3ProjectXYZ() :
++  BaseBinaryEdge<2, Vector2d, VertexSBAPointXYZ, VertexSim3Expmap>()
++  {
++  }
++
++  bool EdgeInverseSim3ProjectXYZ::read(std::istream& is)
++  {
++    for (int i=0; i<2; i++)
++    {
++      is >> _measurement[i];
++    }
++
++    for (int i=0; i<2; i++)
++      for (int j=i; j<2; j++) {
++  is >> information()(i,j);
++      if (i!=j)
++        information()(j,i)=information()(i,j);
++    }
++    return true;
++  }
++
++  bool EdgeInverseSim3ProjectXYZ::write(std::ostream& os) const
++  {
++    for (int i=0; i<2; i++){
++      os  << _measurement[i] << " ";
++    }
++
++    for (int i=0; i<2; i++)
++      for (int j=i; j<2; j++){
++  os << " " <<  information()(i,j);
++    }
++    return os.good();
++  }
++
+ 
+ //  void EdgeSim3ProjectXYZ::linearizeOplus()
+ //  {

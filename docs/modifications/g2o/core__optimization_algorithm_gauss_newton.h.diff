@@ -1,0 +1,19 @@
+--- upstream/core/optimization_algorithm_gauss_newton.h  (blob 4ba0e78de933, closest ancestor)
++++ orbslam3/core/optimization_algorithm_gauss_newton.h
+@@ -27,7 +27,6 @@
+ #ifndef G2O_OPTIMIZATION_ALGORITHM_GAUSS_NEWTON_H
+ #define G2O_OPTIMIZATION_ALGORITHM_GAUSS_NEWTON_H
+ 
+-#include "g2o_core_api.h"
+ #include "optimization_algorithm_with_hessian.h"
+ 
+ namespace g2o {
+@@ -35,7 +34,7 @@
+   /**
+    * \brief Implementation of the Gauss Newton Algorithm
+    */
+-  class G2O_CORE_API OptimizationAlgorithmGaussNewton : public OptimizationAlgorithmWithHessian
++  class  OptimizationAlgorithmGaussNewton : public OptimizationAlgorithmWithHessian
+   {
+     public:
+       /**

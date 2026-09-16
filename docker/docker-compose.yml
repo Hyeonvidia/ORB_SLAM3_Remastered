@@ -1,0 +1,55 @@
+# Run from the repository root:
+#   docker compose -f docker/docker-compose.yml run --rm slam
+#   docker compose -f docker/docker-compose.yml --profile gui run --rm slam-gui
+name: orbslam3r
+
+x-common: &common
+  image: orbslam3r/dev:24.04
+  platform: linux/arm64
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.dev
+  working_dir: /workspace
+  # Pangolin and the SLAM threads want more than Docker's default 64 MB shm.
+  shm_size: "2gb"
+  ulimits:
+    memlock: -1
+    stack: 67108864
+  volumes:
+    # Source lives on the host; the container only compiles and runs it.
+    - ..:/workspace
+    # Datasets are read-only so a test run can never corrupt them.
+    - ../../Datasets:/datasets:ro
+    # Persistent compiler cache across container restarts.
+    - ccache:/root/.ccache
+  stdin_open: true
+  tty: true
+
+services:
+  # Default: no GUI. Trajectories are written to files and scored offline.
+  slam:
+    <<: *common
+    container_name: orbslam3r-dev
+    environment:
+      ORBSLAM3R_DISPLAY_MODE: headless
+
+  # GUI: requires XQuartz on the macOS host.
+  #   1) open -a XQuartz
+  #   2) XQuartz > Settings > Security > "Allow connections from network clients"
+  #   3) xhost +localhost
+  gui: &gui
+    <<: *common
+    container_name: orbslam3r-gui
+    profiles: ["gui"]
+    environment:
+      ORBSLAM3R_DISPLAY_MODE: x11
+      DISPLAY: host.docker.internal:0
+      LIBGL_ALWAYS_INDIRECT: "1"
+
+  slam-gui:
+    <<: *gui
+    container_name: orbslam3r-gui-alias
+    profiles: ["gui"]
+
+volumes:
+  ccache:

@@ -1,0 +1,11 @@
+--- upstream/core/hyper_dijkstra.cpp  (blob ca07e42481ba, closest ancestor)
++++ orbslam3/core/hyper_dijkstra.cpp
+@@ -30,7 +30,7 @@
+ #include <assert.h>
+ #include <iostream>
+ #include "hyper_dijkstra.h"
+-#include "g2o/stuff/macros.h"
++#include "../stuff/macros.h"
+ 
+ namespace g2o{
+ 

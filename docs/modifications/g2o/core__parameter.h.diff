@@ -1,0 +1,11 @@
+--- upstream/core/parameter.h  (blob 82ebafb0cb45, closest ancestor)
++++ orbslam3/core/parameter.h
+@@ -33,7 +33,7 @@
+ 
+ namespace g2o {
+ 
+-    class G2O_CORE_API Parameter : public HyperGraph::HyperGraphElement
++    class  Parameter : public HyperGraph::HyperGraphElement
+     {
+       public:
+         Parameter();

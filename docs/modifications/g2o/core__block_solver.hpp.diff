@@ -1,0 +1,15 @@
+--- upstream/core/block_solver.hpp  (blob a54cff5415e2, closest ancestor)
++++ orbslam3/core/block_solver.hpp
+@@ -29,9 +29,9 @@
+ #include <fstream>
+ #include <iomanip>
+ 
+-#include "g2o/stuff/timeutil.h"
+-#include "g2o/stuff/macros.h"
+-#include "g2o/stuff/misc.h"
++#include "../stuff/timeutil.h"
++#include "../stuff/macros.h"
++#include "../stuff/misc.h"
+ 
+ namespace g2o {
+ 

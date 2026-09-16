@@ -1,0 +1,11 @@
+--- upstream/core/base_unary_edge.h  (blob 178ec92e1691, closest ancestor)
++++ orbslam3/core/base_unary_edge.h
+@@ -33,7 +33,7 @@
+ 
+ #include "base_edge.h"
+ #include "robust_kernel.h"
+-#include "g2o/config.h"
++#include "../../config.h"
+ 
+ namespace g2o {
+ 

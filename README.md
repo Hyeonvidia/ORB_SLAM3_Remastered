@@ -1,0 +1,118 @@
+# ORB_SLAM3_Remastered
+
+ORB-SLAM3 v1.0 rebuilt on **current** upstream dependencies, developed and run
+in Docker, with every change to a borrowed library visible as separate code
+rather than buried in a fork.
+
+Three things make it different from the upstream repository:
+
+1. **Dependencies are pinned git submodules, checked out untouched.**
+   `thirdparty/` holds byte-identical upstream releases — not the stripped,
+   edited copies ORB-SLAM3 ships.
+2. **ORB-SLAM3's changes to those libraries live in `vendor_ext/`** as wrappers,
+   subclasses and aliases you can read on their own. See
+   [docs/WRAPPERS.md](docs/WRAPPERS.md).
+3. **Nothing is built on the host.** A three-layer image stack gives a
+   reproducible linux/arm64 toolchain; the macOS side only edits files.
+
+## Quick start
+
+```bash
+git clone --recurse-submodules <this repo> ORB_SLAM3_Remastered
+cd ORB_SLAM3_Remastered
+./tools/init_submodules.sh     # if you cloned without --recurse-submodules
+./docker/build_images.sh       # base -> thirdparty -> dev  (~10 min cold)
+./docker/run.sh                # headless shell in the dev container
+```
+
+With the viewer, on macOS:
+
+```bash
+open -a XQuartz                # Settings > Security > allow network clients
+xhost +localhost
+./docker/run.sh --gui
+```
+
+## The images
+
+| Image | Contents | Rebuild when |
+|---|---|---|
+| `orbslam3r/base:24.04` | Ubuntu 24.04, GCC 13.3, CMake 3.28, OpenCV 4.6, Eigen 3.4, Boost, Mesa/X11 | the OS baseline moves |
+| `orbslam3r/thirdparty:24.04` | g2o, Sophus, DBoW2, DLib, Pangolin built into `/opt/orbslam3r` | a submodule is re-pinned |
+| `orbslam3r/dev:24.04` | debugging tools, entrypoint, ccache | rarely |
+
+The project source is **not** baked in — it is bind-mounted at `/workspace`, so
+an edit on the host is live in the container. `../Datasets` mounts read-only at
+`/datasets`.
+
+`orbslam3r/thirdparty` carries `/opt/orbslam3r/THIRDPARTY_MANIFEST.txt`, so a
+running container can always report which upstream revisions it was built from.
+
+### Display modes
+
+The entrypoint takes `ORBSLAM3R_DISPLAY_MODE`:
+
+- `headless` (default) — starts Xvfb on `:99` and forces software GL, so
+  Pangolin-linked binaries run with no display attached.
+- `x11` — expects `DISPLAY` from the caller (XQuartz via
+  `host.docker.internal:0`).
+
+## Verifying the environment
+
+```bash
+./docker/run.sh -- bash -c '
+  cmake -S /workspace/tools/smoke_test -B /workspace/build/smoke -G Ninja &&
+  cmake --build /workspace/build/smoke -j 8 &&
+  /workspace/build/smoke/smoke_test --gl'
+```
+
+Compiles and links against every dependency, runs a pose-only bundle adjustment
+on modern g2o and checks it recovers the true pose, and opens a GL context.
+
+## Layout
+
+```
+docker/           three Dockerfiles, compose, build_images.sh, run.sh
+thirdparty/       pinned upstream submodules — never edited
+vendor_ext/       ORB-SLAM3's changes to them, as wrappers
+reference/        pristine ORB-SLAM3 v1.0 — diff reference, never built
+tools/            submodule pinning, delta extraction, smoke test
+docs/             DEPENDENCIES.md, WRAPPERS.md, generated modifications/
+```
+
+## What the measurement found
+
+`tools/classify_vendored.sh` and `tools/upstream_delta.py` compare each vendored
+file against upstream *history* rather than upstream's current tip, so fork drift
+and reformatting are not mistaken for ORB-SLAM3's work.
+
+| Library | Files changed | Lines |
+|---|---:|---:|
+| Sophus | **0 / 21** | **0** |
+| DBoW2 | 7 / 14 | 237 |
+| g2o | 63 / 95 | 1105 |
+
+Three findings worth knowing:
+
+- **Sophus was never modified.** Upstream's `Dependencies.md` says it was.
+- **g2o's only unique file, `types/se3mat.*`, is dead code** — nothing
+  references `SE3mat`, and it duplicates `G2oTypes.h`.
+- **`PnPsolver` does not exist in v1.0.** MLPnP replaced it; the doc entry stayed.
+
+Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+
+## Status
+
+Working: submodule pinning, the image stack, the container workflow, the
+`vendor_ext` wrappers and their tests (including the real 971,814-word
+`ORBvoc.txt`).
+
+Not yet done: the ORB-SLAM3 body itself (`src/`, `include/`) has not been ported
+onto this foundation. `vendor_ext/g2o_ext/solver_factory.hpp` exists precisely
+for that port — the raw-pointer solver construction in `Optimizer.cc` is the
+main mechanical work remaining.
+
+## License
+
+ORB-SLAM3 is GPLv3; see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the
+license of every borrowed component.

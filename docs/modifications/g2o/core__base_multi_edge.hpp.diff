@@ -1,0 +1,13 @@
+--- upstream/core/base_multi_edge.hpp  (blob 14ba8b13d8ce, closest ancestor)
++++ orbslam3/core/base_multi_edge.hpp
+@@ -180,8 +180,8 @@
+       MatrixXd AtO = A.transpose() * omega;
+       int fromDim = from->dimension();
+       assert(fromDim >= 0);
+-      Map<MatrixXd> fromMap(from->hessianData(), fromDim, fromDim);
+-      Map<VectorXd> fromB(from->bData(), fromDim);
++      Eigen::Map<MatrixXd> fromMap(from->hessianData(), fromDim, fromDim);
++      Eigen::Map<VectorXd> fromB(from->bData(), fromDim);
+ 
+       // ii block in the hessian
+ #ifdef G2O_OPENMP

@@ -1,0 +1,26 @@
+--- upstream/DBoW2/BowVector.h  (blob f559811debd7, closest ancestor)
++++ orbslam3/DBoW2/BowVector.h
+@@ -13,6 +13,9 @@
+ #include <iostream>
+ #include <map>
+ #include <vector>
++
++#include <boost/serialization/serialization.hpp>
++#include <boost/serialization/map.hpp>
+ 
+ namespace DBoW2 {
+ 
+@@ -56,6 +59,13 @@
+ class BowVector: 
+ 	public std::map<WordId, WordValue>
+ {
++    friend class boost::serialization::access;
++    template<class Archive>
++    void serialize(Archive& ar, const int version)
++    {
++        ar & boost::serialization::base_object<std::map<WordId, WordValue> >(*this);
++    }
++
+ public:
+ 
+ 	/** 

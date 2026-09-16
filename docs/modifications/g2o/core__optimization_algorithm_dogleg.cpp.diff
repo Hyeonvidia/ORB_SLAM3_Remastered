@@ -1,0 +1,11 @@
+--- upstream/core/optimization_algorithm_dogleg.cpp  (blob 197b03037c60, closest ancestor)
++++ orbslam3/core/optimization_algorithm_dogleg.cpp
+@@ -28,7 +28,7 @@
+ 
+ #include <iostream>
+ 
+-#include "g2o/stuff/timeutil.h"
++#include "../stuff/timeutil.h"
+ 
+ #include "block_solver.h"
+ #include "sparse_optimizer.h"

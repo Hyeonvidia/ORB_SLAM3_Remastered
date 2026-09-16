@@ -1,0 +1,11 @@
+--- upstream/core/openmp_mutex.h  (blob fffb6e858284, closest ancestor)
++++ orbslam3/core/openmp_mutex.h
+@@ -27,7 +27,7 @@
+ #ifndef G2O_OPENMP_MUTEX
+ #define G2O_OPENMP_MUTEX
+ 
+-#include "g2o/config.h"
++#include "../../config.h"
+ 
+ #ifdef G2O_OPENMP
+ #include <omp.h>

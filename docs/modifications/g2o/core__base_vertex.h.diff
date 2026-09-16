@@ -1,0 +1,20 @@
+--- upstream/core/base_vertex.h  (blob 037999416c82, closest ancestor)
++++ orbslam3/core/base_vertex.h
+@@ -29,7 +29,7 @@
+ 
+ #include "optimizable_graph.h"
+ #include "creators.h"
+-#include "g2o/stuff/macros.h"
++#include "../stuff/macros.h"
+ 
+ #include <Eigen/Core>
+ #include <Eigen/Dense>
+@@ -59,7 +59,7 @@
+ 
+     static const int Dimension = D;           ///< dimension of the estimate (minimal) in the manifold space
+ 
+-    typedef Map<Matrix<double, D, D>, Matrix<double,D,D>::Flags & AlignedBit ? Aligned : Unaligned >  HessianBlockType;
++    typedef Eigen::Map<Matrix<double, D, D>, Matrix<double,D,D>::Flags & AlignedBit ? Aligned : Unaligned >  HessianBlockType;
+ 
+   public:
+     BaseVertex();

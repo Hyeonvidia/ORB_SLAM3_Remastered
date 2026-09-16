@@ -1,0 +1,11 @@
+--- upstream/core/block_solver.h  (blob 9a9b43c2d76e, closest ancestor)
++++ orbslam3/core/block_solver.h
+@@ -32,7 +32,7 @@
+ #include "sparse_block_matrix.h"
+ #include "sparse_block_matrix_diagonal.h"
+ #include "openmp_mutex.h"
+-#include "g2o/config.h"
++#include "../../config.h"
+ 
+ namespace g2o {
+   using namespace Eigen;

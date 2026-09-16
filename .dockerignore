@@ -1,0 +1,29 @@
+# Keep the build context small: submodule git metadata alone is >300 MB.
+**/.git
+**/.github
+.gitmodules
+
+# The pristine upstream ORB-SLAM3 checkout is a diff reference for the host,
+# never an input to any image (it also carries the 42 MB vocabulary archive).
+reference/
+
+# Host-side build output
+build/
+cmake-build-*/
+lib/
+bin/
+Vocabulary/*.txt
+
+# Datasets are bind-mounted at runtime, never baked into an image
+Datasets/
+data/
+
+# Upstream test/example/doc trees that no image stage compiles
+thirdparty/*/test/
+thirdparty/*/tests/
+thirdparty/*/examples/
+thirdparty/*/doc/
+thirdparty/*/docs/
+thirdparty/*/py/
+
+.DS_Store

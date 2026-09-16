@@ -1,0 +1,11 @@
+--- upstream/core/creators.h  (blob 250849eed1c3, closest ancestor)
++++ orbslam3/core/creators.h
+@@ -38,7 +38,7 @@
+   /**
+    * \brief Abstract interface for allocating HyperGraphElement
+    */
+-  class G2O_CORE_API AbstractHyperGraphElementCreator
++  class  AbstractHyperGraphElementCreator
+   {
+     public:
+       /**

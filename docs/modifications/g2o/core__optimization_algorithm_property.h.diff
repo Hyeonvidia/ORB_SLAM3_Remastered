@@ -1,0 +1,18 @@
+--- upstream/core/optimization_algorithm_property.h  (blob 54d8e6ec9c53, closest ancestor)
++++ orbslam3/core/optimization_algorithm_property.h
+@@ -29,14 +29,12 @@
+ 
+ #include <string>
+ 
+-#include "g2o_core_api.h"
+-
+ namespace g2o {
+ 
+ /**
+  * \brief describe the properties of a solver
+  */
+-struct G2O_CORE_API OptimizationAlgorithmProperty
++struct  OptimizationAlgorithmProperty
+ {
+   std::string name;           ///< name of the solver, e.g., var
+   std::string desc;           ///< short description of the solver

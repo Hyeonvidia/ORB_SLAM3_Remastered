@@ -1,0 +1,11 @@
+--- upstream/core/sparse_block_matrix_diagonal.h  (blob 245eab727677, closest ancestor)
++++ orbslam3/core/sparse_block_matrix_diagonal.h
+@@ -31,7 +31,7 @@
+ #include <Eigen/Core>
+ #include <Eigen/StdVector>
+ 
+-#include "g2o/config.h"
++#include "../../config.h"
+ #include "matrix_operations.h"
+ 
+ namespace g2o {

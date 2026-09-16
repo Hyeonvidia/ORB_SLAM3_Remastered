@@ -1,0 +1,13 @@
+--- upstream/core/optimization_algorithm_gauss_newton.cpp  (blob 08ab901a0e1e, closest ancestor)
++++ orbslam3/core/optimization_algorithm_gauss_newton.cpp
+@@ -28,8 +28,8 @@
+ 
+ #include <iostream>
+ 
+-#include "g2o/stuff/timeutil.h"
+-#include "g2o/stuff/macros.h"
++#include "../stuff/timeutil.h"
++#include "../stuff/macros.h"
+ 
+ #include "solver.h"
+ #include "batch_stats.h"

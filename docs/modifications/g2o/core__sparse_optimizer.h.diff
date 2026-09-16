@@ -1,0 +1,24 @@
+--- upstream/core/sparse_optimizer.h  (blob e831524d7801, closest ancestor)
++++ orbslam3/core/sparse_optimizer.h
+@@ -27,11 +27,10 @@
+ #ifndef G2O_GRAPH_OPTIMIZER_CHOL_H_
+ #define G2O_GRAPH_OPTIMIZER_CHOL_H_
+ 
+-#include "g2o/stuff/macros.h"
++#include "../stuff/macros.h"
+ 
+ #include "optimizable_graph.h"
+ #include "sparse_block_matrix.h"
+-#include "g2o_core_api.h"
+ #include "batch_stats.h"
+ 
+ #include <map>
+@@ -43,7 +42,7 @@
+   class OptimizationAlgorithm;
+   class EstimatePropagatorCost;
+ 
+-  class G2O_CORE_API SparseOptimizer : public OptimizableGraph {
++  class  SparseOptimizer : public OptimizableGraph {
+ 
+     public:
+     enum {

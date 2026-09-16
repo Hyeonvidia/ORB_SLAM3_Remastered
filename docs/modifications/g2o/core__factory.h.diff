@@ -1,0 +1,22 @@
+--- upstream/core/factory.h  (blob 85180564f9d8, closest ancestor)
++++ orbslam3/core/factory.h
+@@ -27,8 +27,8 @@
+ #ifndef G2O_FACTORY_H
+ #define G2O_FACTORY_H
+ 
+-#include "g2o/config.h"
+-#include "g2o/stuff/misc.h"
++#include "../../config.h"
++#include "../stuff/misc.h"
+ #include "hyper_graph.h"
+ #include "creators.h"
+ 
+@@ -46,7 +46,7 @@
+   /**
+    * \brief create vertices and edges based on TAGs in, for example, a file
+    */
+-  class G2O_CORE_API Factory
++  class  Factory
+   {
+     public:
+ 

@@ -1,0 +1,11 @@
+--- upstream/core/factory.cpp  (blob 43de5c2cf333, closest ancestor)
++++ orbslam3/core/factory.cpp
+@@ -30,7 +30,7 @@
+ #include "parameter.h"
+ #include "cache.h"
+ #include "optimizable_graph.h"
+-#include "g2o/stuff/color_macros.h"
++#include "../stuff/color_macros.h"
+ 
+ #include <iostream>
+ #include <typeinfo>

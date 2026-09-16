@@ -1,0 +1,11 @@
+--- upstream/types/sim3.h  (blob 9edb36477ce0, closest ancestor)
++++ orbslam3/types/sim3.h
+@@ -27,7 +27,7 @@
+ #ifndef G2O_SIM_3
+ #define G2O_SIM_3
+ 
+-#include "g2o/types/slam3d/se3_ops.h"
++#include "se3_ops.h"
+ #include <Eigen/Geometry>
+ 
+ namespace g2o

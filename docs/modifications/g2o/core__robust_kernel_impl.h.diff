@@ -1,0 +1,96 @@
+--- upstream/core/robust_kernel_impl.h  (blob 4d383f8b41ec, closest ancestor)
++++ orbslam3/core/robust_kernel_impl.h
+@@ -28,7 +28,6 @@
+ #define G2O_ROBUST_KERNEL_IMPL_H
+ 
+ #include "robust_kernel.h"
+-#include "g2o_core_api.h"
+ 
+ namespace g2o {
+ 
+@@ -39,7 +38,7 @@
+    * one implements a kernel which only is designed for a fixed window
+    * size.
+    */
+-  class G2O_CORE_API RobustKernelScaleDelta : public RobustKernel
++  class  RobustKernelScaleDelta : public RobustKernel
+   {
+     public:
+       /**
+@@ -74,11 +73,39 @@
+    *               1/2    2
+    * rho(e) = 2 d e    - d
+    */
+-  class G2O_CORE_API RobustKernelHuber : public RobustKernel
++  class  RobustKernelHuber : public RobustKernel
+   {
+     public:
++      virtual void setDelta(double delta);
++      virtual void setDeltaSqr(const double &delta, const double &deltaSqr);
+       virtual void robustify(double e2, Eigen::Vector3d& rho) const;
++
++    private:
++      float dsqr;
+   };
++
++   /**
++   * \brief Tukey Cost Function
++   *
++   *
++   * If e^(1/2) < d
++   * rho(e) = delta2(1-(1-e/delta2)^3)
++   *
++   * else
++   *              
++   * rho(e) = delta2
++   */
++  class  RobustKernelTukey : public RobustKernel
++  {
++    public:
++
++      virtual void setDeltaSqr(const double &deltaSqr, const double &inv);
++      virtual void robustify(double e2, Eigen::Vector3d& rho) const;
++    private:
++      float _deltaSqr;
++      float _invDeltaSqr;
++  };
++
+ 
+   /**
+    * \brief Pseudo Huber Cost Function
+@@ -91,7 +118,7 @@
+    *             2
+    *            d
+    */
+-  class G2O_CORE_API RobustKernelPseudoHuber : public RobustKernel
++  class  RobustKernelPseudoHuber : public RobustKernel
+   {
+     public:
+       virtual void robustify(double e2, Eigen::Vector3d& rho) const;
+@@ -105,7 +132,7 @@
+    *         2
+    *        d
+    */
+-  class G2O_CORE_API RobustKernelCauchy : public RobustKernel
++  class  RobustKernelCauchy : public RobustKernel
+   {
+     public:
+       virtual void robustify(double e2, Eigen::Vector3d& rho) const;
+@@ -116,7 +143,7 @@
+    *
+    * The error is at most delta^2
+    */
+-  class G2O_CORE_API RobustKernelSaturated : public RobustKernel
++  class  RobustKernelSaturated : public RobustKernel
+   {
+     public:
+       virtual void robustify(double e2, Eigen::Vector3d& rho) const;
+@@ -129,7 +156,7 @@
+    *
+    * delta is used as $phi$
+    */
+-  class G2O_CORE_API RobustKernelDCS : public RobustKernel
++  class  RobustKernelDCS : public RobustKernel
+   {
+     public:
+       virtual void robustify(double e2, Eigen::Vector3d& rho) const;

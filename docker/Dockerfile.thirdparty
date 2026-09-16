@@ -1,0 +1,132 @@
+# =============================================================================
+# orbslam3r/thirdparty  —  pristine upstream dependencies, built and installed
+#
+# Layer 2 of 3.  Every dependency here is an UNMODIFIED upstream checkout,
+# pinned by git submodule to a release tag (see tools/init_submodules.sh).
+# ORB-SLAM3's own changes to these libraries are NOT applied here; they live in
+# vendor_ext/ as wrapper/extension code compiled with the project.  That split
+# is what makes "what did ORB-SLAM3 change?" answerable at any time.
+#
+#   base  ->  thirdparty  ->  dev
+# =============================================================================
+ARG BASE_IMAGE=orbslam3r/base:24.04
+FROM ${BASE_IMAGE} AS builder
+
+ARG JOBS=8
+ENV PREFIX=/opt/orbslam3r
+
+# Sources are copied in dependency order so that a bump to one submodule does
+# not invalidate the cached build of the ones before it.
+
+# --- DLib — DUtils only ----------------------------------------------------
+# DUtilsCV and DVision are skipped: their .cpp files are written against the
+# OpenCV 1.x C API (IplImage / CvScalar / CV_RGB2GRAY / CV_EVENT_*) that
+# OpenCV 4 removed, and ORB-SLAM3 uses neither module.  Their *headers* do
+# compile fine and are installed below, because upstream DBoW2's FORB.cpp
+# carries a vestigial `#include <DVision/DVision.h>`.
+COPY thirdparty/DLib /src/DLib
+RUN cmake -S /src/DLib -B /build/DLib -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DBUILD_DUtils=ON -DBUILD_DUtilsCV=OFF -DBUILD_DVision=OFF \
+    && cmake --build /build/DLib -j ${JOBS} \
+    && cmake --install /build/DLib \
+    && cp -r /src/DLib/include/DVision ${PREFIX}/include/ \
+    && rm -rf /build/DLib
+
+# --- DBoW2 (upstream sources, our build definition) ------------------------
+# See vendor_ext/dbow2_build/CMakeLists.txt for why upstream's own CMakeLists
+# is not used.  The sources compiled are the untouched upstream ones.
+COPY thirdparty/DBoW2 /src/DBoW2
+COPY vendor_ext/dbow2_build /src/dbow2_build
+RUN cmake -S /src/dbow2_build -B /build/DBoW2 -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+        -DCMAKE_PREFIX_PATH=${PREFIX} \
+        -DDBOW2_UPSTREAM_DIR=/src/DBoW2 \
+        -DDLIB_UPSTREAM_DIR=/src/DLib \
+    && cmake --build /build/DBoW2 -j ${JOBS} \
+    && cmake --install /build/DBoW2 \
+    && rm -rf /build/DBoW2
+
+# --- Sophus (header-only; python bindings off => no libfmt dependency) ------
+COPY thirdparty/Sophus /src/Sophus
+RUN cmake -S /src/Sophus -B /build/Sophus -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+        -DSOPHUS_INSTALL=ON \
+        -DBUILD_SOPHUS_TESTS=OFF \
+        -DBUILD_PYTHON_BINDINGS=OFF \
+    && cmake --build /build/Sophus -j ${JOBS} \
+    && cmake --install /build/Sophus \
+    && rm -rf /build/Sophus
+
+# --- g2o -------------------------------------------------------------------
+# 2D types, apps, examples and the OpenGL viewer are dropped: ORB-SLAM3 uses
+# only the SLAM3D / SBA / Sim3 type families and the Eigen linear solver.
+# march=native stays OFF so the image remains portable across Apple Silicon
+# generations.
+COPY thirdparty/g2o /src/g2o
+RUN cmake -S /src/g2o -B /build/g2o -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_WITH_MARCH_NATIVE=OFF \
+        -DBUILD_UNITTESTS=OFF \
+        -DG2O_BUILD_APPS=OFF \
+        -DG2O_BUILD_EXAMPLES=OFF \
+        -DG2O_BUILD_BENCHMARKS=OFF \
+        -DG2O_USE_OPENGL=OFF \
+        -DG2O_USE_LOGGING=ON \
+        -DG2O_USE_CHOLMOD=ON \
+        -DG2O_USE_CSPARSE=ON \
+        -DG2O_BUILD_SLAM2D_TYPES=OFF \
+    && cmake --build /build/g2o -j ${JOBS} \
+    && cmake --install /build/g2o \
+    && rm -rf /build/g2o
+
+# --- Pangolin --------------------------------------------------------------
+# Camera/vendor video backends are disabled; file + ffmpeg input is enough for
+# dataset replay, and they pull in SDKs that do not exist for linux/arm64.
+COPY thirdparty/Pangolin /src/Pangolin
+RUN cmake -S /src/Pangolin -B /build/Pangolin -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_TOOLS=OFF \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_TESTS=OFF \
+        -DBUILD_PANGOLIN_PYTHON=OFF \
+        -DBUILD_PANGOLIN_REALSENSE=OFF \
+        -DBUILD_PANGOLIN_REALSENSE2=OFF \
+        -DBUILD_PANGOLIN_OPENNI=OFF \
+        -DBUILD_PANGOLIN_OPENNI2=OFF \
+        -DBUILD_PANGOLIN_LIBDC1394=OFF \
+        -DBUILD_PANGOLIN_TELICAM=OFF \
+        -DBUILD_PANGOLIN_PLEORA=OFF \
+        -DBUILD_PANGOLIN_DEPTHSENSE=OFF \
+        -DBUILD_PANGOLIN_LIBUVC=OFF \
+    && cmake --build /build/Pangolin -j ${JOBS} \
+    && cmake --install /build/Pangolin \
+    && rm -rf /build/Pangolin /src
+
+# =============================================================================
+# Final stage: the toolchain from base + only the installed dependency tree.
+# Build trees and upstream sources are left behind in the builder stage.
+# =============================================================================
+ARG BASE_IMAGE=orbslam3r/base:24.04
+FROM ${BASE_IMAGE}
+
+LABEL org.opencontainers.image.title="orbslam3r-thirdparty"
+LABEL org.opencontainers.image.description="Pristine upstream SLAM dependencies pinned to release tags"
+
+COPY --from=builder /opt/orbslam3r /opt/orbslam3r
+
+# Record exactly which upstream revisions are baked in, so a running container
+# can always answer "which g2o is this?" without consulting the host repo.
+COPY docker/thirdparty_manifest.txt /opt/orbslam3r/THIRDPARTY_MANIFEST.txt
+
+RUN ldconfig /opt/orbslam3r/lib
+
+WORKDIR /workspace
