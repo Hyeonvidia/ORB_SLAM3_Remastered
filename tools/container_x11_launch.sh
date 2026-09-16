@@ -32,8 +32,11 @@ mkdir -p "$LOG_DIR"
 # -screen ...x24 pins the depth instead of letting it be inherited.
 # -no-host-grab stops a stray Ctrl+Shift on the host from capturing the
 # keyboard and mouse into the nested server.
+# -sw-cursor makes Xephyr draw the pointer into its own framebuffer. Without it
+# the cursor is left to the host layer, which does not survive this transport,
+# so it vanishes the moment it enters the window and the GUI becomes unusable.
 Xephyr "$INNER_DISPLAY" -screen "$SCREEN" \
-    -title 'ORB-SLAM3 Viewer' -resizeable -no-host-grab -nolisten tcp \
+    -title 'ORB-SLAM3 Viewer' -resizeable -no-host-grab -sw-cursor -nolisten tcp \
     > "$LOG_DIR/xephyr.log" 2>&1 &
 XEPHYR_PID=$!
 

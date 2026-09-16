@@ -351,14 +351,16 @@ def fix_viewer_layout(text, path):
         '    // a negative aspect, which was harmless when the 3D view owned the\n'
         '    // whole window but covers its neighbours once it shares one.\n'
         '    // (View::Resize, thirdparty/Pangolin/components/pango_display/src/view.cpp:75)\n'
-        '    // How much of the width right of the menu the 3D map gets. The map\n'
-        '    // is the thing you actually watch, so it takes the larger share;\n'
-        '    // ORBSLAM3R_MAP_VIEW_FRACTION retunes it without a rebuild.\n'
+        '    // Where the 3D map ends and the tracked frame begins, as a fraction\n'
+        '    // of window width. Recomputed from the image once its size is known\n'
+        '    // (see below); this is only the value used before the first frame.\n'
+        '    // ORBSLAM3R_MAP_VIEW_FRACTION pins it instead, without a rebuild.\n'
         '    double dMapViewFraction = 0.72;\n'
+        '    bool bMapFractionPinned = false;\n'
         '    if(const char* f = std::getenv("ORBSLAM3R_MAP_VIEW_FRACTION"))\n'
         '    {\n'
         '        const double v = std::atof(f);\n'
-        '        if(v > 0.2 && v < 0.95) dMapViewFraction = v;\n'
+        '        if(v > 0.2 && v < 0.95) { dMapViewFraction = v; bMapFractionPinned = true; }\n'
         '    }\n'
         '    const double kMapViewRight = dMapViewFraction;\n'
         '\n'
@@ -444,6 +446,27 @@ def fix_viewer_layout(text, path):
         '                imageTexture.Reinitialise(toShow.cols, toShow.rows, GL_RGB8,\n'
         '                                          false, 0, GL_BGR, GL_UNSIGNED_BYTE);\n'
         '                d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);\n'
+        '\n'
+        '                // Size the frame view from the image\'s own resolution.\n'
+        '                // FrameDrawer burns its status line into the image with\n'
+        '                // FONT_HERSHEY_PLAIN at scale 1, roughly ten pixels tall,\n'
+        '                // so displaying below 1:1 resamples the text into mush.\n'
+        '                // Give the frame its native width where the window can\n'
+        '                // spare it and let the map have the rest.\n'
+        '                if(!bMapFractionPinned)\n'
+        '                {\n'
+        '                    const int nWinWidth = pangolin::DisplayBase().v.w > 0\n'
+        '                            ? pangolin::DisplayBase().v.w : kWindowWidth;\n'
+        '                    const double dFrameFrac = std::min(\n'
+        '                            0.55, static_cast<double>(toShow.cols) / nWinWidth);\n'
+        '                    const double dSplit = 1.0 - dFrameFrac;\n'
+        '                    d_cam.SetBounds(0.0, 1.0,\n'
+        '                                    pangolin::Attach::Pix(kMenuPanelWidth),\n'
+        '                                    dSplit, 1024.0f/768.0f);\n'
+        '                    d_img.SetBounds(0.0, 1.0, dSplit, 1.0);\n'
+        '                    d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);\n'
+        '                }\n'
+        '\n'
         '                nLastImageCols = toShow.cols;\n'
         '                nLastImageRows = toShow.rows;\n'
         '            }\n'
@@ -471,6 +494,8 @@ def fix_viewer_layout(text, path):
         text = text.replace(old, new, 1)
         n += 1
 
+    if n and '#include <algorithm>' not in text:
+        text = text.replace('#include <mutex>', '#include <algorithm>\n#include <mutex>', 1)
     if n and '#include <thread>' not in text:
         text = text.replace('#include <mutex>',
                             '#include <chrono>\n#include <mutex>\n#include <thread>', 1)

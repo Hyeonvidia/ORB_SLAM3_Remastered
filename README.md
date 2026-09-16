@@ -186,8 +186,9 @@ both the clicks and the keys. If a click seems to do nothing, click once on the
 window to activate it first; macOS swallows the activating click unless
 *Click-through inactive windows* is enabled in XQuartz's settings.
 
-The 3D map takes 72% of the width beside the menu. `ORBSLAM3R_MAP_VIEW_FRACTION`
-retunes that without a rebuild:
+The tracked frame is shown at the video's own resolution — 1:1, so the status
+line FrameDrawer burns into it stays legible — and the 3D map takes the rest.
+`ORBSLAM3R_MAP_VIEW_FRACTION` pins the split instead, without a rebuild:
 
 ```bash
 ORBSLAM3R_MAP_VIEW_FRACTION=0.85 ./tools/monitor.sh --x11 euroc stereo MH01

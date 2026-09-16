@@ -21,6 +21,7 @@
 #include <pangolin/pangolin.h>
 #include <pangolin/display/process.h>
 
+#include <algorithm>
 #include <chrono>
 #include <mutex>
 #include <thread>
@@ -238,14 +239,16 @@ void Viewer::Run()
     // a negative aspect, which was harmless when the 3D view owned the
     // whole window but covers its neighbours once it shares one.
     // (View::Resize, thirdparty/Pangolin/components/pango_display/src/view.cpp:75)
-    // How much of the width right of the menu the 3D map gets. The map
-    // is the thing you actually watch, so it takes the larger share;
-    // ORBSLAM3R_MAP_VIEW_FRACTION retunes it without a rebuild.
+    // Where the 3D map ends and the tracked frame begins, as a fraction
+    // of window width. Recomputed from the image once its size is known
+    // (see below); this is only the value used before the first frame.
+    // ORBSLAM3R_MAP_VIEW_FRACTION pins it instead, without a rebuild.
     double dMapViewFraction = 0.72;
+    bool bMapFractionPinned = false;
     if(const char* f = std::getenv("ORBSLAM3R_MAP_VIEW_FRACTION"))
     {
         const double v = std::atof(f);
-        if(v > 0.2 && v < 0.95) dMapViewFraction = v;
+        if(v > 0.2 && v < 0.95) { dMapViewFraction = v; bMapFractionPinned = true; }
     }
     const double kMapViewRight = dMapViewFraction;
 
@@ -409,6 +412,27 @@ void Viewer::Run()
                 imageTexture.Reinitialise(toShow.cols, toShow.rows, GL_RGB8,
                                           false, 0, GL_BGR, GL_UNSIGNED_BYTE);
                 d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
+
+                // Size the frame view from the image's own resolution.
+                // FrameDrawer burns its status line into the image with
+                // FONT_HERSHEY_PLAIN at scale 1, roughly ten pixels tall,
+                // so displaying below 1:1 resamples the text into mush.
+                // Give the frame its native width where the window can
+                // spare it and let the map have the rest.
+                if(!bMapFractionPinned)
+                {
+                    const int nWinWidth = pangolin::DisplayBase().v.w > 0
+                            ? pangolin::DisplayBase().v.w : kWindowWidth;
+                    const double dFrameFrac = std::min(
+                            0.55, static_cast<double>(toShow.cols) / nWinWidth);
+                    const double dSplit = 1.0 - dFrameFrac;
+                    d_cam.SetBounds(0.0, 1.0,
+                                    pangolin::Attach::Pix(kMenuPanelWidth),
+                                    dSplit, 1024.0f/768.0f);
+                    d_img.SetBounds(0.0, 1.0, dSplit, 1.0);
+                    d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
+                }
+
                 nLastImageCols = toShow.cols;
                 nLastImageRows = toShow.rows;
             }
