@@ -236,12 +236,14 @@ System::System(const std::string &strVocFile, const std::string &strSettingsFile
     //usleep(10*1000*1000);
 
     //Initialize the Viewer thread and launch
-    // ORBSLAM3R_VIEWER=0 forces the viewer off whatever the caller
-    // asked for, so a headless batch run has one switch. Unset, the
-    // caller's flag wins and behaviour is unchanged.
+    // ORBSLAM3R_VIEWER overrides the caller's flag in both directions:
+    // "0" forces the viewer off, anything else forces it on, and unset
+    // leaves the decision to the caller. Both directions are needed
+    // because upstream's examples hard-code opposite flags, so without
+    // an override there is no way to run a given example the other way.
     const char* viewerEnv = std::getenv("ORBSLAM3R_VIEWER");
     const bool bViewerEnabled =
-        bUseViewer && !(viewerEnv && std::string(viewerEnv) == "0");
+        viewerEnv ? (std::string(viewerEnv) != "0") : bUseViewer;
     if(bViewerEnabled)
     //if(false) // TODO
     {

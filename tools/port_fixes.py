@@ -210,7 +210,7 @@ def drop_compiledwithc11_guards(text, path):
 
 # ---------------------------------------------------------------------------
 def make_viewer_switchable(text, path):
-    """Let ORBSLAM3R_VIEWER=0 force the Pangolin viewer off.
+    """Let ORBSLAM3R_VIEWER override the Pangolin viewer in both directions.
 
     Upstream's examples disagree about the flag they pass: mono_euroc asks for
     no viewer, stereo_euroc asks for one, and stereo_inertial_euroc asks for
@@ -222,7 +222,10 @@ def make_viewer_switchable(text, path):
     Upstream clearly hit this too; the line below the check is their own
     commented-out `if(false) // TODO`.
 
-    The default is unchanged: with the variable unset, the caller's flag wins.
+    The override has to work both ways. Forcing off makes batch runs usable;
+    forcing on is the only way to exercise the viewer from an example that
+    hard-codes bUseViewer=false, which is most of them. With the variable unset
+    the caller's flag wins and behaviour is unchanged.
     """
     if path.name != "System.cpp":
         return text, 0
@@ -231,12 +234,14 @@ def make_viewer_switchable(text, path):
         return text, 0
     new = (
         "    //Initialize the Viewer thread and launch\n"
-        "    // ORBSLAM3R_VIEWER=0 forces the viewer off whatever the caller\n"
-        "    // asked for, so a headless batch run has one switch. Unset, the\n"
-        "    // caller's flag wins and behaviour is unchanged.\n"
+        "    // ORBSLAM3R_VIEWER overrides the caller's flag in both directions:\n"
+        "    // \"0\" forces the viewer off, anything else forces it on, and unset\n"
+        "    // leaves the decision to the caller. Both directions are needed\n"
+        "    // because upstream's examples hard-code opposite flags, so without\n"
+        "    // an override there is no way to run a given example the other way.\n"
         "    const char* viewerEnv = std::getenv(\"ORBSLAM3R_VIEWER\");\n"
         "    const bool bViewerEnabled =\n"
-        "        bUseViewer && !(viewerEnv && std::string(viewerEnv) == \"0\");\n"
+        "        viewerEnv ? (std::string(viewerEnv) != \"0\") : bUseViewer;\n"
         "    if(bViewerEnabled)\n"
     )
     text = text.replace(old, new, 1)
@@ -246,8 +251,276 @@ def make_viewer_switchable(text, path):
     return text, 1
 
 
+# ---------------------------------------------------------------------------
+def fix_viewer_layout(text, path):
+    """One window for both views, a panel wide enough for its labels, and
+    Follow Camera on by default.
+
+    Three problems with the stock viewer:
+
+    1. It opens TWO OS windows -- a Pangolin window for the 3D map and a
+       separate OpenCV highgui window for the tracked frame. Under a bare X
+       server both land at +0+0 on top of each other, and neither respects the
+       other's aspect ratio.
+    2. The menu panel is 175 px wide, narrower than its longest labels.
+       Pangolin does not clip panel text, so "Show Inertial Graph" and
+       "Localization Mode" render straight past the grey panel onto the 3D view.
+    3. Follow Camera defaults to off, so the map does not track the camera until
+       the user ticks it.
+
+    The frame is now uploaded to a GlTexture and drawn into a second Pangolin
+    view, and both views sit in a LayoutEqualHorizontal container.
+
+    The sign of the aspect matters (View::Resize in
+    thirdparty/Pangolin/components/pango_display/src/view.cpp:75): a POSITIVE
+    aspect fits the view inside its slot (letterbox), a NEGATIVE one overfits
+    and crops. The 3D view keeps ORB-SLAM3's negative aspect so it still fills
+    its slot; the frame gets a positive one so no part of the image is cut off.
+    """
+    if path.name != "Viewer.cpp":
+        return text, 0
+
+    n = 0
+
+    # --- one window, sized for a side-by-side layout ------------------------
+    old = '    pangolin::CreateWindowAndBind("ORB-SLAM3: Map Viewer",1024,768);'
+    new = (
+        '    // One window now holds both the 3D map and the tracked frame;\n'
+        '    // 1600x900 leaves each a usable slot beside the menu panel.\n'
+        '    const int kWindowWidth = 1600, kWindowHeight = 900;\n'
+        '    pangolin::CreateWindowAndBind("ORB-SLAM3: Viewer",kWindowWidth,kWindowHeight);\n'
+        '\n'
+        '    // Pangolin sizes its root view ONLY from an X11 ConfigureNotify\n'
+        '    // (thirdparty/Pangolin/components/pango_windowing/src/display_x11.cpp:422).\n'
+        '    // With no window manager -- Xvfb inside a container -- a window created\n'
+        '    // at its final size never receives one, so the root view stays 0x0, every\n'
+        '    // child view is empty and the window renders blank.\n'
+        '    //\n'
+        '    // Upstream only escaped this by accident: opening the separate\n'
+        '    // cv::imshow window restacked the display, and the resulting\n'
+        '    // ConfigureNotify is what sized Pangolin. Folding that window into this\n'
+        '    // one removed the accident, so the root view is now sized explicitly.\n'
+        '    pangolin::process::Resize(kWindowWidth, kWindowHeight);'
+    )
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    # --- panel wide enough for its longest label ----------------------------
+    old = '    pangolin::CreatePanel("menu").SetBounds(0.0,1.0,0.0,pangolin::Attach::Pix(175));'
+    new = (
+        '    // Pangolin does not clip panel text -- Panel::Render disables the\n'
+        '    // scissor test outright (pango_display/src/widgets.cpp:269) -- so a\n'
+        '    // panel narrower than its longest label spills onto the 3D view.\n'
+        '    //\n'
+        '    // A checkbox label starts 28 px in (6 px panel inset + 18 px box +\n'
+        '    // 4 px gap) and the default font, AnonymousPro at 18 px, is\n'
+        '    // monospaced at 9.826 px per character. "Show Inertial Graph" is 19\n'
+        '    // characters, so it ends at 28 + 186.7 = 214.7 px -- 39.7 px past the\n'
+        '    // 175 px panel ORB-SLAM3 asked for. 221 px is the minimum that keeps\n'
+        '    // the same 6 px margin on the right; 240 leaves room for a 20th.\n'
+        '    const int kMenuPanelWidth = 240;\n'
+        '    pangolin::CreatePanel("menu").SetBounds(0.0,1.0,0.0,pangolin::Attach::Pix(kMenuPanelWidth));'
+    )
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    # --- follow the camera by default ---------------------------------------
+    old = '    pangolin::Var<bool> menuFollowCamera("menu.Follow Camera",false,true);'
+    new = '    pangolin::Var<bool> menuFollowCamera("menu.Follow Camera",true,true);'
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    # --- two views side by side ---------------------------------------------
+    old = (
+        '    // Add named OpenGL viewport to window and provide 3D Handler\n'
+        '    pangolin::View& d_cam = pangolin::CreateDisplay()\n'
+        '            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)\n'
+        '            .SetHandler(new pangolin::Handler3D(s_cam));'
+    )
+    new = (
+        '    // Both views are top-level displays with explicit bounds, the way\n'
+        '    // ORB-SLAM3 already placed its single one. A LayoutEqualHorizontal\n'
+        '    // container with AddDisplay() also reads well but renders nothing\n'
+        '    // here, so the arrangement stays explicit.\n'
+        '    //\n'
+        '    // The aspect sign matters: POSITIVE fits the view inside its bounds\n'
+        '    // (letterbox), NEGATIVE overfits and grows past them. ORB-SLAM3 used\n'
+        '    // a negative aspect, which was harmless when the 3D view owned the\n'
+        '    // whole window but covers its neighbours once it shares one.\n'
+        '    // (View::Resize, thirdparty/Pangolin/components/pango_display/src/view.cpp:75)\n'
+        '    const double kMapViewRight = 0.58;\n'
+        '\n'
+        '    pangolin::View& d_cam = pangolin::CreateDisplay()\n'
+        '            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(kMenuPanelWidth),\n'
+        '                       kMapViewRight, 1024.0f/768.0f)\n'
+        '            .SetHandler(new pangolin::Handler3D(s_cam));\n'
+        '\n'
+        '    // The tracked frame, which used to be a separate cv::imshow window.\n'
+        '    // Its aspect comes from the first frame, since it depends on the\n'
+        '    // sensor and on whether the right image is concatenated.\n'
+        '    pangolin::View& d_img = pangolin::CreateDisplay()\n'
+        '            .SetBounds(0.0, 1.0, kMapViewRight, 1.0);\n'
+        '\n'
+        '    pangolin::GlTexture imageTexture;\n'
+        '    int nLastImageCols = 0, nLastImageRows = 0;'
+    )
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    # --- drop the highgui window --------------------------------------------
+    old = '    cv::namedWindow("ORB-SLAM3: Current Frame");\n'
+    if old in text:
+        text = text.replace(old, '', 1)
+        n += 1
+
+    # --- draw the frame into the window, then swap --------------------------
+    old = (
+        '        pangolin::FinishFrame();\n'
+        '\n'
+        '        cv::Mat toShow;\n'
+        '        cv::Mat im = mpFrameDrawer->DrawFrame(trackedImageScale);\n'
+        '\n'
+        '        if(both){\n'
+        '            cv::Mat imRight = mpFrameDrawer->DrawRightFrame(trackedImageScale);\n'
+        '            cv::hconcat(im,imRight,toShow);\n'
+        '        }\n'
+        '        else{\n'
+        '            toShow = im;\n'
+        '        }\n'
+        '\n'
+        '        if(mImageViewerScale != 1.f)\n'
+        '        {\n'
+        '            int width = toShow.cols * mImageViewerScale;\n'
+        '            int height = toShow.rows * mImageViewerScale;\n'
+        '            cv::resize(toShow, toShow, cv::Size(width, height));\n'
+        '        }\n'
+        '\n'
+        '        cv::imshow("ORB-SLAM3: Current Frame",toShow);\n'
+        '        cv::waitKey(mT);\n'
+    )
+    new = (
+        '        // The frame is drawn before FinishFrame(), which swaps buffers.\n'
+        '        cv::Mat toShow;\n'
+        '        cv::Mat im = mpFrameDrawer->DrawFrame(trackedImageScale);\n'
+        '\n'
+        '        if(both){\n'
+        '            cv::Mat imRight = mpFrameDrawer->DrawRightFrame(trackedImageScale);\n'
+        '            cv::hconcat(im,imRight,toShow);\n'
+        '        }\n'
+        '        else{\n'
+        '            toShow = im;\n'
+        '        }\n'
+        '\n'
+        '        // This used to shrink the highgui window\'s contents. The frame\n'
+        '        // now scales with its view, so the setting only picks the\n'
+        '        // texture resolution.\n'
+        '        if(mImageViewerScale != 1.f)\n'
+        '        {\n'
+        '            int width = toShow.cols * mImageViewerScale;\n'
+        '            int height = toShow.rows * mImageViewerScale;\n'
+        '            cv::resize(toShow, toShow, cv::Size(width, height));\n'
+        '        }\n'
+        '\n'
+        '        if(!toShow.empty())\n'
+        '        {\n'
+        '            if(toShow.cols != nLastImageCols || toShow.rows != nLastImageRows)\n'
+        '            {\n'
+        '                // The frame changes size when the right image is\n'
+        '                // concatenated, so the texture and the view\'s aspect\n'
+        '                // both follow it.\n'
+        '                imageTexture.Reinitialise(toShow.cols, toShow.rows, GL_RGB8,\n'
+        '                                          false, 0, GL_BGR, GL_UNSIGNED_BYTE);\n'
+        '                d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);\n'
+        '                nLastImageCols = toShow.cols;\n'
+        '                nLastImageRows = toShow.rows;\n'
+        '            }\n'
+        '\n'
+        '            // Upload reads rows*cols*3 bytes contiguously, so a Mat that\n'
+        '            // is a view into a larger buffer has to be compacted first.\n'
+        '            const cv::Mat contiguous = toShow.isContinuous() ? toShow : toShow.clone();\n'
+        '            imageTexture.Upload(contiguous.data, GL_BGR, GL_UNSIGNED_BYTE);\n'
+        '\n'
+        '            d_img.Activate();\n'
+        '            glColor3f(1.0f,1.0f,1.0f);\n'
+        '            // cv::Mat rows run top-down; OpenGL texture rows bottom-up.\n'
+        '            imageTexture.RenderToViewportFlipY();\n'
+        '        }\n'
+        '\n'
+        '        pangolin::FinishFrame();\n'
+        '\n'
+        '        // cv::waitKey(mT) used to pace this loop as well as pump the\n'
+        '        // highgui event queue. FinishFrame() does not sleep, so the\n'
+        '        // pacing is explicit now.\n'
+        '        std::this_thread::sleep_for(\n'
+        '            std::chrono::milliseconds(static_cast<int>(mT)));\n'
+    )
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    if n and '#include <thread>' not in text:
+        text = text.replace('#include <mutex>',
+                            '#include <chrono>\n#include <mutex>\n#include <thread>', 1)
+    # pangolin.h does not pull in process.h, which declares process::Resize.
+    if n and 'display/process.h' not in text:
+        text = text.replace('#include <pangolin/pangolin.h>',
+                            '#include <pangolin/pangolin.h>\n'
+                            '#include <pangolin/display/process.h>', 1)
+
+    return text, n
+
+
+# ---------------------------------------------------------------------------
+def fix_unmatched_glend(text, path):
+    """Remove the stray glEnd() in MapDrawer::DrawKeyFrames.
+
+    The keyframe loop opens its primitive in one of two mutually exclusive
+    branches -- a thicker red frustum for the map's first keyframe, a normal one
+    otherwise -- so exactly ONE glBegin(GL_LINES) runs per keyframe:
+
+        if(!pKF->GetParent()) { glLineWidth(...*5); glColor3f(1,0,0); glBegin(GL_LINES); }
+        else                  { glLineWidth(...);   glColor3f(...);   glBegin(GL_LINES); }
+
+    but it then calls glEnd() TWICE, unconditionally. glEnd() without a matching
+    glBegin() is GL_INVALID_OPERATION, raised once per keyframe per rendered
+    frame -- roughly 1,400 errors in 20 seconds on EuRoC MH01.
+
+    Nothing in ORB-SLAM3 ever calls glGetError(), so the flag just accumulated
+    and the bug stayed invisible. It surfaced here only because drawing the
+    tracked frame through Pangolin's GlTexture brought a CheckGlDieOnError()
+    into the render loop, which reports whatever error is already pending.
+
+    The same if/else-then-single-glEnd shape appears twice more in the file and
+    is correct there; only this one has the extra call.
+    """
+    if path.name != "MapDrawer.cpp":
+        return text, 0
+
+    old = (
+        "            glEnd();\n"
+        "\n"
+        "            glPopMatrix();\n"
+        "\n"
+        "            glEnd();\n"
+    )
+    new = (
+        "            glEnd();\n"
+        "\n"
+        "            glPopMatrix();\n"
+    )
+    if old not in text:
+        return text, 0
+    return text.replace(old, new, 1), 1
+
+
 FIXES = [
     ("COMPILEDWITHC11 guards", drop_compiledwithc11_guards),
+    ("viewer single-window layout", fix_viewer_layout),
+    ("unmatched glEnd in MapDrawer", fix_unmatched_glend),
     ("viewer env switch", make_viewer_switchable),
     ("g2o solver ownership", fix_g2o_solver_ownership),
     ("mnFullBAIdx bool -> int", fix_full_ba_generation_counter),

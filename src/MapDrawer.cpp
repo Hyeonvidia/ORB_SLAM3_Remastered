@@ -263,8 +263,6 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const b
             glEnd();
 
             glPopMatrix();
-
-            glEnd();
         }
     }
 

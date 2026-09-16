@@ -15,6 +15,10 @@ LABEL org.opencontainers.image.description="Interactive dev/test container for O
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# xdotool is here for GUI verification: with no window manager running under
+# Xvfb, every toolkit places its window at +0+0, so screenshots of one window
+# capture whatever is stacked on top of it. Moving and raising windows is the
+# only way to capture them cleanly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gdb \
         less \
@@ -24,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         htop \
         file \
         bash-completion \
+        xdotool \
     && rm -rf /var/lib/apt/lists/*
 
 # ccache keeps incremental rebuilds of the SLAM library cheap across container

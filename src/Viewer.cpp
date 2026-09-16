@@ -19,8 +19,11 @@
 
 #include "Viewer.hpp"
 #include <pangolin/pangolin.h>
+#include <pangolin/display/process.h>
 
+#include <chrono>
 #include <mutex>
+#include <thread>
 
 #include <iostream>
 #include <stdexcept>
@@ -168,7 +171,22 @@ void Viewer::Run()
     mbFinished = false;
     mbStopped = false;
 
-    pangolin::CreateWindowAndBind("ORB-SLAM3: Map Viewer",1024,768);
+    // One window now holds both the 3D map and the tracked frame;
+    // 1600x900 leaves each a usable slot beside the menu panel.
+    const int kWindowWidth = 1600, kWindowHeight = 900;
+    pangolin::CreateWindowAndBind("ORB-SLAM3: Viewer",kWindowWidth,kWindowHeight);
+
+    // Pangolin sizes its root view ONLY from an X11 ConfigureNotify
+    // (thirdparty/Pangolin/components/pango_windowing/src/display_x11.cpp:422).
+    // With no window manager -- Xvfb inside a container -- a window created
+    // at its final size never receives one, so the root view stays 0x0, every
+    // child view is empty and the window renders blank.
+    //
+    // Upstream only escaped this by accident: opening the separate
+    // cv::imshow window restacked the display, and the resulting
+    // ConfigureNotify is what sized Pangolin. Folding that window into this
+    // one removed the accident, so the root view is now sized explicitly.
+    pangolin::process::Resize(kWindowWidth, kWindowHeight);
 
     // 3D Mouse handler requires depth testing to be enabled
     glEnable(GL_DEPTH_TEST);
@@ -177,8 +195,19 @@ void Viewer::Run()
     glEnable (GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    pangolin::CreatePanel("menu").SetBounds(0.0,1.0,0.0,pangolin::Attach::Pix(175));
-    pangolin::Var<bool> menuFollowCamera("menu.Follow Camera",false,true);
+    // Pangolin does not clip panel text -- Panel::Render disables the
+    // scissor test outright (pango_display/src/widgets.cpp:269) -- so a
+    // panel narrower than its longest label spills onto the 3D view.
+    //
+    // A checkbox label starts 28 px in (6 px panel inset + 18 px box +
+    // 4 px gap) and the default font, AnonymousPro at 18 px, is
+    // monospaced at 9.826 px per character. "Show Inertial Graph" is 19
+    // characters, so it ends at 28 + 186.7 = 214.7 px -- 39.7 px past the
+    // 175 px panel ORB-SLAM3 asked for. 221 px is the minimum that keeps
+    // the same 6 px margin on the right; 240 leaves room for a 20th.
+    const int kMenuPanelWidth = 240;
+    pangolin::CreatePanel("menu").SetBounds(0.0,1.0,0.0,pangolin::Attach::Pix(kMenuPanelWidth));
+    pangolin::Var<bool> menuFollowCamera("menu.Follow Camera",true,true);
     pangolin::Var<bool> menuCamView("menu.Camera View",false,false);
     pangolin::Var<bool> menuTopView("menu.Top View",false,false);
     // pangolin::Var<bool> menuSideView("menu.Side View",false,false);
@@ -199,16 +228,36 @@ void Viewer::Run()
                 pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
                 );
 
-    // Add named OpenGL viewport to window and provide 3D Handler
+    // Both views are top-level displays with explicit bounds, the way
+    // ORB-SLAM3 already placed its single one. A LayoutEqualHorizontal
+    // container with AddDisplay() also reads well but renders nothing
+    // here, so the arrangement stays explicit.
+    //
+    // The aspect sign matters: POSITIVE fits the view inside its bounds
+    // (letterbox), NEGATIVE overfits and grows past them. ORB-SLAM3 used
+    // a negative aspect, which was harmless when the 3D view owned the
+    // whole window but covers its neighbours once it shares one.
+    // (View::Resize, thirdparty/Pangolin/components/pango_display/src/view.cpp:75)
+    const double kMapViewRight = 0.58;
+
     pangolin::View& d_cam = pangolin::CreateDisplay()
-            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
+            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(kMenuPanelWidth),
+                       kMapViewRight, 1024.0f/768.0f)
             .SetHandler(new pangolin::Handler3D(s_cam));
+
+    // The tracked frame, which used to be a separate cv::imshow window.
+    // Its aspect comes from the first frame, since it depends on the
+    // sensor and on whether the right image is concatenated.
+    pangolin::View& d_img = pangolin::CreateDisplay()
+            .SetBounds(0.0, 1.0, kMapViewRight, 1.0);
+
+    pangolin::GlTexture imageTexture;
+    int nLastImageCols = 0, nLastImageRows = 0;
 
     pangolin::OpenGlMatrix Twc, Twr;
     Twc.SetIdentity();
     pangolin::OpenGlMatrix Ow; // Oriented with g in the z axis
     Ow.SetIdentity();
-    cv::namedWindow("ORB-SLAM3: Current Frame");
 
     bool bFollow = true;
     bool bLocalizationMode = false;
@@ -319,8 +368,7 @@ void Viewer::Run()
         if(menuShowPoints)
             mpMapDrawer->DrawMapPoints();
 
-        pangolin::FinishFrame();
-
+        // The frame is drawn before FinishFrame(), which swaps buffers.
         cv::Mat toShow;
         cv::Mat im = mpFrameDrawer->DrawFrame(trackedImageScale);
 
@@ -332,6 +380,9 @@ void Viewer::Run()
             toShow = im;
         }
 
+        // This used to shrink the highgui window's contents. The frame
+        // now scales with its view, so the setting only picks the
+        // texture resolution.
         if(mImageViewerScale != 1.f)
         {
             int width = toShow.cols * mImageViewerScale;
@@ -339,8 +390,38 @@ void Viewer::Run()
             cv::resize(toShow, toShow, cv::Size(width, height));
         }
 
-        cv::imshow("ORB-SLAM3: Current Frame",toShow);
-        cv::waitKey(mT);
+        if(!toShow.empty())
+        {
+            if(toShow.cols != nLastImageCols || toShow.rows != nLastImageRows)
+            {
+                // The frame changes size when the right image is
+                // concatenated, so the texture and the view's aspect
+                // both follow it.
+                imageTexture.Reinitialise(toShow.cols, toShow.rows, GL_RGB8,
+                                          false, 0, GL_BGR, GL_UNSIGNED_BYTE);
+                d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
+                nLastImageCols = toShow.cols;
+                nLastImageRows = toShow.rows;
+            }
+
+            // Upload reads rows*cols*3 bytes contiguously, so a Mat that
+            // is a view into a larger buffer has to be compacted first.
+            const cv::Mat contiguous = toShow.isContinuous() ? toShow : toShow.clone();
+            imageTexture.Upload(contiguous.data, GL_BGR, GL_UNSIGNED_BYTE);
+
+            d_img.Activate();
+            glColor3f(1.0f,1.0f,1.0f);
+            // cv::Mat rows run top-down; OpenGL texture rows bottom-up.
+            imageTexture.RenderToViewportFlipY();
+        }
+
+        pangolin::FinishFrame();
+
+        // cv::waitKey(mT) used to pace this loop as well as pump the
+        // highgui event queue. FinishFrame() does not sleep, so the
+        // pacing is explicit now.
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(static_cast<int>(mT)));
 
         if(menuReset)
         {
