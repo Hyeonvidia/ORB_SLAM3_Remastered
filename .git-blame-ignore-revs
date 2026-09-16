@@ -18,3 +18,7 @@
 # Indent namespace bodies (66 files). Same verification: every object file
 # built from the tree is bit-identical before and after.
 b20192f49640a308bd79f81a06f15755b2c3d5b6
+
+# Indent namespace bodies (67 files). Same verification: every object file
+# built from the tree is bit-identical before and after.
+520c648789cf3f485edde6a36f3d527a16e2b3da
