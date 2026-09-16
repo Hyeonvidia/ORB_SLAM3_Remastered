@@ -16,8 +16,8 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "FrameDrawer.h"
-#include "Tracking.h"
+#include "FrameDrawer.hpp"
+#include "Tracking.hpp"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>

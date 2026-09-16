@@ -98,9 +98,30 @@ ORB_VOCABULARY_REPLACEMENT = (
 )
 
 
+def project_headers():
+    """Every header under include/, spelled the way an #include names it.
+
+    ORB-SLAM3 writes them as "Frame.h" and "CameraModels/Pinhole.h", and the
+    build puts both include/ and include/CameraModels on the search path, so a
+    header can legitimately appear under either spelling.
+    """
+    spellings = set()
+    base = ROOT / "include"
+    for f in base.rglob("*.h"):
+        rel = f.relative_to(base).as_posix()
+        spellings.add(rel)                  # CameraModels/Pinhole.h
+        spellings.add(f.name)               # Pinhole.h
+        spellings.add(f"include/{rel}")     # include/CameraModels/Pinhole.h
+    return spellings
+
+
 def normalise_extensions(check: bool):
-    """ORB-SLAM3 ships most sources as .cc and a handful as .cpp. Settle on
-    .cpp so the tree has one convention."""
+    """One extension convention for the tree: .cpp for sources, .hpp for headers.
+
+    ORB-SLAM3 ships most sources as .cc and a handful as .cpp, and all of its
+    headers as .h.  vendor_ext/ already uses .cpp/.hpp, so leaving include/ on
+    .h would keep two conventions side by side in one project.
+    """
     renamed = []
     sources = [f for d in ("src", "Examples") for f in sorted((ROOT / d).rglob("*.cc"))]
     for f in sources:
@@ -108,7 +129,31 @@ def normalise_extensions(check: bool):
         renamed.append((f.relative_to(ROOT), dest.relative_to(ROOT)))
         if not check:
             f.rename(dest)
+
+    headers = sorted((ROOT / "include").rglob("*.h"))
+    for f in headers:
+        dest = f.with_suffix(".hpp")
+        renamed.append((f.relative_to(ROOT), dest.relative_to(ROOT)))
+        if not check:
+            f.rename(dest)
     return renamed
+
+
+def rewrite_project_header_includes(text, headers, counter):
+    """Point #include at the renamed project headers.
+
+    Only paths that name a header under include/ are touched, so external
+    headers that still end in .h -- <DBoW2/FORB.h>, <g2o/core/block_solver.h> --
+    are left exactly as they are.
+    """
+    def sub(m):
+        directive, open_c, path, close_c = m.groups()
+        if path not in headers:
+            return m.group(0)
+        new_path = path[:-2] + ".hpp"
+        counter[f"{path}  ->  {new_path}"] += 1
+        return f'{directive}"{new_path}"'
+    return INCLUDE_RE.sub(sub, text)
 
 
 def main():
@@ -117,10 +162,17 @@ def main():
                     help="report what would change without writing")
     args = ap.parse_args()
 
+    # Extension normalisation first: the include rewrite below needs to see the
+    # headers under their new names.
+    headers = project_headers()
     renamed = normalise_extensions(args.check)
     if renamed:
         verb = "would rename" if args.check else "renamed"
-        print(f"{verb} {len(renamed)} sources from .cc to .cpp\n")
+        n_src = sum(1 for a, _ in renamed if a.suffix == ".cc")
+        n_hdr = len(renamed) - n_src
+        print(f"{verb} {n_src} sources .cc -> .cpp and {n_hdr} headers .h -> .hpp\n")
+    # After renaming, includes must name the .hpp spelling.
+    headers = {h for h in headers}
 
     counter = Counter()
     touched = []
@@ -134,8 +186,9 @@ def main():
                 continue
             original = f.read_text(encoding="utf-8", errors="replace")
             text = rewrite(original, counter)
+            text = rewrite_project_header_includes(text, headers, counter)
 
-            if f.name == "ORBVocabulary.h":
+            if f.name in ("ORBVocabulary.h", "ORBVocabulary.hpp"):
                 text, n = ORB_VOCABULARY_TYPEDEF.subn(
                     ORB_VOCABULARY_REPLACEMENT, text)
                 if n:

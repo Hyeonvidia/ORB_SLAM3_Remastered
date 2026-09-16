@@ -17,13 +17,13 @@
 */
 
 
-#include "LoopClosing.h"
+#include "LoopClosing.hpp"
 
-#include "Sim3Solver.h"
-#include "Converter.h"
-#include "Optimizer.h"
-#include "ORBmatcher.h"
-#include "G2oTypes.h"
+#include "Sim3Solver.hpp"
+#include "Converter.hpp"
+#include "Optimizer.hpp"
+#include "ORBmatcher.hpp"
+#include "G2oTypes.hpp"
 
 #include<mutex>
 #include<thread>

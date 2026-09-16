@@ -16,10 +16,10 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "ImuTypes.h"
-#include "Converter.h"
+#include "ImuTypes.hpp"
+#include "Converter.hpp"
 
-#include "GeometricTools.h"
+#include "GeometricTools.hpp"
 
 #include<iostream>
 

@@ -17,14 +17,14 @@
 */
 
 
-#include "Sim3Solver.h"
+#include "Sim3Solver.hpp"
 
 #include <vector>
 #include <cmath>
 #include <opencv2/core/core.hpp>
 
-#include "KeyFrame.h"
-#include "ORBmatcher.h"
+#include "KeyFrame.hpp"
+#include "ORBmatcher.hpp"
 
 #include <DUtils/Random.h>
 

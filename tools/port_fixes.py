@@ -113,29 +113,39 @@ def fix_g2o_solver_ownership(text, path):
 
 # ---------------------------------------------------------------------------
 def fix_full_ba_generation_counter(text, path):
-    """`mnFullBAIdx` is a generation counter declared as bool.
+    """`mnFullBAIdx` is incremented and compared, but declared bool.
 
-    LoopClosing uses it to notice that a new global bundle adjustment was
-    requested while one was already running:
+    Three call sites abort a running global bundle adjustment with
 
-        int idx = mnFullBAIdx;        // before launching GBA
-        ...
-        if (idx != mnFullBAIdx) return;   // superseded, throw the result away
+        mbStopGBA = true;
+        mnFullBAIdx++;
 
-    but the member is `bool mnFullBAIdx;`, so `mnFullBAIdx++` saturates at true
-    after the first request and the comparison stops detecting anything. A
-    second interruption during an already-interrupted GBA goes unnoticed and a
-    stale optimisation result gets merged.
+    and RunGlobalBundleAdjustment guards its map update with
 
-    C++17 removed `operator++` on bool, which is how this surfaced at all.
-    ORB-SLAM2 declared the same member `int`.
+        int idx = mnFullBAIdx;
+        { lock(mMutexGBA); if (idx != mnFullBAIdx) return; ... }
+
+    With `bool mnFullBAIdx;` the first `++` sets it to true and every later one
+    is a no-op, so after the first abort in a session `idx != mnFullBAIdx` can
+    never be true again and that guard is permanently dead. ORB-SLAM2 declared
+    the same member `int`.
+
+    C++17 removed operator++ on bool, which is the only reason this surfaced.
+
+    SCOPE: only the type is changed here. ORB-SLAM3 also reads the snapshot
+    *after* the optimisation returns, where ORB-SLAM2 read it before, so even as
+    an int this guard now only covers the gap between that read and acquiring
+    mMutexGBA. Moving the snapshot back would change runtime behaviour rather
+    than fix a compile error, and the primary abort handling is mbStopGBA, which
+    is checked separately a few lines below.
     """
-    if path.name != "LoopClosing.h":
+    if path.stem != "LoopClosing" or path.suffix not in (".h", ".hpp"):
         return text, 0
     new, n = re.subn(
         r"^(\s*)bool(\s+mnFullBAIdx\s*;)",
-        r"\1// Generation counter, not a flag: LoopClosing compares a saved copy\n"
-        r"\1// against it to detect that a newer GBA request superseded this one.\n"
+        r"\1// Counter, not a flag: incremented on every GBA abort and compared\n"
+        r"\1// with != in RunGlobalBundleAdjustment. As a bool it saturates at\n"
+        r"\1// true and that comparison stops working. See tools/port_fixes.py.\n"
         r"\1int\2",
         text, flags=re.MULTILINE)
     return new, n
@@ -150,7 +160,7 @@ def add_dbow2_serialization(text, path):
     non-intrusively, but the overloads have to be visible where the archive is
     instantiated.
     """
-    if path.name != "KeyFrame.h":
+    if path.stem != "KeyFrame" or path.suffix not in (".h", ".hpp"):
         return text, 0
     if "dbow2_ext/serialization.hpp" in text:
         return text, 0

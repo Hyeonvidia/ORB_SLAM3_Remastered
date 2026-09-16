@@ -11,7 +11,7 @@ Three stages, each of which explains itself in its own header comment:
 
 | Stage | Script | What it does |
 |---|---|---|
-| 1 | `port_body.py` | Rewrites the include graph from the bundled `Thirdparty/` tree onto the pinned upstream packages and the `vendor_ext/` wrappers. Renames `.cc` → `.cpp`. |
+| 1 | `port_body.py` | Rewrites the include graph from the bundled `Thirdparty/` tree onto the pinned upstream packages and the `vendor_ext/` wrappers. Normalises extensions: `.cc` → `.cpp`, `.h` → `.hpp`. |
 | 2 | `qualify_std.py` | Adds `std::` qualification and the standard headers the code had been getting through a leaked `using namespace std`. |
 | 3 | `port_fixes.py` | Targeted source fixes the first two cannot express. |
 
@@ -22,7 +22,25 @@ reading three files instead of diffing 36,000 lines.
 **Put new changes in `port_fixes.py`, not in `src/`** — `port_all.sh` overwrites
 the tree.
 
-## Stage 1 — the include graph
+## Stage 1 — the include graph and file extensions
+
+### Extensions
+
+ORB-SLAM3 ships 24 sources as `.cc` and 2 as `.cpp`, and all 31 headers as `.h`.
+The tree now uses `.cpp` and `.hpp` throughout, which also matches `vendor_ext/`
+— otherwise one project would carry two conventions side by side.
+
+Only headers under `include/` are renamed, and only includes that name one of
+them are rewritten. External headers keep their own spelling: `<DBoW2/FORB.h>`,
+`<g2o/core/block_solver.h>` and `<DUtils/Random.h>` are untouched, because they
+belong to upstream packages this project does not rename.
+
+Includes are matched under all three spellings ORB-SLAM3 uses for its own
+headers — `"Frame.h"`, `"CameraModels/Pinhole.h"` and `"include/CameraModels/Pinhole.h"` —
+since the build puts both `include/` and `include/CameraModels` on the search
+path.
+
+### Includes
 
 42 rewrites across 13 files. Most are mechanical (`Thirdparty/g2o/g2o/core/x.h`
 → `g2o/core/x.h`), with three that are not:
@@ -94,23 +112,51 @@ branches to make two algorithms from it (the `bLarge` case in local inertial
 BA), only one algorithm is ever used and the other silently leaks its block
 solver. Constructing inside each branch removes that.
 
-### `mnFullBAIdx` is a generation counter declared `bool`
+### `mnFullBAIdx` is incremented and compared, but declared `bool`
 
-`LoopClosing` uses it to notice that a newer global bundle adjustment request
-superseded the one in flight:
+Three sites in `LoopClosing` abort a running global bundle adjustment:
 
 ```cpp
-int idx = mnFullBAIdx;          // before launching GBA
-...
-if (idx != mnFullBAIdx) return; // superseded — discard this result
+mbStopGBA = true;
+mnFullBAIdx++;
 ```
 
-but the member is `bool mnFullBAIdx;`. `mnFullBAIdx++` saturates at `true` after
-the first request, so a second interruption during an already-interrupted GBA
-goes unnoticed and a stale optimisation result gets merged into the map.
-ORB-SLAM2 declared the same member `int`.
+and `RunGlobalBundleAdjustment` guards its map update with:
 
-C++17 removing `operator++` on `bool` is the only reason this surfaced.
+```cpp
+int idx = mnFullBAIdx;
+{
+    std::unique_lock<std::mutex> lock(mMutexGBA);
+    if (idx != mnFullBAIdx) return;   // superseded — discard this result
+    ...
+}
+```
+
+The member is `bool mnFullBAIdx;`. The first `++` sets it to `true`; every later
+one is a no-op. So after the first abort in a session, `idx != mnFullBAIdx` can
+never be true again and that guard is permanently dead. ORB-SLAM2 declared the
+same member `int`.
+
+C++17 removing `operator++` on `bool` is the only reason this surfaced at all —
+before that it compiled with a deprecation warning nobody reads.
+
+**The fix is one word**, in `include/LoopClosing.h`:
+
+```diff
+-    bool mnFullBAIdx;
++    // Counter, not a flag: incremented on every GBA abort and compared
++    // with != in RunGlobalBundleAdjustment. As a bool it saturates at
++    // true and that comparison stops working.
++    int mnFullBAIdx;
+```
+
+**Scope.** Only the type changed. ORB-SLAM3 also moved the snapshot to *after*
+the optimisation returns — ORB-SLAM2 read it before — so even as an `int` the
+guard now only covers the gap between that read and acquiring `mMutexGBA`, which
+is microseconds. Restoring the earlier snapshot would change runtime behaviour
+rather than fix a compile error, and the primary abort handling is `mbStopGBA`,
+checked separately a few lines below. So this is a correctness fix to a
+secondary race guard, not a fix to how aborts are handled.
 
 ### `COMPILEDWITHC11` guards — 42 blocks
 

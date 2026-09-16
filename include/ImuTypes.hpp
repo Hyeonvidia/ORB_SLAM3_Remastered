@@ -29,7 +29,7 @@
 #include <sophus/se3.hpp>
 #include <mutex>
 
-#include "SerializationUtils.h"
+#include "SerializationUtils.hpp"
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/vector.hpp>

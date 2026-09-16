@@ -20,11 +20,11 @@
 #ifndef OPTIMIZER_H
 #define OPTIMIZER_H
 
-#include "Map.h"
-#include "MapPoint.h"
-#include "KeyFrame.h"
-#include "LoopClosing.h"
-#include "Frame.h"
+#include "Map.hpp"
+#include "MapPoint.hpp"
+#include "KeyFrame.hpp"
+#include "LoopClosing.hpp"
+#include "Frame.hpp"
 
 #include <math.h>
 

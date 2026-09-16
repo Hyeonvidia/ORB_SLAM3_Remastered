@@ -16,9 +16,9 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "G2oTypes.h"
-#include "ImuTypes.h"
-#include "Converter.h"
+#include "G2oTypes.hpp"
+#include "ImuTypes.hpp"
+#include "Converter.hpp"
 
 #include <cmath>
 #include <istream>

@@ -27,11 +27,11 @@
 
 #include <sophus/geometry.hpp>
 
-#include "ImuTypes.h"
-#include "ORBVocabulary.h"
+#include "ImuTypes.hpp"
+#include "ORBVocabulary.hpp"
 
-#include "Converter.h"
-#include "Settings.h"
+#include "Converter.hpp"
+#include "Settings.hpp"
 
 #include <mutex>
 #include <opencv2/opencv.hpp>

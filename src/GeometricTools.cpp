@@ -16,9 +16,9 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "GeometricTools.h"
+#include "GeometricTools.hpp"
 
-#include "KeyFrame.h"
+#include "KeyFrame.hpp"
 
 namespace ORB_SLAM3
 {

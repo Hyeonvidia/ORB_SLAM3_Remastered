@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "OptimizableTypes.h"
+#include "OptimizableTypes.hpp"
 
 #include <istream>
 #include <ostream>

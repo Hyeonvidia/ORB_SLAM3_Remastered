@@ -49,8 +49,8 @@
 #ifndef ORB_SLAM3_MLPNPSOLVER_H
 #define ORB_SLAM3_MLPNPSOLVER_H
 
-#include "MapPoint.h"
-#include "Frame.h"
+#include "MapPoint.hpp"
+#include "Frame.hpp"
 
 #include<Eigen/Dense>
 #include<Eigen/Sparse>

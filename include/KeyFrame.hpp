@@ -20,17 +20,17 @@
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
 
-#include "MapPoint.h"
+#include "MapPoint.hpp"
 #include <DBoW2/BowVector.h>
 #include <DBoW2/FeatureVector.h>
-#include "ORBVocabulary.h"
-#include "ORBextractor.h"
-#include "Frame.h"
-#include "KeyFrameDatabase.h"
-#include "ImuTypes.h"
+#include "ORBVocabulary.hpp"
+#include "ORBextractor.hpp"
+#include "Frame.hpp"
+#include "KeyFrameDatabase.hpp"
+#include "ImuTypes.hpp"
 
-#include "GeometricCamera.h"
-#include "SerializationUtils.h"
+#include "GeometricCamera.hpp"
+#include "SerializationUtils.hpp"
 
 #include <mutex>
 

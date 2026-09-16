@@ -16,12 +16,12 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "Atlas.h"
-#include "Viewer.h"
+#include "Atlas.hpp"
+#include "Viewer.hpp"
 
-#include "GeometricCamera.h"
-#include "Pinhole.h"
-#include "KannalaBrandt8.h"
+#include "GeometricCamera.hpp"
+#include "Pinhole.hpp"
+#include "KannalaBrandt8.hpp"
 
 #include <algorithm>
 #include <iostream>

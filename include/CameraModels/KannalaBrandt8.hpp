@@ -22,9 +22,9 @@
 
 #include <assert.h>
 
-#include "GeometricCamera.h"
+#include "GeometricCamera.hpp"
 
-#include "TwoViewReconstruction.h"
+#include "TwoViewReconstruction.hpp"
 
 #include <istream>
 #include <ostream>

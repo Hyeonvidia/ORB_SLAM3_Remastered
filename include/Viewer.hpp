@@ -20,11 +20,11 @@
 #ifndef VIEWER_H
 #define VIEWER_H
 
-#include "FrameDrawer.h"
-#include "MapDrawer.h"
-#include "Tracking.h"
-#include "System.h"
-#include "Settings.h"
+#include "FrameDrawer.hpp"
+#include "MapDrawer.hpp"
+#include "Tracking.hpp"
+#include "System.hpp"
+#include "Settings.hpp"
 
 #include <mutex>
 

@@ -59,7 +59,7 @@
 #include <vector>
 #include <iostream>
 
-#include "ORBextractor.h"
+#include "ORBextractor.hpp"
 
 #include <algorithm>
 #include <cmath>

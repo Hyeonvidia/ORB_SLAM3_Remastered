@@ -17,7 +17,7 @@
 */
 
 
-#include "Viewer.h"
+#include "Viewer.hpp"
 #include <pangolin/pangolin.h>
 
 #include <mutex>

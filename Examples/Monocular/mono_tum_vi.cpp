@@ -25,8 +25,8 @@
 
 #include<opencv2/core/core.hpp>
 
-#include"System.h"
-#include "Converter.h"
+#include"System.hpp"
+#include "Converter.hpp"
 
 #include <string>
 #include <vector>

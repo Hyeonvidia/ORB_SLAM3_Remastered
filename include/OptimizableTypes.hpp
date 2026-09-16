@@ -24,7 +24,7 @@
 #include <orbslam3r/g2o_ext/compat.hpp>
 
 #include <Eigen/Geometry>
-#include <include/CameraModels/GeometricCamera.h>
+#include "include/CameraModels/GeometricCamera.hpp"
 
 #include <istream>
 #include <ostream>

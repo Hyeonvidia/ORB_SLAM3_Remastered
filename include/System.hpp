@@ -28,17 +28,17 @@
 #include<thread>
 #include<opencv2/core/core.hpp>
 
-#include "Tracking.h"
-#include "FrameDrawer.h"
-#include "MapDrawer.h"
-#include "Atlas.h"
-#include "LocalMapping.h"
-#include "LoopClosing.h"
-#include "KeyFrameDatabase.h"
-#include "ORBVocabulary.h"
-#include "Viewer.h"
-#include "ImuTypes.h"
-#include "Settings.h"
+#include "Tracking.hpp"
+#include "FrameDrawer.hpp"
+#include "MapDrawer.hpp"
+#include "Atlas.hpp"
+#include "LocalMapping.hpp"
+#include "LoopClosing.hpp"
+#include "KeyFrameDatabase.hpp"
+#include "ORBVocabulary.hpp"
+#include "Viewer.hpp"
+#include "ImuTypes.hpp"
+#include "Settings.hpp"
 
 #include <iostream>
 #include <mutex>

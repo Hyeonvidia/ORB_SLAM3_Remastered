@@ -17,17 +17,17 @@
 */
 
 
-#include "Tracking.h"
+#include "Tracking.hpp"
 
-#include "ORBmatcher.h"
-#include "FrameDrawer.h"
-#include "Converter.h"
-#include "G2oTypes.h"
-#include "Optimizer.h"
-#include "Pinhole.h"
-#include "KannalaBrandt8.h"
-#include "MLPnPsolver.h"
-#include "GeometricTools.h"
+#include "ORBmatcher.hpp"
+#include "FrameDrawer.hpp"
+#include "Converter.hpp"
+#include "G2oTypes.hpp"
+#include "Optimizer.hpp"
+#include "Pinhole.hpp"
+#include "KannalaBrandt8.hpp"
+#include "MLPnPsolver.hpp"
+#include "GeometricTools.hpp"
 
 #include <iostream>
 

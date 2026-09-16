@@ -17,12 +17,12 @@
 */
 
 
-#include "LocalMapping.h"
-#include "LoopClosing.h"
-#include "ORBmatcher.h"
-#include "Optimizer.h"
-#include "Converter.h"
-#include "GeometricTools.h"
+#include "LocalMapping.hpp"
+#include "LoopClosing.hpp"
+#include "ORBmatcher.hpp"
+#include "Optimizer.hpp"
+#include "Converter.hpp"
+#include "GeometricTools.hpp"
 
 #include<mutex>
 #include<chrono>

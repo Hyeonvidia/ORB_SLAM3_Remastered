@@ -36,8 +36,8 @@
 
 #include <Eigen/Geometry>
 
-#include "Converter.h"
-#include "GeometricTools.h"
+#include "Converter.hpp"
+#include "GeometricTools.hpp"
 
 namespace ORB_SLAM3 {
     class GeometricCamera {

@@ -16,8 +16,8 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "MapPoint.h"
-#include "ORBmatcher.h"
+#include "MapPoint.hpp"
+#include "ORBmatcher.hpp"
 
 #include<mutex>
 

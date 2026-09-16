@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "Pinhole.h"
+#include "Pinhole.hpp"
 
 #include <boost/serialization/export.hpp>
 

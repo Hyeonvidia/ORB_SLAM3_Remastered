@@ -20,8 +20,8 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include "MapPoint.h"
-#include "KeyFrame.h"
+#include "MapPoint.hpp"
+#include "KeyFrame.hpp"
 
 #include <set>
 #include <pangolin/pangolin.h>

@@ -16,9 +16,9 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "KeyFrame.h"
-#include "Converter.h"
-#include "ImuTypes.h"
+#include "KeyFrame.hpp"
+#include "Converter.hpp"
+#include "ImuTypes.hpp"
 #include<mutex>
 
 #include <algorithm>

@@ -24,10 +24,10 @@
 #include <list>
 #include <set>
 
-#include "KeyFrame.h"
-#include "Frame.h"
-#include "ORBVocabulary.h"
-#include "Map.h"
+#include "KeyFrame.hpp"
+#include "Frame.hpp"
+#include "ORBVocabulary.hpp"
+#include "Map.hpp"
 
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/vector.hpp>

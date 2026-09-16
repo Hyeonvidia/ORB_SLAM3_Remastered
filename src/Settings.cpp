@@ -16,12 +16,12 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "Settings.h"
+#include "Settings.hpp"
 
-#include "CameraModels/Pinhole.h"
-#include "CameraModels/KannalaBrandt8.h"
+#include "CameraModels/Pinhole.hpp"
+#include "CameraModels/KannalaBrandt8.hpp"
 
-#include "System.h"
+#include "System.hpp"
 
 #include <opencv2/core/persistence.hpp>
 #include <opencv2/core/eigen.hpp>

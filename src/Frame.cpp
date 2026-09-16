@@ -16,19 +16,19 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "Frame.h"
+#include "Frame.hpp"
 
-#include "G2oTypes.h"
-#include "MapPoint.h"
-#include "KeyFrame.h"
-#include "ORBextractor.h"
-#include "Converter.h"
-#include "ORBmatcher.h"
-#include "GeometricCamera.h"
+#include "G2oTypes.hpp"
+#include "MapPoint.hpp"
+#include "KeyFrame.hpp"
+#include "ORBextractor.hpp"
+#include "Converter.hpp"
+#include "ORBmatcher.hpp"
+#include "GeometricCamera.hpp"
 
 #include <thread>
-#include <include/CameraModels/Pinhole.h>
-#include <include/CameraModels/KannalaBrandt8.h>
+#include "include/CameraModels/Pinhole.hpp"
+#include "include/CameraModels/KannalaBrandt8.hpp"
 
 #include <algorithm>
 #include <chrono>

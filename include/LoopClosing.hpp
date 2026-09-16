@@ -20,13 +20,13 @@
 #ifndef LOOPCLOSING_H
 #define LOOPCLOSING_H
 
-#include "KeyFrame.h"
-#include "LocalMapping.h"
-#include "Atlas.h"
-#include "ORBVocabulary.h"
-#include "Tracking.h"
+#include "KeyFrame.hpp"
+#include "LocalMapping.hpp"
+#include "Atlas.hpp"
+#include "ORBVocabulary.hpp"
+#include "Tracking.hpp"
 
-#include "KeyFrameDatabase.h"
+#include "KeyFrameDatabase.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <thread>
@@ -230,10 +230,13 @@ protected:
     bool mbFixScale;
 
 
-    // Generation counter, not a flag: LoopClosing compares a saved copy
+    // Counter, not a flag: incremented on every GBA abort and compared
 
 
-    // against it to detect that a newer GBA request superseded this one.
+    // with != in RunGlobalBundleAdjustment. As a bool it saturates at
+
+
+    // true and that comparison stops working. See tools/port_fixes.py.
 
 
     int mnFullBAIdx;

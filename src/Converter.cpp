@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "Converter.h"
+#include "Converter.hpp"
 
 #include <cmath>
 #include <vector>

@@ -20,12 +20,12 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
-#include "KeyFrame.h"
-#include "Frame.h"
-#include "Map.h"
-#include "Converter.h"
+#include "KeyFrame.hpp"
+#include "Frame.hpp"
+#include "Map.hpp"
+#include "Converter.hpp"
 
-#include "SerializationUtils.h"
+#include "SerializationUtils.hpp"
 
 #include <opencv2/core/core.hpp>
 #include <mutex>

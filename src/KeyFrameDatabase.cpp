@@ -17,9 +17,9 @@
 */
 
 
-#include "KeyFrameDatabase.h"
+#include "KeyFrameDatabase.hpp"
 
-#include "KeyFrame.h"
+#include "KeyFrame.hpp"
 #include <DBoW2/BowVector.h>
 
 #include<mutex>

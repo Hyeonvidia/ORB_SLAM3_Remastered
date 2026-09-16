@@ -16,10 +16,10 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "TwoViewReconstruction.h"
+#include "TwoViewReconstruction.hpp"
 
-#include "Converter.h"
-#include "GeometricTools.h"
+#include "Converter.hpp"
+#include "GeometricTools.hpp"
 
 #include <DUtils/Random.h>
 

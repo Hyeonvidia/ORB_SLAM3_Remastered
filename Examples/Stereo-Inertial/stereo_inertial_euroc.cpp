@@ -27,9 +27,9 @@
 #include <opencv2/core/core.hpp>
 
 
-#include<System.h>
-#include "ImuTypes.h"
-#include "Optimizer.h"
+#include"System.hpp"
+#include "ImuTypes.hpp"
+#include "Optimizer.hpp"
 
 #include <string>
 #include <vector>

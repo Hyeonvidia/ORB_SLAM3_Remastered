@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "Optimizer.h"
+#include "Optimizer.hpp"
 
 #include <complex>
 
@@ -33,12 +33,12 @@
 #include <orbslam3r/g2o_ext/solver_factory.hpp>
 #include <g2o/core/robust_kernel_impl.h>
 #include <g2o/solvers/dense/linear_solver_dense.h>
-#include "G2oTypes.h"
-#include "Converter.h"
+#include "G2oTypes.hpp"
+#include "Converter.hpp"
 
 #include<mutex>
 
-#include "OptimizableTypes.h"
+#include "OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cmath>

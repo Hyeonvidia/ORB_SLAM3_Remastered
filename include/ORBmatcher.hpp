@@ -25,9 +25,9 @@
 #include<opencv2/features2d/features2d.hpp>
 #include"sophus/sim3.hpp"
 
-#include"MapPoint.h"
-#include"KeyFrame.h"
-#include"Frame.h"
+#include"MapPoint.hpp"
+#include"KeyFrame.hpp"
+#include"Frame.hpp"
 
 #include <set>
 #include <utility>
