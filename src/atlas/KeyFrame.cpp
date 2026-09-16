@@ -53,7 +53,7 @@ KeyFrame::KeyFrame():
         mfLogScaleFactor(0), mvScaleFactors(0), mvLevelSigma2(0), mvInvLevelSigma2(0), mnMinX(0), mnMinY(0), mnMaxX(0),
         mnMaxY(0), mPrevKF(static_cast<KeyFrame*>(NULL)), mNextKF(static_cast<KeyFrame*>(NULL)), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
         mbToBeErased(false), mbBad(false), mHalfBaseline(0), mbCurrentPlaceRecognition(false), mnMergeCorrectedForKF(0),
-        NLeft(0),NRight(0), mnNumberOfOpt(0), mbHasVelocity(false)
+        NLeft(0),NRight(0), mnNumberOfOpt(0)
 {
 
 }
@@ -75,7 +75,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap), mbCurrentPlaceRecognition(false), mNameFile(F.mNameFile), mnMergeCorrectedForKF(0),
     mpCamera(F.mpCamera), mpCamera2(F.mpCamera2),
     mvLeftToRightMatch(F.mvLeftToRightMatch),mvRightToLeftMatch(F.mvRightToLeftMatch), mTlr(F.GetRelativePoseTlr()),
-    mvKeysRight(F.mvKeysRight), NLeft(F.Nleft), NRight(F.Nright), mTrl(F.GetRelativePoseTrl()), mnNumberOfOpt(0), mbHasVelocity(false)
+    mvKeysRight(F.mvKeysRight), NLeft(F.Nleft), NRight(F.Nright), mTrl(F.GetRelativePoseTrl()), mnNumberOfOpt(0)
 {
     mnId=nNextId++;
 
@@ -95,15 +95,8 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
 
 
 
-    if(!F.HasVelocity()) {
-        mVw.setZero();
-        mbHasVelocity = false;
-    }
-    else
-    {
-        mVw = F.GetVelocity();
-        mbHasVelocity = true;
-    }
+    if(F.HasVelocity())
+        SetVelocity(F.GetVelocity());
 
     mImuBias = F.mImuBias;
     SetPose(F.GetPose());
@@ -126,80 +119,71 @@ void KeyFrame::SetPose(const Sophus::SE3f &Tcw)
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
 
-    mTcw = Tcw;
-    mRcw = mTcw.rotationMatrix();
-    mTwc = mTcw.inverse();
-    mRwc = mTwc.rotationMatrix();
-
-    if (mImuCalib.mbIsSet) // TODO Use a flag instead of the OpenCV matrix
-    {
-        mOwb = mRwc * mImuCalib.mTcb.translation() + mTwc.translation();
-    }
+    mState.SetPose(Tcw, mImuCalib);
 }
 
 void KeyFrame::SetVelocity(const Eigen::Vector3f &Vw)
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    mVw = Vw;
-    mbHasVelocity = true;
+    mState.SetVelocity(Vw);
 }
 
 Sophus::SE3f KeyFrame::GetPose()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mTcw;
+    return mState.Tcw();
 }
 
 Sophus::SE3f KeyFrame::GetPoseInverse()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mTwc;
+    return mState.Twc();
 }
 
 Eigen::Vector3f KeyFrame::GetCameraCenter(){
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mTwc.translation();
+    return mState.Ow();
 }
 
 Eigen::Vector3f KeyFrame::GetImuPosition()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mOwb;
+    return mState.Owb();
 }
 
 Eigen::Matrix3f KeyFrame::GetImuRotation()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return (mTwc * mImuCalib.mTcb).rotationMatrix();
+    return mState.ImuRotation(mImuCalib);
 }
 
 Sophus::SE3f KeyFrame::GetImuPose()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mTwc * mImuCalib.mTcb;
+    return mState.ImuPose(mImuCalib);
 }
 
 Eigen::Matrix3f KeyFrame::GetRotation(){
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mRcw;
+    return mState.Rcw();
 }
 
 Eigen::Vector3f KeyFrame::GetTranslation()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mTcw.translation();
+    return mState.tcw();
 }
 
 Eigen::Vector3f KeyFrame::GetVelocity()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mVw;
+    return mState.Velocity();
 }
 
 bool KeyFrame::isVelocitySet()
 {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return mbHasVelocity;
+    return mState.HasVelocity();
 }
 
 void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
@@ -684,7 +668,7 @@ void KeyFrame::SetBadFlag()
 
         if(mpParent){
             mpParent->EraseChild(this);
-            mTcp = mTcw * mpParent->GetPoseInverse();
+            mTcp = mState.Tcw() * mpParent->GetPoseInverse();
         }
         mbBad = true;
     }
@@ -780,7 +764,7 @@ bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
         Eigen::Vector3f x3Dc(x, y, z);
 
         std::unique_lock<std::mutex> lock(mMutexPose);
-        x3D = mRwc * x3Dc + mTwc.translation();
+        x3D = mState.Rwc() * x3Dc + mState.Ow();
         return true;
     }
     else
@@ -799,8 +783,8 @@ float KeyFrame::ComputeSceneMedianDepth(const int q)
         std::unique_lock<std::mutex> lock(mMutexFeatures);
         std::unique_lock<std::mutex> lock2(mMutexPose);
         vpMapPoints = mvpMapPoints;
-        tcw = mTcw.translation();
-        Rcw = mRcw;
+        tcw = mState.tcw();
+        Rcw = mState.Rcw();
     }
 
     std::vector<float> vDepths;
@@ -939,7 +923,7 @@ void KeyFrame::PostLoad(std::map<long unsigned int, KeyFrame*>& mpKFid, std::map
     // Rebuild the empty variables
 
     // Pose
-    SetPose(mTcw);
+    SetPose(mState.Tcw());
 
     mTrl = mTlr.inverse();
 
@@ -1031,7 +1015,7 @@ bool KeyFrame::ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, flo
     Eigen::Vector3f P = pMP->GetWorldPos();
 
     // 3D in camera coordinates
-    Eigen::Vector3f Pc = mRcw * P + mTcw.translation();
+    Eigen::Vector3f Pc = mState.Rcw() * P + mState.tcw();
     float &PcX = Pc(0);
     float &PcY = Pc(1);
     float &PcZ = Pc(2);
@@ -1094,7 +1078,7 @@ bool KeyFrame::ProjectPointUnDistort(MapPoint* pMP, cv::Point2f &kp, float &u, f
     Eigen::Vector3f P = pMP->GetWorldPos();
 
     // 3D in camera coordinates
-    Eigen::Vector3f Pc = mRcw * P + mTcw.translation();
+    Eigen::Vector3f Pc = mState.Rcw() * P + mState.tcw();
     float &PcX = Pc(0);
     float &PcY= Pc(1);
     float &PcZ = Pc(2);
@@ -1136,30 +1120,30 @@ Sophus::SE3f KeyFrame::GetRelativePoseTlr()
 Sophus::SE3<float> KeyFrame::GetRightPose() {
     std::unique_lock<std::mutex> lock(mMutexPose);
 
-    return mTrl * mTcw;
+    return mTrl * mState.Tcw();
 }
 
 Sophus::SE3<float> KeyFrame::GetRightPoseInverse() {
     std::unique_lock<std::mutex> lock(mMutexPose);
 
-    return mTwc * mTlr;
+    return mState.Twc() * mTlr;
 }
 
 Eigen::Vector3f KeyFrame::GetRightCameraCenter() {
     std::unique_lock<std::mutex> lock(mMutexPose);
 
-    return (mTwc * mTlr).translation();
+    return (mState.Twc() * mTlr).translation();
 }
 
 Eigen::Matrix<float,3,3> KeyFrame::GetRightRotation() {
     std::unique_lock<std::mutex> lock(mMutexPose);
 
-    return (mTrl.so3() * mTcw.so3()).matrix();
+    return (mTrl.so3() * mState.Tcw().so3()).matrix();
 }
 
 Eigen::Vector3f KeyFrame::GetRightTranslation() {
     std::unique_lock<std::mutex> lock(mMutexPose);
-    return (mTrl * mTcw).translation();
+    return (mTrl * mState.Tcw()).translation();
 }
 
 void KeyFrame::SetORBVocabulary(ORBVocabulary* pORBVoc)

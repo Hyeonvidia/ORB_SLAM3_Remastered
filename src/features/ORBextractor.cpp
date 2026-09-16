@@ -69,6 +69,29 @@
 
 using namespace cv;
 
+// WHERE THIS FILE CAME FROM
+//
+// The BSD notice above is OpenCV's, and the ancestor is OpenCV *2.4.x*
+// modules/features2d/src/orb.cpp -- not the 4.6.0 this project links against.
+// OpenCV 3.0 rewrote that code (folding these loops into ICAngles and
+// computeOrbDescriptors), so diffing against a modern OpenCV makes every symbol
+// here look original when most of it is not.
+//
+// Taken from OpenCV, essentially unchanged:
+//   bit_pattern_31_, IC_Angle, computeOrbDescriptor, computeOrientation,
+//   computeDescriptors, ComputePyramid, the umax table built in the
+//   constructor, and the per-level descriptor loop in operator().
+//
+// ORB-SLAM3's own contribution:
+//   ExtractorNode::DivideNode, compareNodes, DistributeOctTree and
+//   ComputeKeyPointsOctTree -- the octree that spreads keypoints evenly over
+//   the image instead of keeping the strongest N, which is what makes tracking
+//   robust to textured corners hogging the budget.
+//
+// The two are interleaved loop by loop, so the file is kept whole rather than
+// split: any cut would leave OpenCV code in a file labelled otherwise. See
+// docs/DEPENDENCIES.md.
+
 namespace ORB_SLAM3
 {
 

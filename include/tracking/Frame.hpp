@@ -28,6 +28,7 @@
 #include <sophus/geometry.hpp>
 
 #include "common/ImuTypes.hpp"
+#include "common/NavState.hpp"
 #include "atlas/ORBVocabulary.hpp"
 
 #include "common/Converter.hpp"
@@ -132,63 +133,51 @@ public:
 
     bool isSet() const;
 
-    // Computes rotation, translation and camera center matrices from the camera pose.
-    void UpdatePoseMatrices();
-
     // Returns the camera center.
-    inline Eigen::Vector3f GetCameraCenter(){
-        return mOw;
+    inline Eigen::Vector3f GetCameraCenter() const {
+        return mState.Ow();
     }
 
     // Returns inverse of rotation
-    inline Eigen::Matrix3f GetRotationInverse(){
-        return mRwc;
+    inline Eigen::Matrix3f GetRotationInverse() const {
+        return mState.Rwc();
     }
 
+    // Not guarded, and it does not need to be: Tracking owns every Frame and
+    // hands KeyFrames, not Frames, to the other threads.
     inline Sophus::SE3<float> GetPose() const {
-        //TODO: can the Frame pose be accsessed from several threads? should this be protected somehow?
-        return mTcw;
+        return mState.Tcw();
     }
 
     inline Eigen::Matrix3f GetRwc() const {
-        return mRwc;
+        return mState.Rwc();
     }
 
     inline Eigen::Vector3f GetOw() const {
-        return mOw;
+        return mState.Ow();
     }
 
     inline bool HasPose() const {
-        return mbHasPose;
+        return mState.HasPose();
     }
 
     inline bool HasVelocity() const {
-        return mbHasVelocity;
+        return mState.HasVelocity();
     }
 
 
 
 private:
-    //Sophus/Eigen migration
-    Sophus::SE3<float> mTcw;
-    Eigen::Matrix<float,3,3> mRwc;
-    Eigen::Matrix<float,3,1> mOw;
-    Eigen::Matrix<float,3,3> mRcw;
-    Eigen::Matrix<float,3,1> mtcw;
-    bool mbHasPose;
+    // Camera pose and IMU velocity. A Frame belongs to the thread that made it,
+    // so it holds the state plainly; a KeyFrame holds the same type behind
+    // mMutexPose. See common/NavState.hpp.
+    NavState mState;
 
-    //Rcw_ not necessary as Sophus has a method for extracting the rotation matrix: Tcw_.rotationMatrix()
-    //tcw_ not necessary as Sophus has a method for extracting the translation vector: Tcw_.translation()
-    //Twc_ not necessary as Sophus has a method for easily computing the inverse pose: Tcw_.inverse()
-
+    // Stereo extrinsics, left to right. Not part of the pose: these are fixed
+    // by the rig, not estimated.
     Sophus::SE3<float> mTlr, mTrl;
     Eigen::Matrix<float,3,3> mRlr;
     Eigen::Vector3f mtlr;
-
-
-    // IMU linear velocity
-    Eigen::Vector3f mVw;
-    bool mbHasVelocity;
 
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -319,8 +308,6 @@ private:
 
     // Assign keypoints to the grid for speed up feature matching (called in the constructor).
     void AssignFeaturesToGrid();
-
-    bool mbIsSet;
 
     bool mbImuPreintegrated;
 

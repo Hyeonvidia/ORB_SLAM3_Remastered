@@ -25,6 +25,7 @@
 #include "atlas/ORBVocabulary.hpp"
 #include "features/ORBextractor.hpp"
 #include "common/ImuTypes.hpp"
+#include "common/NavState.hpp"
 
 #include "common/SerializationUtils.hpp"
 
@@ -150,8 +151,9 @@ class KeyFrame
         ar & const_cast<int&>(mnMaxX);
         ar & const_cast<int&>(mnMaxY);
         ar & boost::serialization::make_array(mK_.data(), mK_.size());
-        // Pose
-        serializeSophusSE3<Archive>(ar, mTcw, version);
+        // Pose. The derived forms are not stored: PostLoad calls SetPose,
+        // which rebuilds them from Tcw.
+        serializeSophusSE3<Archive>(ar, mState.mTcw, version);
         // MapPointsId associated to keypoints
         ar & mvBackupMapPointsId;
         // Grid
@@ -193,9 +195,9 @@ class KeyFrame
         ar & mBackupPrevKFId;
         ar & mBackupNextKFId;
         ar & bImu;
-        ar & boost::serialization::make_array(mVw.data(), mVw.size());
-        ar & boost::serialization::make_array(mOwb.data(), mOwb.size());
-        ar & mbHasVelocity;
+        ar & boost::serialization::make_array(mState.mVw.data(), mState.mVw.size());
+        ar & boost::serialization::make_array(mState.mOwb.data(), mState.mOwb.size());
+        ar & mState.mbHasVelocity;
     }
 
 public:
@@ -432,17 +434,10 @@ public:
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:
-    // sophus poses
-    Sophus::SE3<float> mTcw;
-    Eigen::Matrix3f mRcw;
-    Sophus::SE3<float> mTwc;
-    Eigen::Matrix3f mRwc;
-
-    // IMU position
-    Eigen::Vector3f mOwb;
-    // Velocity (Only used for inertial SLAM)
-    Eigen::Vector3f mVw;
-    bool mbHasVelocity;
+    // Camera pose and IMU velocity, the same type a Frame holds. Everything
+    // that reads it takes mMutexPose first: four threads share a KeyFrame,
+    // where a Frame belongs to one. See common/NavState.hpp.
+    NavState mState;
 
     //Transformation matrix between cameras in stereo fisheye
     Sophus::SE3<float> mTlr;

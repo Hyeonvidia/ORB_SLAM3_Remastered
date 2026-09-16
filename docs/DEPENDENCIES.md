@@ -79,10 +79,34 @@ submodule to pin. Upstream ORB-SLAM3 lists them in its `Dependencies.md`.
 
 | ORB-SLAM3 file | Origin | License | Status |
 |---|---|---|---|
-| `src/ORBextractor.cc` | OpenCV `modules/features2d/src/orb.cpp` | BSD | Fork. OpenCV does not expose `ORB_Impl` internals, so this cannot become a wrapper. |
-| `src/MLPnPsolver.cpp` | Steffen Urban's MLPnP, via OpenGV | BSD | Fork. |
+| `src/features/ORBextractor.cpp` | OpenCV **2.4.x** `modules/features2d/src/orb.cpp` | BSD | Fork. See below. |
+| `src/tracking/MLPnPsolver.cpp` | Steffen Urban's MLPnP, via OpenGV | BSD | Fork. |
 | `ORBmatcher::DescriptorDistance` | Stanford "Bit Twiddling Hacks" parallel popcount | public domain | Snippet. `__builtin_popcount` is the modern equivalent. |
 | ~~`PnPsolver.h/.cc`~~ | Lepetit's EPnP | FreeBSD | **Does not exist in v1.0.** Removed when MLPnP replaced it; upstream's `Dependencies.md` still lists it. |
+
+### ORBextractor: which OpenCV it came from, and why it is not split
+
+The ancestor is **OpenCV 2.4.x**, not the 4.6.0 this project builds against.
+That distinction is the whole reason the file looks unrecognisable next to
+today's OpenCV: 3.0 rewrote this code, folding the angle and descriptor loops
+into `ICAngles` and `computeOrbDescriptors`. Diffing against 4.6.0 therefore
+reports *every* symbol as rewritten, which is an artefact of comparing against
+the wrong ancestor, not a measure of what ORB-SLAM3 changed.
+
+Measured against 2.4.13.7, roughly **442 of 1022 lines** are OpenCV-derived --
+including `ComputePyramid` and the descriptor scaffolding inside `operator()`,
+which are easy to mistake for ORB-SLAM3 originals. What ORB-SLAM3 genuinely
+added is the octree keypoint distribution (`DistributeOctTree`,
+`ComputeKeyPointsOctTree`), which spreads features evenly over the image
+instead of taking the strongest N.
+
+**It is deliberately not split into an "OpenCV part" and an "ORB-SLAM3 part".**
+The two are interleaved at the level of individual loops, so any cut leaves
+OpenCV-derived code sitting in a file labelled ORB-SLAM3 original -- a *worse*
+licence statement than the honest dual notice the file carries today. And there
+is nothing to fix on the compliance side: BSD-3 inside GPLv3 only obliges us to
+retain the notice, which `src/features/ORBextractor.cpp` already does at the
+top of the file.
 
 ## Licenses
 
