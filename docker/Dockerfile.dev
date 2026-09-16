@@ -30,7 +30,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 # live from macOS: XQuartz cannot host it (its indirect GLX offers only OpenGL
 # 1.4, and Pangolin finds no usable fbConfig), but macOS ships a VNC client, so
 # rendering stays in the container on llvmpipe and only pixels cross over.
+#
+# clang-format applies .clang-format at the repository root. It lives here, not
+# on the host, for the same reason the compiler does: the formatting a file gets
+# must not depend on which machine touched it, and clang-format's output changes
+# between major versions.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        clang-format \
         gdb \
         less \
         vim-tiny \
