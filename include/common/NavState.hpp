@@ -53,8 +53,7 @@ public:
     void SetPose(Sophus::SE3f Tcw, const IMU::Calib &calib);
 
     // Sets the IMU pose, which fixes the camera pose through the extrinsics.
-    void SetImuPose(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb,
-                    const IMU::Calib &calib);
+    void SetImuPose(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const IMU::Calib &calib);
 
     void SetVelocity(const Eigen::Vector3f &Vw);
 
@@ -72,10 +71,7 @@ public:
     const Eigen::Vector3f &Owb() const { return mOwb; }
 
     Sophus::SE3f ImuPose(const IMU::Calib &calib) const { return mTwc * calib.mTcb; }
-    Eigen::Matrix3f ImuRotation(const IMU::Calib &calib) const
-    {
-        return (mTwc * calib.mTcb).rotationMatrix();
-    }
+    Eigen::Matrix3f ImuRotation(const IMU::Calib &calib) const { return (mTwc * calib.mTcb).rotationMatrix(); }
 
     const Eigen::Vector3f &Velocity() const { return mVw; }
 

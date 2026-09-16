@@ -107,6 +107,46 @@ Produces `build/lib/libORB_SLAM3.so` and twelve dataset example binaries under
 Extract the vocabulary once first:
 `tar -xzf reference/ORB_SLAM3/Vocabulary/ORBvoc.txt.tar.gz -C Vocabulary`.
 
+## Formatting
+
+```bash
+./tools/format.sh            # rewrite in place
+./tools/format.sh --check    # CI mode: exit 1 if anything differs
+```
+
+`.clang-format` at the root is the whole policy. It runs in the dev container,
+which pins clang-format 18.1.3, because clang-format's output changes between
+major versions and the layout a file gets must not depend on which machine
+touched it. VS Code's C/C++ extension bundles a much newer clang-format — the
+config was checked against both and they produce byte-identical output, so
+format-on-save and `tools/format.sh` agree.
+
+Two things about it are deliberate and easy to undo by accident:
+
+- **`SortIncludes: Never`.** Not because sorting breaks the build — it does
+  not — but because it silently deletes three duplicated `#include` lines, so
+  "apply the formatter" would quietly stop being a formatting-only commit. It
+  also undoes the include grouping that came out of breaking 37 include cycles.
+- **`ReflowComments: false`.** At `true`, clang-format welds the two separate
+  GPLv3 copyright notices at the top of every file into one paragraph, which
+  changes what a legal notice says.
+
+`reference/` and `thirdparty/` are **not** formatted: one is the pristine
+baseline every delta is measured against, the other is pinned submodules. Each
+carries a `.clang-format` with `DisableFormat: true`, so neither the script nor
+an editor that formats on save can reach them.
+
+Three regions carry `// clang-format off` because no setting expresses them: the
+Boost `serialize()` bodies (clang-format reads `ar & x` as a reference
+declaration), `MLPnPsolver::mlpnpJacs` (machine-generated symbolic algebra), and
+the unrolled ORB descriptor loop.
+
+Blame is noisy across the one commit that applied all this. To skip it:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Layout
 
 ```
@@ -119,7 +159,7 @@ src/ include/     the SLAM library, in layers that follow the paper's Figure 1:
                   (.cpp / .hpp throughout; upstream ships .cc / .h)
 Examples/         dataset example binaries — also generated
 reference/        pristine ORB-SLAM3 v1.0 — diff reference, never built
-tools/            submodule pinning, the port pipeline, ATE evaluation
+tools/            submodule pinning, the port pipeline, ATE evaluation, format.sh
 docs/             DEPENDENCIES.md, WRAPPERS.md, PORTING.md, FRAME_KEYFRAME.md,
                   modifications/
 ```

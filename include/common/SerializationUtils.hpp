@@ -33,9 +33,10 @@
 namespace ORB_SLAM3
 {
 
-template <class Archive>
+template<class Archive>
 void serializeSophusSE3(Archive &ar, Sophus::SE3f &T, const unsigned int version)
 {
+    // clang-format off
     Eigen::Vector4f quat;
     Eigen::Vector3f transl;
 
@@ -54,11 +55,13 @@ void serializeSophusSE3(Archive &ar, Sophus::SE3f &T, const unsigned int version
         Eigen::Quaternionf q(quat[0], quat[1], quat[2], quat[3]);
         T = Sophus::SE3f(q, transl);
     }
+    // clang-format on
 }
 
 /*template <class Archive, size_t dim>
 void serializeDiagonalMatrix(Archive &ar, Eigen::DiagonalMatrix<float, dim> &D, const unsigned int version)
 {
+    // clang-format off
     Eigen::Matrix<float,dim,dim> dense;
     if(Archive::is_saving::value)
     {
@@ -71,11 +74,13 @@ void serializeDiagonalMatrix(Archive &ar, Eigen::DiagonalMatrix<float, dim> &D, 
     {
         D = dense.diagonal().asDiagonal();
     }
+    // clang-format on
 }*/
 
 template<class Archive>
-void serializeMatrix(Archive& ar, cv::Mat& mat, const unsigned int version)
+void serializeMatrix(Archive &ar, cv::Mat &mat, const unsigned int version)
 {
+    // clang-format off
     int cols, rows, type;
     bool continuous;
 
@@ -98,11 +103,13 @@ void serializeMatrix(Archive& ar, cv::Mat& mat, const unsigned int version)
             ar & boost::serialization::make_array(mat.ptr(i), row_size);
         }
     }
+    // clang-format on
 }
 
 template<class Archive>
-void serializeMatrix(Archive& ar, const cv::Mat& mat, const unsigned int version)
+void serializeMatrix(Archive &ar, const cv::Mat &mat, const unsigned int version)
 {
+    // clang-format off
     cv::Mat matAux = mat;
 
     serializeMatrix(ar, matAux,version);
@@ -113,11 +120,13 @@ void serializeMatrix(Archive& ar, const cv::Mat& mat, const unsigned int version
         ptr = (cv::Mat*)( &mat );
         *ptr = matAux;
     }
+    // clang-format on
 }
 
 template<class Archive>
-void serializeVectorKeyPoints(Archive& ar, const std::vector<cv::KeyPoint>& vKP, const unsigned int version)
+void serializeVectorKeyPoints(Archive &ar, const std::vector<cv::KeyPoint> &vKP, const unsigned int version)
 {
+    // clang-format off
     int NumEl;
 
     if (Archive::is_saving::value) {
@@ -159,6 +168,7 @@ void serializeVectorKeyPoints(Archive& ar, const std::vector<cv::KeyPoint>& vKP,
         ptr = (std::vector<cv::KeyPoint>*)( &vKP );
         *ptr = vKPaux;
     }
+    // clang-format on
 }
 
 } // namespace ORB_SLAM3

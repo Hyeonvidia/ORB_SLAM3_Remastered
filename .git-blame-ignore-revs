@@ -1,0 +1,15 @@
+# Revisions to skip when running git blame.
+#
+# Enable it once per clone:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# It is not automatic: blame.ignoreRevsFile is local config, so a fresh clone
+# ignores this file until that command is run.
+#
+# Only whole-tree, no-logic commits belong here. Each entry must be a full
+# 40-character SHA.
+
+# Apply .clang-format to the whole tree (78 files). Verified to change nothing
+# but layout: every object file built from the tree is bit-identical before and
+# after.

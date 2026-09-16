@@ -38,8 +38,7 @@ void NavState::SetPose(Sophus::SE3f Tcw, const IMU::Calib &calib)
     mbHasPose = true;
 }
 
-void NavState::SetImuPose(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb,
-                          const IMU::Calib &calib)
+void NavState::SetImuPose(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const IMU::Calib &calib)
 {
     const Sophus::SE3f Twb(Rwb, twb);
     SetPose(calib.mTcb * Twb.inverse(), calib);

@@ -1,0 +1,126 @@
+# .clang-format — ORB_SLAM3_Remastered
+#
+# Run it with ./tools/format.sh, which uses the clang-format pinned in the dev
+# container (18.1.3). Verified to produce byte-identical output under the 23.1.0
+# that VS Code's C/C++ extension bundles, so format-on-save and the script agree.
+#
+# Every override below is here because the existing code votes for it, or because
+# the LLVM default actively damages something. Options equal to LLVM are omitted
+# unless pinning one guards against a known hazard.
+#
+# reference/ and thirdparty/ are NOT formatted: they are a pristine diff baseline
+# and pinned submodules. clang-format searches parent directories, so this file
+# would otherwise reach 305 files inside them — reference/.clang-format and
+# thirdparty/.clang-format carry DisableFormat to stop it.
+
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++17
+
+# ------------------------------------------------------------------ indentation
+IndentWidth: 4            # 98.8% of block openings already step by exactly 4
+TabWidth: 4
+AccessModifierOffset: -4  # `public:` sits flush with `class`; 94.7% already do
+
+# None, although the editor that prompted this file used All. Every file here is a
+# single namespace wrapping the whole file, so the indent disambiguates nothing
+# while taxing ~32,000 lines: switching to All doubles the first commit (26k ->
+# 55k changed lines) and pushes lines past 100 columns from 1,805 to 2,038 — it
+# makes the wrapping worse. The tree already votes None 56:13.
+NamespaceIndentation: None
+
+# 36 files close `namespace ORB_SLAM3` with a comment that says ORB_SLAM or
+# ORB_SLAM2 — ORB-SLAM1/2 leftovers. With flush namespaces that marker is what
+# tells you what closed 800 lines ago, so it had better be right.
+FixNamespaceComments: true
+
+# ----------------------------------------------------------------------- braces
+BreakBeforeBraces: Allman        # 81.8% of the tree already; also cheaper than K&R
+AllowShortFunctionsOnASingleLine: Inline
+                                 # all 108 one-line bodies are in-class accessors,
+                                 # and this keeps `GeometricCamera() {}` on one line
+IndentCaseLabels: true           # no switch exists today, so this costs nothing
+
+# ------------------------------------------------------------------- line width
+# 120, not 0. ColumnLimit: 0 is not the safe no-op it looks like — it never
+# re-wraps but still inserts spaces, so the longest line GROWS from 975 to 1515
+# characters. At 120, lines over 120 columns fall from 686 to 129, and 125 of
+# those 129 are comments ReflowComments leaves alone: 4 real code lines remain.
+# Against 100: 100 costs 1,439 more changed lines and orphans 85 assignments onto
+# a bare `=` where 120 orphans 21 — fewer than the 26 the humans left.
+ColumnLimit: 120
+PenaltyBreakAssignment: 200      # at the default (2) clang-format orphans `x =`
+                                 # onto its own line; this cuts that to a handful
+AlignAfterOpenBracket: Align     # pinned deliberately: it is what produces the
+                                 # readable Frame.hpp and System.hpp signature wraps
+AlwaysBreakTemplateDeclarations: Yes
+                                 # keeps `template<class Archive>` off the
+                                 # serialize() signature line
+AlignEscapedNewlines: Left       # Right pads GET_VALUE's backslashes out to column
+                                 # 120, leaving ~95 characters of trailing space
+
+# LLVM defaults, pinned because flipping any one explodes the big constructors:
+# KeyFrame::KeyFrame (~60 initializers) goes 21 -> 79 lines. Several popular
+# presets ship PackConstructorInitializers: NextLine, so do not inherit silently.
+BinPackParameters: true
+BinPackArguments: true
+PackConstructorInitializers: BinPack
+BreakConstructorInitializers: BeforeColon
+
+# ------------------------------------------------------- pointers, refs, spacing
+# This codebase splits the two axes and clang-format 18 is the first version that
+# can say so: `Type* name` 78%, but `Type &name` 78%. Counted in declarations,
+# excluding multiplication and the boost `ar &` operators that triple a naive grep.
+# (clang-format falls back to Right on multi-declarator lines regardless, so
+# `GeometricCamera *a, *b;` stays that way in 8 places. Nothing fixes that.)
+PointerAlignment: Left
+ReferenceAlignment: Right
+DerivePointerAlignment: false    # derivation would re-infer per file and entrench
+                                 # the inconsistency this is meant to remove
+SpaceBeforeParens: Never         # `if(` 1998 vs `if (` 221; codifying upstream's
+                                 # habit rather than rewriting 943 lines
+SpaceAfterTemplateKeyword: false
+BreakStringLiterals: false       # the startup banner and the CSV timing headers are
+                                 # diagnostic surface; splitting them across adjacent
+                                 # literals makes them ungreppable as whole phrases
+InsertNewlineAtEOF: true         # one file (ORBmatcher.hpp) ends without one
+
+# ------------------------------------------------------------ comments, includes
+# false, and not negotiable. At true, clang-format welds the two SEPARATE GPLv3
+# copyright notices into one running paragraph in all 72 files ("...University of
+# Zaragoza. Copyright (C) 2014-2016 Raúl Mur-Artal..."), which changes what a legal
+# notice says. The cost of false is that it re-indents a block comment's opening
+# `/*` without moving the ` * ` continuation lines, so indented doc comments need
+# their continuations fixed by hand once. (clang-format 20's IndentOnly would be
+# strictly better; 18 only has the bool.)
+ReflowComments: false
+
+# Off deliberately, and not because it breaks the build — it does not. It is that
+# sorting silently DELETES three duplicated `#include <orbslam3r/g2o_ext/compat.hpp>`
+# lines, so "apply the formatter" would quietly stop being a formatting-only commit.
+# It also interleaves project headers into the system-header run, destroying the
+# hand-made grouping that came out of breaking 37 include cycles.
+SortIncludes: Never
+IncludeBlocks: Preserve          # defence in depth if anyone ever flips that on
+
+KeepEmptyLinesAtTheStartOfBlocks: false   # 96.4% of blocks already comply
+
+# ----------------------------------------------------------------------- macros
+StatementMacros: [EIGEN_MAKE_ALIGNED_OPERATOR_NEW]
+                                 # a no-op today, pinned so version drift can never
+                                 # glue the macro to the declaration after it
+
+# ------------------------------------------------------------ what is left alone
+# Three regions carry `// clang-format off` because no setting expresses them:
+#
+#   serialize() bodies (8 headers)  Boost's `ar & x` is a binary operator, but
+#                                   clang-format reads it as a reference
+#                                   declaration and emits `ar &x` — rendering the
+#                                   same operator two ways in adjacent lines of one
+#                                   checklist. ReferenceAlignment: Middle repairs
+#                                   it for +589 lines, but spells every
+#                                   `const std::string &p` as `& p`. Guards are cheaper.
+#   MLPnPsolver::mlpnpJacs          machine-generated symbolic algebra; wrapping
+#                                   turns 6 jacobian entries into ~130 lines.
+#   ORBextractor descriptor loop    each line loads the pixel pair the next line
+#                                   compares; splitting them loses that rhythm.

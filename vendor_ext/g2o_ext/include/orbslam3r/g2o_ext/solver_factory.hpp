@@ -41,41 +41,46 @@
 #include <g2o/solvers/dense/linear_solver_dense.h>
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 
-namespace orbslam3r::g2o_ext {
+namespace orbslam3r::g2o_ext
+{
 
-enum class LinearSolver {
-  kEigen,  // sparse Cholesky; what ORB-SLAM3 uses nearly everywhere
-  kDense,  // dense Cholesky; used for the small inertial-only problems
+enum class LinearSolver
+{
+    kEigen, // sparse Cholesky; what ORB-SLAM3 uses nearly everywhere
+    kDense, // dense Cholesky; used for the small inertial-only problems
 };
 
-namespace detail {
+namespace detail
+{
 
-template <typename BlockSolverT, LinearSolver kind>
-std::unique_ptr<g2o::Solver> MakeBlockSolver() {
-  using PoseMatrix = typename BlockSolverT::PoseMatrixType;
-  if constexpr (kind == LinearSolver::kEigen) {
-    return std::make_unique<BlockSolverT>(
-        std::make_unique<g2o::LinearSolverEigen<PoseMatrix>>());
-  } else {
-    return std::make_unique<BlockSolverT>(
-        std::make_unique<g2o::LinearSolverDense<PoseMatrix>>());
-  }
+template<typename BlockSolverT, LinearSolver kind>
+std::unique_ptr<g2o::Solver> MakeBlockSolver()
+{
+    using PoseMatrix = typename BlockSolverT::PoseMatrixType;
+    if constexpr(kind == LinearSolver::kEigen)
+    {
+        return std::make_unique<BlockSolverT>(std::make_unique<g2o::LinearSolverEigen<PoseMatrix>>());
+    }
+    else
+    {
+        return std::make_unique<BlockSolverT>(std::make_unique<g2o::LinearSolverDense<PoseMatrix>>());
+    }
 }
 
-}  // namespace detail
+} // namespace detail
 
 // Both return a raw pointer because that is what SparseOptimizer::setAlgorithm
 // takes: the optimizer assumes ownership of the algorithm it is given.
-template <typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
-g2o::OptimizationAlgorithmLevenberg* MakeLevenberg() {
-  return new g2o::OptimizationAlgorithmLevenberg(
-      detail::MakeBlockSolver<BlockSolverT, kind>());
+template<typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
+g2o::OptimizationAlgorithmLevenberg* MakeLevenberg()
+{
+    return new g2o::OptimizationAlgorithmLevenberg(detail::MakeBlockSolver<BlockSolverT, kind>());
 }
 
-template <typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
-g2o::OptimizationAlgorithmGaussNewton* MakeGaussNewton() {
-  return new g2o::OptimizationAlgorithmGaussNewton(
-      detail::MakeBlockSolver<BlockSolverT, kind>());
+template<typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
+g2o::OptimizationAlgorithmGaussNewton* MakeGaussNewton()
+{
+    return new g2o::OptimizationAlgorithmGaussNewton(detail::MakeBlockSolver<BlockSolverT, kind>());
 }
 
-}  // namespace orbslam3r::g2o_ext
+} // namespace orbslam3r::g2o_ext

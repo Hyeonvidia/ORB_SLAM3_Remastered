@@ -16,14 +16,12 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef LOOPCLOSING_H
 #define LOOPCLOSING_H
 
 #include "atlas/KeyFrame.hpp"
 #include "atlas/Atlas.hpp"
 #include "atlas/ORBVocabulary.hpp"
-
 
 #include <boost/algorithm/string.hpp>
 #include <thread>
@@ -45,18 +43,16 @@ class LocalMapping;
 class KeyFrameDatabase;
 class Map;
 
-
 class LoopClosing
 {
 public:
-
-    typedef std::pair<std::set<KeyFrame*>,int> ConsistentGroup;    
-    typedef std::map<KeyFrame*,g2o::Sim3,std::less<KeyFrame*>,
-        Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3> > > KeyFrameAndPose;
+    typedef std::pair<std::set<KeyFrame*>, int> ConsistentGroup;
+    typedef std::map<KeyFrame*, g2o::Sim3, std::less<KeyFrame*>,
+                     Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3>>>
+        KeyFrameAndPose;
 
 public:
-
-    LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale, const bool bActiveLC);
+    LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc, const bool bFixScale, const bool bActiveLC);
 
     void SetTracker(Tracking* pTracker);
 
@@ -65,7 +61,7 @@ public:
     // Main function
     void Run();
 
-    void InsertKeyFrame(KeyFrame *pKF);
+    void InsertKeyFrame(KeyFrame* pKF);
 
     void RequestReset();
     void RequestResetActiveMap(Map* pMap);
@@ -73,14 +69,16 @@ public:
     // This function will run in a separate thread
     void RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF);
 
-    bool isRunningGBA(){
+    bool isRunningGBA()
+    {
         std::unique_lock<std::mutex> lock(mMutexGBA);
         return mbRunningGBA;
     }
-    bool isFinishedGBA(){
+    bool isFinishedGBA()
+    {
         std::unique_lock<std::mutex> lock(mMutexGBA);
         return mbFinishedGBA;
-    }   
+    }
 
     void RequestFinish();
 
@@ -121,22 +119,22 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 protected:
-
     bool CheckNewKeyFrames();
-
 
     //Methods to implement the new place recognition algorithm
     bool NewDetectCommonRegions();
-    bool DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches,
-                                        std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
-    bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame* &pMatchedKF, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw,
-                                     int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
-    bool DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches,
-                                            std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
+    bool DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw,
+                                        int &nNumProjMatches, std::vector<MapPoint*> &vpMPs,
+                                        std::vector<MapPoint*> &vpMatchedMPs);
+    bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame*&pMatchedKF, KeyFrame*&pLastCurrentKF,
+                                    g2o::Sim3 &g2oScw, int &nNumCoincidences, std::vector<MapPoint*> &vpMPs,
+                                    std::vector<MapPoint*> &vpMatchedMPs);
+    bool DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw,
+                                       int &nNumProjMatches, std::vector<MapPoint*> &vpMPs,
+                                       std::vector<MapPoint*> &vpMatchedMPs);
     int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw,
                                 std::set<MapPoint*> &spMatchedMPinOrigin, std::vector<MapPoint*> &vpMapPoints,
                                 std::vector<MapPoint*> &vpMatchedMapPoints);
-
 
     void SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, std::vector<MapPoint*> &vpMapPoints);
     void SearchAndFuse(const std::vector<KeyFrame*> &vConectedKFs, std::vector<MapPoint*> &vpMapPoints);
@@ -166,7 +164,7 @@ protected:
     KeyFrameDatabase* mpKeyFrameDB;
     ORBVocabulary* mpORBVocabulary;
 
-    LocalMapping *mpLocalMapper;
+    LocalMapping* mpLocalMapper;
 
     std::list<KeyFrame*> mlpLoopKeyFrameQueue;
 
@@ -226,19 +224,13 @@ protected:
     // Fix scale in the stereo/RGB-D case
     bool mbFixScale;
 
-
     // Counter, not a flag: incremented on every GBA abort and compared
-
 
     // with != in RunGlobalBundleAdjustment. As a bool it saturates at
 
-
     // true and that comparison stops working. See tools/port_fixes.py.
 
-
     int mnFullBAIdx;
-
-
 
     std::vector<double> vdPR_CurrentTime;
     std::vector<double> vdPR_MatchedTime;
@@ -249,7 +241,6 @@ protected:
     int mnNumCorrection;
     int mnCorrectionGBA;
 
-
     // To (de)activate LC
     bool mbActiveLC = true;
 
@@ -258,6 +249,6 @@ protected:
 #endif
 };
 
-} //namespace ORB_SLAM
+} // namespace ORB_SLAM3
 
 #endif // LOOPCLOSING_H

@@ -29,7 +29,8 @@
 #include <g2o/types/sim3/types_seven_dof_expmap.h>
 #include <g2o/types/slam3d/vertex_pointxyz.h>
 
-namespace g2o {
+namespace g2o
+{
 
 // Upstream folded the SBA-specific point vertex into the shared slam3d types
 // and dropped the "SBA" prefix.  Same base class, same estimate type:
@@ -42,4 +43,4 @@ using VertexSBAPointXYZ = VertexPointXYZ;
 // where it was a plain Matrix<double,7,1>.  Identical type, different name.
 using Vector7d = Vector7;
 
-}  // namespace g2o
+} // namespace g2o

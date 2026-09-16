@@ -16,7 +16,6 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef LOCALMAPPING_H
 #define LOCALMAPPING_H
 
@@ -31,7 +30,6 @@
 #include <string>
 #include <vector>
 
-
 namespace ORB_SLAM3
 {
 
@@ -44,7 +42,8 @@ class LocalMapping
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bInertial, const std::string &_strSeqName=std::string());
+    LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bInertial,
+                 const std::string &_strSeqName = std::string());
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -73,7 +72,8 @@ public:
     void RequestFinish();
     bool isFinished();
 
-    int KeyframesInQueue(){
+    int KeyframesInQueue()
+    {
         std::unique_lock<std::mutex> lock(mMutexNewKFs);
         return mlNewKeyFrames.size();
     }
@@ -121,7 +121,6 @@ public:
     std::vector<double> vdKFCulling_ms;
     std::vector<double> vdLMTotal_ms;
 
-
     std::vector<double> vdLBASync_ms;
     std::vector<double> vdKFCullingSync_ms;
     std::vector<int> vnLBA_edges;
@@ -132,7 +131,6 @@ public:
     int nLBA_abort;
 #endif
 protected:
-
     bool CheckNewKeyFrames();
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();
@@ -141,7 +139,7 @@ protected:
     void SearchInNeighbors();
     void KeyFrameCulling();
 
-    System *mpSystem;
+    System* mpSystem;
 
     bool mbMonocular;
     bool mbInertial;
@@ -196,9 +194,8 @@ protected:
 
     //DEBUG
     std::ofstream f_lm;
+};
 
-    };
-
-} //namespace ORB_SLAM
+} // namespace ORB_SLAM3
 
 #endif // LOCALMAPPING_H

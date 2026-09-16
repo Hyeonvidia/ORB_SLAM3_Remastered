@@ -16,7 +16,6 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef SIM3SOLVER_H
 #define SIM3SOLVER_H
 
@@ -24,8 +23,6 @@
 #include <vector>
 
 #include "atlas/KeyFrame.hpp"
-
-
 
 namespace ORB_SLAM3
 {
@@ -37,12 +34,13 @@ public:
     Sim3Solver(KeyFrame* pKF1, KeyFrame* pKF2, const std::vector<MapPoint*> &vpMatched12, const bool bFixScale = true,
                const std::vector<KeyFrame*> vpKeyFrameMatchedMP = std::vector<KeyFrame*>());
 
-    void SetRansacParameters(double probability = 0.99, int minInliers = 6 , int maxIterations = 300);
+    void SetRansacParameters(double probability = 0.99, int minInliers = 6, int maxIterations = 300);
 
     Eigen::Matrix4f find(std::vector<bool> &vbInliers12, int &nInliers);
 
     Eigen::Matrix4f iterate(int nIterations, bool &bNoMore, std::vector<bool> &vbInliers, int &nInliers);
-    Eigen::Matrix4f iterate(int nIterations, bool &bNoMore, std::vector<bool> &vbInliers, int &nInliers, bool &bConverge);
+    Eigen::Matrix4f iterate(int nIterations, bool &bNoMore, std::vector<bool> &vbInliers, int &nInliers,
+                            bool &bConverge);
 
     Eigen::Matrix4f GetEstimatedTransformation();
     Eigen::Matrix3f GetEstimatedRotation();
@@ -50,19 +48,18 @@ public:
     float GetEstimatedScale();
 
 protected:
-
     void ComputeCentroid(Eigen::Matrix3f &P, Eigen::Matrix3f &Pr, Eigen::Vector3f &C);
 
     void ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2);
 
     void CheckInliers();
 
-    void Project(const std::vector<Eigen::Vector3f> &vP3Dw, std::vector<Eigen::Vector2f> &vP2D, Eigen::Matrix4f Tcw, GeometricCamera* pCamera);
-    void FromCameraToImage(const std::vector<Eigen::Vector3f> &vP3Dc, std::vector<Eigen::Vector2f> &vP2D, GeometricCamera* pCamera);
-
+    void Project(const std::vector<Eigen::Vector3f> &vP3Dw, std::vector<Eigen::Vector2f> &vP2D, Eigen::Matrix4f Tcw,
+                 GeometricCamera* pCamera);
+    void FromCameraToImage(const std::vector<Eigen::Vector3f> &vP3Dc, std::vector<Eigen::Vector2f> &vP2D,
+                           GeometricCamera* pCamera);
 
 protected:
-
     // KeyFrames and matches
     KeyFrame* mpKF1;
     KeyFrame* mpKF2;
@@ -126,10 +123,9 @@ protected:
     //cv::Mat mK1;
     //cv::Mat mK2;
 
-    GeometricCamera* pCamera1, *pCamera2;
-
+    GeometricCamera *pCamera1, *pCamera2;
 };
 
-} //namespace ORB_SLAM
+} // namespace ORB_SLAM3
 
 #endif // SIM3SOLVER_H

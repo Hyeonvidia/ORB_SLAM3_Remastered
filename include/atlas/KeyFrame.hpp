@@ -16,7 +16,6 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
 
@@ -45,7 +44,6 @@
 #include <string>
 #include <vector>
 
-
 namespace ORB_SLAM3
 {
 
@@ -61,8 +59,9 @@ class KeyFrame
     friend class boost::serialization::access;
 
     template<class Archive>
-    void serialize(Archive& ar, const unsigned int version)
+    void serialize(Archive &ar, const unsigned int version)
     {
+        // clang-format off
         ar & mnId;
         ar & const_cast<long unsigned int&>(mnFrameId);
         ar & const_cast<double&>(mTimeStamp);
@@ -198,6 +197,7 @@ class KeyFrame
         ar & boost::serialization::make_array(mState.mVw.data(), mState.mVw.size());
         ar & boost::serialization::make_array(mState.mOwb.data(), mState.mOwb.size());
         ar & mState.mbHasVelocity;
+        // clang-format on
     }
 
 public:
@@ -229,10 +229,10 @@ public:
     void AddConnection(KeyFrame* pKF, const int &weight);
     void EraseConnection(KeyFrame* pKF);
 
-    void UpdateConnections(bool upParent=true);
+    void UpdateConnections(bool upParent = true);
     void UpdateBestCovisibles();
-    std::set<KeyFrame *> GetConnectedKeyFrames();
-    std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();
+    std::set<KeyFrame*> GetConnectedKeyFrames();
+    std::vector<KeyFrame*> GetVectorCovisibleKeyFrames();
     std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);
     std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);
     int GetWeight(KeyFrame* pKF);
@@ -266,7 +266,8 @@ public:
     MapPoint* GetMapPoint(const size_t &idx);
 
     // KeyPoint functions
-    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const bool bRight = false) const;
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float &y, const float &r,
+                                          const bool bRight = false) const;
     bool UnprojectStereo(int i, Eigen::Vector3f &x3D);
 
     // Image
@@ -283,13 +284,9 @@ public:
     // Compute Scene Depth (q=2 median). Used in monocular.
     float ComputeSceneMedianDepth(const int q);
 
-    static bool weightComp( int a, int b){
-        return a>b;
-    }
+    static bool weightComp(int a, int b) { return a > b; }
 
-    static bool lId(KeyFrame* pKF1, KeyFrame* pKF2){
-        return pKF1->mnId<pKF2->mnId;
-    }
+    static bool lId(KeyFrame* pKF1, KeyFrame* pKF2) { return pKF1->mnId < pKF2->mnId; }
 
     Map* GetMap();
     void UpdateMap(Map* pMap);
@@ -304,9 +301,9 @@ public:
     bool ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
     bool ProjectPointUnDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
 
-    void PreSave(std::set<KeyFrame*>& spKF,std::set<MapPoint*>& spMP, std::set<GeometricCamera*>& spCam);
-    void PostLoad(std::map<long unsigned int, KeyFrame*>& mpKFid, std::map<long unsigned int, MapPoint*>& mpMPid, std::map<unsigned int, GeometricCamera*>& mpCamId);
-
+    void PreSave(std::set<KeyFrame*> &spKF, std::set<MapPoint*> &spMP, std::set<GeometricCamera*> &spCam);
+    void PostLoad(std::map<long unsigned int, KeyFrame*> &mpKFid, std::map<long unsigned int, MapPoint*> &mpMPid,
+                  std::map<unsigned int, GeometricCamera*> &mpCamId);
 
     void SetORBVocabulary(ORBVocabulary* pORBVoc);
     void SetKeyFrameDatabase(KeyFrameDatabase* pKFDB);
@@ -315,7 +312,6 @@ public:
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
-
     static long unsigned int nNextId;
     long unsigned int mnId;
     const long unsigned int mnFrameId;
@@ -355,7 +351,6 @@ public:
 
     bool mbCurrentPlaceRecognition;
 
-
     // Variables used by loop closing
     Sophus::SE3f mTcwGBA;
     Sophus::SE3f mTcwBefGBA;
@@ -389,7 +384,7 @@ public:
     const std::vector<cv::KeyPoint> mvKeys;
     const std::vector<cv::KeyPoint> mvKeysUn;
     const std::vector<float> mvuRight; // negative value for monocular points
-    const std::vector<float> mvDepth; // negative value for monocular points
+    const std::vector<float> mvDepth;  // negative value for monocular points
     const cv::Mat mDescriptors;
 
     //BoW
@@ -426,8 +421,8 @@ public:
 
     int mnDataset;
 
-    std::vector <KeyFrame*> mvpLoopCandKFs;
-    std::vector <KeyFrame*> mvpMergeCandKFs;
+    std::vector<KeyFrame*> mvpLoopCandKFs;
+    std::vector<KeyFrame*> mvpMergeCandKFs;
 
     //bool mbHasHessian;
     //cv::Mat mHessianPose;
@@ -456,9 +451,9 @@ protected:
     ORBVocabulary* mpORBvocabulary;
 
     // Grid over the image to speed up feature matching
-    std::vector< std::vector <std::vector<size_t> > > mGrid;
+    std::vector<std::vector<std::vector<size_t>>> mGrid;
 
-    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;
+    std::map<KeyFrame*, int> mConnectedKeyFrameWeights;
     std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
     std::vector<int> mvOrderedWeights;
     // For save relation without pointer, this is necessary for save/load function
@@ -479,7 +474,7 @@ protected:
     // Bad flags
     bool mbNotErase;
     bool mbToBeErased;
-    bool mbBad;    
+    bool mbBad;
 
     float mHalfBaseline; // Only for visualization
 
@@ -503,7 +498,7 @@ protected:
     std::mutex mMutexMap;
 
 public:
-    GeometricCamera* mpCamera, *mpCamera2;
+    GeometricCamera *mpCamera, *mpCamera2;
 
     //Indexes of stereo observations correspondences
     std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch;
@@ -516,30 +511,33 @@ public:
 
     const int NLeft, NRight;
 
-    std::vector< std::vector <std::vector<size_t> > > mGridRight;
+    std::vector<std::vector<std::vector<size_t>>> mGridRight;
 
     Sophus::SE3<float> GetRightPose();
     Sophus::SE3<float> GetRightPoseInverse();
 
     Eigen::Vector3f GetRightCameraCenter();
-    Eigen::Matrix<float,3,3> GetRightRotation();
+    Eigen::Matrix<float, 3, 3> GetRightRotation();
     Eigen::Vector3f GetRightTranslation();
 
-    void PrintPointDistribution(){
+    void PrintPointDistribution()
+    {
         int left = 0, right = 0;
         int Nlim = (NLeft != -1) ? NLeft : N;
-        for(int i = 0; i < N; i++){
-            if(mvpMapPoints[i]){
-                if(i < Nlim) left++;
-                else right++;
+        for(int i = 0; i < N; i++)
+        {
+            if(mvpMapPoints[i])
+            {
+                if(i < Nlim)
+                    left++;
+                else
+                    right++;
             }
         }
         std::cout << "Point distribution in KeyFrame: left-> " << left << " --- right-> " << right << std::endl;
     }
-
-
 };
 
-} //namespace ORB_SLAM
+} // namespace ORB_SLAM3
 
 #endif // KEYFRAME_H

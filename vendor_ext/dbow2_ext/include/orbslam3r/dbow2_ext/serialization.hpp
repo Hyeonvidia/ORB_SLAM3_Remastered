@@ -37,17 +37,23 @@
 #include <DBoW2/BowVector.h>
 #include <DBoW2/FeatureVector.h>
 
-namespace boost::serialization {
+namespace boost::serialization
+{
 
-template <class Archive>
-void serialize(Archive& ar, DBoW2::BowVector& v, const unsigned int /*version*/) {
+template<class Archive>
+void serialize(Archive &ar, DBoW2::BowVector &v, const unsigned int /*version*/)
+{
+    // clang-format off
   ar& base_object<std::map<DBoW2::WordId, DBoW2::WordValue>>(v);
+    // clang-format on
 }
 
-template <class Archive>
-void serialize(Archive& ar, DBoW2::FeatureVector& v,
-               const unsigned int /*version*/) {
+template<class Archive>
+void serialize(Archive &ar, DBoW2::FeatureVector &v, const unsigned int /*version*/)
+{
+    // clang-format off
   ar& base_object<std::map<DBoW2::NodeId, std::vector<unsigned int>>>(v);
+    // clang-format on
 }
 
-}  // namespace boost::serialization
+} // namespace boost::serialization

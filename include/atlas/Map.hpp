@@ -16,10 +16,8 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef MAP_H
 #define MAP_H
-
 
 #include <set>
 #include <pangolin/pangolin.h>
@@ -33,7 +31,6 @@
 #include <vector>
 #include "camera/GeometricCamera.hpp"
 #include "atlas/ORBVocabulary.hpp"
-
 
 namespace ORB_SLAM3
 {
@@ -91,7 +88,7 @@ public:
     std::vector<MapPoint*> GetReferenceMapPoints();
 
     long unsigned int MapPointsInMap();
-    long unsigned  KeyFramesInMap();
+    long unsigned KeyFramesInMap();
 
     long unsigned int GetId();
 
@@ -120,7 +117,7 @@ public:
     void SetImuInitialized();
     bool isImuInitialized();
 
-    void ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel=false);
+    void ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel = false);
 
     void SetInertialSensor();
     bool IsInertial();
@@ -136,9 +133,11 @@ public:
     unsigned int GetLowerKFID();
 
     void PreSave(std::set<GeometricCamera*> &spCams);
-    void PostLoad(KeyFrameDatabase* pKFDB, ORBVocabulary* pORBVoc/*, map<long unsigned int, KeyFrame*>& mpKeyFrameId*/, std::map<unsigned int, GeometricCamera*> &mpCams);
+    void PostLoad(KeyFrameDatabase* pKFDB, ORBVocabulary* pORBVoc /*, map<long unsigned int, KeyFrame*>& mpKeyFrameId*/,
+                  std::map<unsigned int, GeometricCamera*> &mpCams);
 
-    void printReprojectionError(std::list<KeyFrame*> &lpLocalWindowKFs, KeyFrame* mpCurrentKF, std::string &name, std::string &name_folder);
+    void printReprojectionError(std::list<KeyFrame*> &lpLocalWindowKFs, KeyFrame* mpCurrentKF, std::string &name,
+                                std::string &name_folder);
 
     std::vector<KeyFrame*> mvpKeyFrameOrigins;
     std::vector<unsigned long int> mvBackupKeyFrameOriginsId;
@@ -161,7 +160,6 @@ public:
     std::set<long unsigned int> msFixedKFs;
 
 protected:
-
     long unsigned int mnId;
 
     std::set<MapPoint*> mspMapPoints;
@@ -191,7 +189,6 @@ protected:
     // Index related to a big change in the map (loop closure, global BA)
     int mnBigChangeIdx;
 
-
     // View of the map in aerial sight (for the AtlasViewer)
     GLubyte* mThumbnail;
 
@@ -205,7 +202,6 @@ protected:
 
     // Mutex
     std::mutex mMutexMap;
-
 };
 
 } //namespace ORB_SLAM3

@@ -16,7 +16,6 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef ORBVOCABULARY_H
 #define ORBVOCABULARY_H
 
@@ -31,6 +30,6 @@ namespace ORB_SLAM3
 // subclass of untouched upstream instead; see docs/WRAPPERS.md.
 typedef orbslam3r::ORBVocabulary ORBVocabulary;
 
-} //namespace ORB_SLAM
+} // namespace ORB_SLAM3
 
 #endif // ORBVOCABULARY_H

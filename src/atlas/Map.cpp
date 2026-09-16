@@ -16,11 +16,10 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #include "atlas/Map.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
 
-#include<mutex>
+#include <mutex>
 
 #include <algorithm>
 #include <iostream>
@@ -35,20 +34,23 @@
 namespace ORB_SLAM3
 {
 
-long unsigned int Map::nNextId=0;
+long unsigned int Map::nNextId = 0;
 
-Map::Map():mnMaxKFid(0),mnBigChangeIdx(0), mbImuInitialized(false), mnMapChange(0), mpFirstRegionKF(static_cast<KeyFrame*>(NULL)),
-mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
+Map::Map()
+    : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mnMapChange(0),
+      mpFirstRegionKF(static_cast<KeyFrame*>(NULL)), mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false),
+      mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
 {
-    mnId=nNextId++;
+    mnId = nNextId++;
     mThumbnail = static_cast<GLubyte*>(NULL);
 }
 
-Map::Map(int initKFid):mnInitKFid(initKFid), mnMaxKFid(initKFid),/*mnLastLoopKFid(initKFid),*/ mnBigChangeIdx(0), mIsInUse(false),
-                       mHasTumbnail(false), mbBad(false), mbImuInitialized(false), mpFirstRegionKF(static_cast<KeyFrame*>(NULL)),
-                       mnMapChange(0), mbFail(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
+Map::Map(int initKFid)
+    : mnInitKFid(initKFid), mnMaxKFid(initKFid), /*mnLastLoopKFid(initKFid),*/ mnBigChangeIdx(0), mIsInUse(false),
+      mHasTumbnail(false), mbBad(false), mbImuInitialized(false), mpFirstRegionKF(static_cast<KeyFrame*>(NULL)),
+      mnMapChange(0), mbFail(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
 {
-    mnId=nNextId++;
+    mnId = nNextId++;
     mThumbnail = static_cast<GLubyte*>(NULL);
 }
 
@@ -68,27 +70,28 @@ Map::~Map()
     mvpKeyFrameOrigins.clear();
 }
 
-void Map::AddKeyFrame(KeyFrame *pKF)
+void Map::AddKeyFrame(KeyFrame* pKF)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    if(mspKeyFrames.empty()){
+    if(mspKeyFrames.empty())
+    {
         std::cout << "First KF:" << pKF->mnId << "; Map init KF:" << mnInitKFid << std::endl;
         mnInitKFid = pKF->mnId;
         mpKFinitial = pKF;
         mpKFlowerID = pKF;
     }
     mspKeyFrames.insert(pKF);
-    if(pKF->mnId>mnMaxKFid)
+    if(pKF->mnId > mnMaxKFid)
     {
-        mnMaxKFid=pKF->mnId;
+        mnMaxKFid = pKF->mnId;
     }
-    if(pKF->mnId<mpKFlowerID->mnId)
+    if(pKF->mnId < mpKFlowerID->mnId)
     {
         mpKFlowerID = pKF;
     }
 }
 
-void Map::AddMapPoint(MapPoint *pMP)
+void Map::AddMapPoint(MapPoint* pMP)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
     mspMapPoints.insert(pMP);
@@ -106,7 +109,7 @@ bool Map::isImuInitialized()
     return mbImuInitialized;
 }
 
-void Map::EraseMapPoint(MapPoint *pMP)
+void Map::EraseMapPoint(MapPoint* pMP)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
     mspMapPoints.erase(pMP);
@@ -115,16 +118,16 @@ void Map::EraseMapPoint(MapPoint *pMP)
     // Delete the MapPoint
 }
 
-void Map::EraseKeyFrame(KeyFrame *pKF)
+void Map::EraseKeyFrame(KeyFrame* pKF)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
     mspKeyFrames.erase(pKF);
-    if(mspKeyFrames.size()>0)
+    if(mspKeyFrames.size() > 0)
     {
         if(pKF->mnId == mpKFlowerID->mnId)
         {
-            std::vector<KeyFrame*> vpKFs = std::vector<KeyFrame*>(mspKeyFrames.begin(),mspKeyFrames.end());
-            std::sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+            std::vector<KeyFrame*> vpKFs = std::vector<KeyFrame*>(mspKeyFrames.begin(), mspKeyFrames.end());
+            std::sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
             mpKFlowerID = vpKFs[0];
         }
     }
@@ -137,7 +140,7 @@ void Map::EraseKeyFrame(KeyFrame *pKF)
     // Delete the MapPoint
 }
 
-void Map::SetReferenceMapPoints(const std::vector<MapPoint *> &vpMPs)
+void Map::SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
     mvpReferenceMapPoints = vpMPs;
@@ -158,13 +161,13 @@ int Map::GetLastBigChangeIdx()
 std::vector<KeyFrame*> Map::GetAllKeyFrames()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    return std::vector<KeyFrame*>(mspKeyFrames.begin(),mspKeyFrames.end());
+    return std::vector<KeyFrame*>(mspKeyFrames.begin(), mspKeyFrames.end());
 }
 
 std::vector<MapPoint*> Map::GetAllMapPoints()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    return std::vector<MapPoint*>(mspMapPoints.begin(),mspMapPoints.end());
+    return std::vector<MapPoint*>(mspMapPoints.begin(), mspMapPoints.end());
 }
 
 long unsigned int Map::MapPointsInMap()
@@ -224,14 +227,14 @@ void Map::SetStoredMap()
 
 void Map::clear()
 {
-//    for(set<MapPoint*>::iterator sit=mspMapPoints.begin(), send=mspMapPoints.end(); sit!=send; sit++)
-//        delete *sit;
+    //    for(set<MapPoint*>::iterator sit=mspMapPoints.begin(), send=mspMapPoints.end(); sit!=send; sit++)
+    //        delete *sit;
 
-    for(std::set<KeyFrame*>::iterator sit=mspKeyFrames.begin(), send=mspKeyFrames.end(); sit!=send; sit++)
+    for(std::set<KeyFrame*>::iterator sit = mspKeyFrames.begin(), send = mspKeyFrames.end(); sit != send; sit++)
     {
         KeyFrame* pKF = *sit;
         pKF->UpdateMap(static_cast<Map*>(NULL));
-//        delete *sit;
+        //        delete *sit;
     }
 
     mspMapPoints.clear();
@@ -259,7 +262,6 @@ bool Map::IsBad()
     return mbBad;
 }
 
-
 void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
@@ -269,22 +271,21 @@ void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool b
     Eigen::Matrix3f Ryw = Tyw.rotationMatrix();
     Eigen::Vector3f tyw = Tyw.translation();
 
-    for(std::set<KeyFrame*>::iterator sit=mspKeyFrames.begin(); sit!=mspKeyFrames.end(); sit++)
+    for(std::set<KeyFrame*>::iterator sit = mspKeyFrames.begin(); sit != mspKeyFrames.end(); sit++)
     {
         KeyFrame* pKF = *sit;
         Sophus::SE3f Twc = pKF->GetPoseInverse();
         Twc.translation() *= s;
-        Sophus::SE3f Tyc = Tyw*Twc;
+        Sophus::SE3f Tyc = Tyw * Twc;
         Sophus::SE3f Tcy = Tyc.inverse();
         pKF->SetPose(Tcy);
         Eigen::Vector3f Vw = pKF->GetVelocity();
         if(!bScaledVel)
-            pKF->SetVelocity(Ryw*Vw);
+            pKF->SetVelocity(Ryw * Vw);
         else
-            pKF->SetVelocity(Ryw*Vw*s);
-
+            pKF->SetVelocity(Ryw * Vw * s);
     }
-    for(std::set<MapPoint*>::iterator sit=mspMapPoints.begin(); sit!=mspMapPoints.end(); sit++)
+    for(std::set<MapPoint*>::iterator sit = mspMapPoints.begin(); sit != mspMapPoints.end(); sit++)
     {
         MapPoint* pMP = *sit;
         pMP->SetWorldPos(s * Ryw * pMP->GetWorldPos() + tyw);
@@ -337,7 +338,8 @@ void Map::ChangeId(long unsigned int nId)
 unsigned int Map::GetLowerKFID()
 {
     std::unique_lock<std::mutex> lock(mMutexMap);
-    if (mpKFlowerID) {
+    if(mpKFlowerID)
+    {
         return mpKFlowerID->mnId;
     }
     return 0;
@@ -379,14 +381,13 @@ void Map::PreSave(std::set<GeometricCamera*> &spCams)
         {
             nMPWithoutObs++;
         }
-        std::map<KeyFrame*, std::tuple<int,int>> mpObs = pMPi->GetObservations();
-        for(std::map<KeyFrame*, std::tuple<int,int>>::iterator it= mpObs.begin(), end=mpObs.end(); it!=end; ++it)
+        std::map<KeyFrame*, std::tuple<int, int>> mpObs = pMPi->GetObservations();
+        for(std::map<KeyFrame*, std::tuple<int, int>>::iterator it = mpObs.begin(), end = mpObs.end(); it != end; ++it)
         {
             if(it->first->GetMap() != this || it->first->isBad())
             {
                 pMPi->EraseObservation(it->first);
             }
-
         }
     }
 
@@ -398,7 +399,6 @@ void Map::PreSave(std::set<GeometricCamera*> &spCams)
         mvBackupKeyFrameOriginsId.push_back(mvpKeyFrameOrigins[i]->mnId);
     }
 
-
     // Backup of MapPoints
     mvpBackupMapPoints.clear();
     for(MapPoint* pMPi : mspMapPoints)
@@ -407,7 +407,7 @@ void Map::PreSave(std::set<GeometricCamera*> &spCams)
             continue;
 
         mvpBackupMapPoints.push_back(pMPi);
-        pMPi->PreSave(mspKeyFrames,mspMapPoints);
+        pMPi->PreSave(mspKeyFrames, mspMapPoints);
     }
 
     // Backup of KeyFrames
@@ -418,7 +418,7 @@ void Map::PreSave(std::set<GeometricCamera*> &spCams)
             continue;
 
         mvpBackupKeyFrames.push_back(pKFi);
-        pKFi->PreSave(mspKeyFrames,mspMapPoints, spCams);
+        pKFi->PreSave(mspKeyFrames, mspMapPoints, spCams);
     }
 
     mnBackupKFinitialID = -1;
@@ -432,15 +432,16 @@ void Map::PreSave(std::set<GeometricCamera*> &spCams)
     {
         mnBackupKFlowerID = mpKFlowerID->mnId;
     }
-
 }
 
-void Map::PostLoad(KeyFrameDatabase* pKFDB, ORBVocabulary* pORBVoc/*, map<long unsigned int, KeyFrame*>& mpKeyFrameId*/, std::map<unsigned int, GeometricCamera*> &mpCams)
+void Map::PostLoad(KeyFrameDatabase* pKFDB,
+                   ORBVocabulary* pORBVoc /*, map<long unsigned int, KeyFrame*>& mpKeyFrameId*/,
+                   std::map<unsigned int, GeometricCamera*> &mpCams)
 {
     std::copy(mvpBackupMapPoints.begin(), mvpBackupMapPoints.end(), std::inserter(mspMapPoints, mspMapPoints.begin()));
     std::copy(mvpBackupKeyFrames.begin(), mvpBackupKeyFrames.end(), std::inserter(mspKeyFrames, mspKeyFrames.begin()));
 
-    std::map<long unsigned int,MapPoint*> mpMapPointId;
+    std::map<long unsigned int, MapPoint*> mpMapPointId;
     for(MapPoint* pMPi : mspMapPoints)
     {
         if(!pMPi || pMPi->isBad())
@@ -480,7 +481,6 @@ void Map::PostLoad(KeyFrameDatabase* pKFDB, ORBVocabulary* pORBVoc/*, map<long u
         pKFDB->add(pKFi);
     }
 
-
     if(mnBackupKFinitialID != -1)
     {
         mpKFinitial = mpKeyFrameId[mnBackupKFinitialID];
@@ -500,6 +500,5 @@ void Map::PostLoad(KeyFrameDatabase* pKFDB, ORBVocabulary* pORBVoc/*, map<long u
 
     mvpBackupMapPoints.clear();
 }
-
 
 } //namespace ORB_SLAM3

@@ -34,7 +34,6 @@
 #include "atlas/MapPoint.hpp"
 #include "atlas/ORBVocabulary.hpp"
 
-
 namespace ORB_SLAM3
 {
 class Viewer;
@@ -52,6 +51,7 @@ class Atlas
     template<class Archive>
     void serialize(Archive &ar, const unsigned int version)
     {
+        // clang-format off
         ar.template register_type<Pinhole>();
         ar.template register_type<KannalaBrandt8>();
 
@@ -66,6 +66,7 @@ class Atlas
         ar & MapPoint::nNextId;
         ar & GeometricCamera::nNextId;
         ar & mnLastInitKFidMap;
+        // clang-format on
     }
 
 public:
@@ -139,7 +140,6 @@ public:
     long unsigned int GetNumLivedMP();
 
 protected:
-
     std::set<Map*> mspMaps;
     std::set<Map*> mspBadMaps;
     // Its necessary change the container from set to vector because libboost 1.58 and Ubuntu 16.04 have an error with this cointainer
@@ -160,7 +160,6 @@ protected:
 
     // Mutex
     std::mutex mMutexAtlas;
-
 
 }; // class Atlas
 

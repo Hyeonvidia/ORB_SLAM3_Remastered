@@ -16,29 +16,29 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include<iostream>
-#include<algorithm>
-#include<fstream>
-#include<chrono>
-#include<iomanip>
+#include <iostream>
+#include <algorithm>
+#include <fstream>
+#include <chrono>
+#include <iomanip>
 
-#include<opencv2/core/core.hpp>
+#include <opencv2/core/core.hpp>
 
-#include"System.hpp"
+#include "System.hpp"
 
 #include <sstream>
 #include <string>
 #include <vector>
 
-
 void LoadImages(const std::string &strSequence, std::vector<std::string> &vstrImageFilenames,
                 std::vector<double> &vTimestamps);
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     if(argc != 4)
     {
-        std::cerr << std::endl << "Usage: ./mono_kitti path_to_vocabulary path_to_settings path_to_sequence" << std::endl;
+        std::cerr << std::endl
+                  << "Usage: ./mono_kitti path_to_vocabulary path_to_settings path_to_sequence" << std::endl;
         return 1;
     }
 
@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     int nImages = vstrImageFilenames.size();
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR,true);
+    ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::MONOCULAR, true);
     float imageScale = SLAM.GetImageScale();
 
     // Vector for tracking time statistics
@@ -66,10 +66,10 @@ int main(int argc, char **argv)
     double t_track = 0.f;
 
     cv::Mat im;
-    for(int ni=0; ni<nImages; ni++)
+    for(int ni = 0; ni < nImages; ni++)
     {
         // Read image from file
-        im = cv::imread(vstrImageFilenames[ni],cv::IMREAD_UNCHANGED); //,cv::IMREAD_UNCHANGED);
+        im = cv::imread(vstrImageFilenames[ni], cv::IMREAD_UNCHANGED); //,cv::IMREAD_UNCHANGED);
         double tframe = vTimestamps[ni];
 
         if(im.empty())
@@ -88,7 +88,9 @@ int main(int argc, char **argv)
             cv::resize(im, im, cv::Size(width, height));
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point t_End_Resize = std::chrono::steady_clock::now();
-            t_resize = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t_End_Resize - t_Start_Resize).count();
+            t_resize = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(t_End_Resize -
+                                                                                             t_Start_Resize)
+                           .count();
             SLAM.InsertResizeTime(t_resize);
 #endif
         }
@@ -96,51 +98,52 @@ int main(int argc, char **argv)
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
         // Pass the image to the SLAM system
-        SLAM.TrackMonocular(im,tframe,std::vector<ORB_SLAM3::IMU::Point>(), vstrImageFilenames[ni]);
+        SLAM.TrackMonocular(im, tframe, std::vector<ORB_SLAM3::IMU::Point>(), vstrImageFilenames[ni]);
 
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
 
 #ifdef REGISTER_TIMES
-            t_track = t_resize + std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t2 - t1).count();
-            SLAM.InsertTrackTime(t_track);
+        t_track = t_resize + std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(t2 - t1).count();
+        SLAM.InsertTrackTime(t_track);
 #endif
 
-        double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+        double ttrack = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1).count();
 
-        vTimesTrack[ni]=ttrack;
+        vTimesTrack[ni] = ttrack;
 
         // Wait to load the next frame
-        double T=0;
-        if(ni<nImages-1)
-            T = vTimestamps[ni+1]-tframe;
-        else if(ni>0)
-            T = tframe-vTimestamps[ni-1];
+        double T = 0;
+        if(ni < nImages - 1)
+            T = vTimestamps[ni + 1] - tframe;
+        else if(ni > 0)
+            T = tframe - vTimestamps[ni - 1];
 
-        if(ttrack<T)
-            usleep((T-ttrack)*1e6);
+        if(ttrack < T)
+            usleep((T - ttrack) * 1e6);
     }
 
     // Stop all threads
     SLAM.Shutdown();
 
     // Tracking time statistics
-    std::sort(vTimesTrack.begin(),vTimesTrack.end());
+    std::sort(vTimesTrack.begin(), vTimesTrack.end());
     float totaltime = 0;
-    for(int ni=0; ni<nImages; ni++)
+    for(int ni = 0; ni < nImages; ni++)
     {
-        totaltime+=vTimesTrack[ni];
+        totaltime += vTimesTrack[ni];
     }
     std::cout << "-------" << std::endl << std::endl;
-    std::cout << "median tracking time: " << vTimesTrack[nImages/2] << std::endl;
-    std::cout << "mean tracking time: " << totaltime/nImages << std::endl;
+    std::cout << "median tracking time: " << vTimesTrack[nImages / 2] << std::endl;
+    std::cout << "mean tracking time: " << totaltime / nImages << std::endl;
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");    
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
 
     return 0;
 }
 
-void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &vstrImageFilenames, std::vector<double> &vTimestamps)
+void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &vstrImageFilenames,
+                std::vector<double> &vTimestamps)
 {
     std::ifstream fTimes;
     std::string strPathTimeFile = strPathToSequence + "/times.txt";
@@ -148,7 +151,7 @@ void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &
     while(!fTimes.eof())
     {
         std::string s;
-        std::getline(fTimes,s);
+        std::getline(fTimes, s);
         if(!s.empty())
         {
             std::stringstream ss;
@@ -164,7 +167,7 @@ void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &
     const int nTimes = vTimestamps.size();
     vstrImageFilenames.resize(nTimes);
 
-    for(int i=0; i<nTimes; i++)
+    for(int i = 0; i < nTimes; i++)
     {
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(6) << i;

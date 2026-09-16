@@ -16,16 +16,15 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #ifndef MAPDRAWER_H
 #define MAPDRAWER_H
 
 #include "atlas/Atlas.hpp"
 #include "atlas/MapPoint.hpp"
 #include "atlas/KeyFrame.hpp"
-#include<pangolin/pangolin.h>
+#include <pangolin/pangolin.h>
 
-#include<mutex>
+#include <mutex>
 
 #include <string>
 
@@ -45,14 +44,14 @@ public:
     Atlas* mpAtlas;
 
     void DrawMapPoints();
-    void DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph, const bool bDrawOptLba);
+    void DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph,
+                       const bool bDrawOptLba);
     void DrawCurrentCamera(pangolin::OpenGlMatrix &Twc);
     void SetCurrentCameraPose(const Sophus::SE3f &Tcw);
-    void SetReferenceKeyFrame(KeyFrame *pKF);
+    void SetReferenceKeyFrame(KeyFrame* pKF);
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
 
 private:
-
     bool ParseViewerParamFile(cv::FileStorage &fSettings);
 
     float mKeyFrameSize;
@@ -66,15 +65,10 @@ private:
 
     std::mutex mMutexCamera;
 
-    float mfFrameColors[6][3] = {{0.0f, 0.0f, 1.0f},
-                                {0.8f, 0.4f, 1.0f},
-                                {1.0f, 0.2f, 0.4f},
-                                {0.6f, 0.0f, 1.0f},
-                                {1.0f, 1.0f, 0.0f},
-                                {0.0f, 1.0f, 1.0f}};
-
+    float mfFrameColors[6][3] = {{0.0f, 0.0f, 1.0f}, {0.8f, 0.4f, 1.0f}, {1.0f, 0.2f, 0.4f},
+                                 {0.6f, 0.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f}};
 };
 
-} //namespace ORB_SLAM
+} // namespace ORB_SLAM3
 
 #endif // MAPDRAWER_H
