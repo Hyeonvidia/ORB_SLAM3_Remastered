@@ -7,18 +7,31 @@
 #   ./tools/monitor.sh tum rgbd
 #
 # TWO WAYS TO SEE IT
-#   --x11   (default)  the window opens directly on XQuartz, like any other X
-#                      client. Nothing to connect to and the mouse works
-#                      normally, but XQuartz must be running and must accept the
-#                      container (this script runs `xhost +localhost` for you).
-#   --vnc              the container renders to its own Xvfb and x11vnc exports
-#                      the screen; macOS opens it with Screen Sharing. Useful
-#                      when XQuartz is not installed, or over SSH.
+#   --vnc   (default)  the container renders to its own Xvfb and x11vnc exports
+#                      the screen; macOS opens it with Screen Sharing. This is
+#                      the path that is verified to work.
+#   --x11              the window opens directly on XQuartz. It APPEARS, with
+#                      the right title and size, but stays blank on this setup
+#                      -- see below. Kept because it costs nothing and may work
+#                      on a different Mesa or XQuartz.
 #
-# In BOTH cases Mesa renders in the container with llvmpipe -- the host GPU is
-# not involved. XQuartz's own GLX only advertises OpenGL 1.4 with no direct
-# rendering, which is not enough for Pangolin, but it never has to be: Mesa
-# rasterises locally and ships finished images to the X server.
+# WHY --x11 COMES UP BLANK
+#   Rendering itself is fine: the probe in tools/glprobe reports a correct
+#   viewport, 199 frames and no GL error, and the same code renders correctly
+#   into Xvfb. What fails is presentation. Mesa logs
+#
+#       MESA: error: Failed to attach to x11 shm
+#
+#   exactly once per frame and the window never fills in. MIT-SHM cannot work
+#   here in principle -- the container is a Linux VM and XQuartz is macOS, so
+#   there is no shared memory segment to attach to -- and Mesa 25's software X11
+#   path has no working fallback for it. LIBGL_KOPPER_DISABLE,
+#   LIBGL_DRI3_DISABLE, GALLIUM_DRIVER=softpipe and LIBGL_ALWAYS_INDIRECT all
+#   leave the behaviour unchanged.
+#
+#   The VNC path sidesteps this entirely: Xvfb is a real framebuffer inside the
+#   container, so Mesa presents to it normally and only finished pixels cross to
+#   the host.
 #
 #   --no-open   (vnc) do not launch Screen Sharing; just print the URL
 #   --port N    (vnc) use a different local port (default 5900)
@@ -35,7 +48,7 @@ cd "$ROOT"
 
 PORT=5900
 OPEN=1
-MODE=x11
+MODE=vnc
 VNC_PASSWORD="${ORBSLAM3R_VNC_PASSWORD:-orbslam3r}"
 ARGS=()
 while [ $# -gt 0 ]; do

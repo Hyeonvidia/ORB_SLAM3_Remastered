@@ -30,6 +30,7 @@ int main(int argc, char** argv) {
 
   pangolin::View& d = pangolin::CreateDisplay().SetBounds(0.0, 1.0, 0.0, 1.0);
   int frames = 0;
+  bool reported = false;
   const auto deadline =
       std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
   while (std::chrono::steady_clock::now() < deadline && !pangolin::ShouldQuit()) {
@@ -42,6 +43,15 @@ int main(int argc, char** argv) {
     glVertex3f(0.6f, -0.6f, 0.0f);
     glVertex3f(0.0f, 0.6f, 0.0f);
     glEnd();
+    if (frames == 5 && !reported) {
+      reported = true;
+      const pangolin::Viewport& b = pangolin::DisplayBase().v;
+      std::printf("base viewport: l=%d b=%d w=%d h=%d   view: w=%d h=%d\n",
+                  b.l, b.b, b.w, b.h, d.v.w, d.v.h);
+      unsigned char px[4] = {0, 0, 0, 0};
+      glReadPixels(b.w / 2, b.h / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+      std::printf("back-buffer centre: %d %d %d\n", px[0], px[1], px[2]);
+    }
     pangolin::FinishFrame();
     ++frames;
     std::this_thread::sleep_for(std::chrono::milliseconds(33));
