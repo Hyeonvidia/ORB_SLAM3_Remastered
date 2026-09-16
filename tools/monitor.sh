@@ -141,23 +141,22 @@ if [ "$MODE" = x11 ]; then
   echo "== a window titled 'ORB-SLAM3 Viewer' will open on your desktop"
   echo "== Ctrl-C stops the run"
   echo
+  # DISPLAY is the OUTER server, which is what Xephyr paints onto; the app is
+  # switched to :100 below. ORBSLAM3R_DISPLAY_MODE=x11 matters too: without it
+  # the entrypoint takes its headless branch and starts a second, unused Xvfb.
+  # DISPLAY is the OUTER server, which is what Xephyr paints onto; the launcher
+  # switches the app to the nested one. ORBSLAM3R_DISPLAY_MODE=x11 matters too:
+  # without it the entrypoint takes its headless branch and starts a second,
+  # unused Xvfb.
   docker run "${COMMON[@]}" \
-    -e OUTER_DISPLAY=host.docker.internal:0 \
+    -e DISPLAY=host.docker.internal:0 \
+    -e ORBSLAM3R_DISPLAY_MODE=x11 \
     -e LIBGL_ALWAYS_SOFTWARE=1 \
     orbslam3r/dev:24.04 \
-    bash -c "
-      # Xephyr owns a framebuffer in this container, so Mesa presents to it with
-      # shared memory working; Xephyr repaints its own window on XQuartz with
-      # plain X requests, which need none.
-      DISPLAY=\$OUTER_DISPLAY Xephyr :100 -screen 1600x900 \
-          -title 'ORB-SLAM3 Viewer' -resizeable -nolisten tcp \
-          > /workspace/results/live/${TAG}/xephyr.log 2>&1 &
-      export DISPLAY=:100
-      for _ in \$(seq 1 30); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done
-      xdpyinfo >/dev/null 2>&1 || { echo 'Xephyr did not start'; cat /workspace/results/live/${TAG}/xephyr.log; exit 1; }
-      exec /workspace/build/bin/${BIN} ${SLAM_ARGS} \
-        > /workspace/results/live/${TAG}/run.log 2>&1
-    " 2>&1 | grep -v "Failed to attach to x11 shm" || true
+    /workspace/tools/container_x11_launch.sh \
+      "/workspace/results/live/${TAG}" \
+      "/workspace/build/bin/${BIN}" ${SLAM_ARGS} \
+    2>&1 | grep -v "Failed to attach to x11 shm" || true
   tail -n 20 "results/live/${TAG}/run.log" 2>/dev/null || true
   exit 0
 fi

@@ -179,10 +179,12 @@ quietly wrong if the frame or the alignment group is chosen carelessly.
 ```
 
 `--x11` puts a real window on the macOS desktop through XQuartz, and the mouse
-works — clicking the menu checkboxes and dragging to orbit the map are both
-verified. If a click seems to do nothing, click once on the window to activate
-it first; XQuartz swallows the activating click unless *Click-through inactive
-windows* is enabled in its settings.
+works — toggling a menu checkbox moves the map-point pixel count between 638, 0
+and 970, and a drag orbits the view. There is no window manager inside the
+nested server, so input focus is PointerRoot: whatever is under the pointer gets
+both the clicks and the keys. If a click seems to do nothing, click once on the
+window to activate it first; macOS swallows the activating click unless
+*Click-through inactive windows* is enabled in XQuartz's settings.
 
 The 3D map takes 72% of the width beside the menu. `ORBSLAM3R_MAP_VIEW_FRACTION`
 retunes that without a rebuild:
