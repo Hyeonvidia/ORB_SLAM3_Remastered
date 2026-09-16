@@ -13,3 +13,4 @@
 # Apply .clang-format to the whole tree (78 files). Verified to change nothing
 # but layout: every object file built from the tree is bit-identical before and
 # after.
+0744fd7dba1e5a19ea2bcdda2b5367c53b41ed6c
