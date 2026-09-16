@@ -36,6 +36,12 @@ endif()
 enable_testing()
 
 add_subdirectory(vendor_ext)
+add_subdirectory(src)
+
+option(ORBSLAM3R_BUILD_EXAMPLES "Build the dataset example binaries" ON)
+if(ORBSLAM3R_BUILD_EXAMPLES)
+  add_subdirectory(Examples)
+endif()
 
 option(ORBSLAM3R_BUILD_SMOKE_TEST "Build the dependency smoke test" ON)
 if(ORBSLAM3R_BUILD_SMOKE_TEST)

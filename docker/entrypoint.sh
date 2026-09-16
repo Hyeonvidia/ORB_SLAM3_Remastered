@@ -20,6 +20,10 @@ case "$mode" in
     fi
     # llvmpipe: software GL, so OpenGL calls succeed without a host GPU.
     export LIBGL_ALWAYS_SOFTWARE=1
+    # The Pangolin viewer is technically usable here, but software rendering
+    # makes a dataset run unusably slow, so batch runs default to no viewer.
+    # Override per-command with ORBSLAM3R_VIEWER=1.
+    export ORBSLAM3R_VIEWER="${ORBSLAM3R_VIEWER:-0}"
     # Silences the "XDG_RUNTIME_DIR is invalid or not set" warning that GLFW /
     # Wayland client code emits inside a container.
     export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-root}"
