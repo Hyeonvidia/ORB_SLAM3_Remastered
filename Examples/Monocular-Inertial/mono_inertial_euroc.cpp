@@ -27,7 +27,7 @@
 #include<opencv2/core/core.hpp>
 
 #include"System.hpp"
-#include "ImuTypes.hpp"
+#include "common/ImuTypes.hpp"
 
 #include <string>
 #include <vector>

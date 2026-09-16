@@ -11,9 +11,10 @@ find_package(Pangolin REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Boost REQUIRED COMPONENTS serialization)
 
-file(GLOB ORBSLAM3_SOURCES CONFIGURE_DEPENDS
+# One folder per layer of the architecture in Figure 1 of the ORB-SLAM3 paper;
+# see tools/layer_layout.py for what belongs where.
+file(GLOB_RECURSE ORBSLAM3_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/CameraModels/*.cpp
 )
 
 add_library(ORB_SLAM3 SHARED ${ORBSLAM3_SOURCES})
@@ -22,7 +23,6 @@ add_library(orbslam3r::ORB_SLAM3 ALIAS ORB_SLAM3)
 target_include_directories(ORB_SLAM3 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include/CameraModels>
   $<INSTALL_INTERFACE:include>
 )
 

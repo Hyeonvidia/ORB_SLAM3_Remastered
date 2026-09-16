@@ -28,8 +28,8 @@
 
 
 #include"System.hpp"
-#include "ImuTypes.hpp"
-#include "Optimizer.hpp"
+#include "common/ImuTypes.hpp"
+#include "optimization/Optimizer.hpp"
 
 #include <string>
 #include <vector>

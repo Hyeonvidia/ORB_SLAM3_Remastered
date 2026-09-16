@@ -19,10 +19,10 @@
 
 
 #include "System.hpp"
-#include "CameraModels/KannalaBrandt8.hpp"
-#include "CameraModels/Pinhole.hpp"
-#include "Frame.hpp"
-#include "Converter.hpp"
+#include "camera/KannalaBrandt8.hpp"
+#include "camera/Pinhole.hpp"
+#include "tracking/Frame.hpp"
+#include "common/Converter.hpp"
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
@@ -46,7 +46,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
-#include "Map.hpp"
+#include "atlas/Map.hpp"
 
 namespace ORB_SLAM3
 {

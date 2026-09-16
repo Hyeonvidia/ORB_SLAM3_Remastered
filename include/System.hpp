@@ -28,24 +28,24 @@
 #include<thread>
 #include<opencv2/core/core.hpp>
 
-#include "Tracking.hpp"
-#include "FrameDrawer.hpp"
-#include "MapDrawer.hpp"
-#include "Atlas.hpp"
-#include "LocalMapping.hpp"
-#include "LoopClosing.hpp"
-#include "KeyFrameDatabase.hpp"
-#include "ORBVocabulary.hpp"
-#include "Viewer.hpp"
-#include "ImuTypes.hpp"
-#include "Settings.hpp"
+#include "tracking/Tracking.hpp"
+#include "viewer/FrameDrawer.hpp"
+#include "viewer/MapDrawer.hpp"
+#include "atlas/Atlas.hpp"
+#include "local_mapping/LocalMapping.hpp"
+#include "loop_closing/LoopClosing.hpp"
+#include "atlas/KeyFrameDatabase.hpp"
+#include "atlas/ORBVocabulary.hpp"
+#include "viewer/Viewer.hpp"
+#include "common/ImuTypes.hpp"
+#include "common/Settings.hpp"
 
 #include <iostream>
 #include <mutex>
 #include <vector>
 
 
-#include "Verbose.hpp"
+#include "common/Verbose.hpp"
 
 namespace ORB_SLAM3
 {
