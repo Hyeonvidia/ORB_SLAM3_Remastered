@@ -16,6 +16,6 @@
 namespace orbslam3r
 {
 
-using ORBVocabulary = dbow2_ext::TextFileVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB>;
+    using ORBVocabulary = dbow2_ext::TextFileVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB>;
 
 } // namespace orbslam3r

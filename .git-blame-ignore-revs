@@ -14,3 +14,7 @@
 # but layout: every object file built from the tree is bit-identical before and
 # after.
 0744fd7dba1e5a19ea2bcdda2b5367c53b41ed6c
+
+# Indent namespace bodies (66 files). Same verification: every object file
+# built from the tree is bit-identical before and after.
+b20192f49640a308bd79f81a06f15755b2c3d5b6

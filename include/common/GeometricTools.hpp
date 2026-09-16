@@ -23,15 +23,15 @@
 namespace ORB_SLAM3::GeometricTools
 {
 
-/// Triangulates a point seen by two cameras, by the linear (DLT) method.
-///
-/// @param x_c1   bearing of the observation in camera 1, normalised so z == 1
-/// @param x_c2   the same for camera 2
-/// @param Tc1w   3x4 world-to-camera-1 transform
-/// @param Tc2w   3x4 world-to-camera-2 transform
-/// @param x3D    the triangulated point, in world coordinates
-/// @return false when the solution is at infinity, leaving x3D untouched
-bool Triangulate(const Eigen::Vector3f &x_c1, const Eigen::Vector3f &x_c2, const Eigen::Matrix<float, 3, 4> &Tc1w,
-                 const Eigen::Matrix<float, 3, 4> &Tc2w, Eigen::Vector3f &x3D);
+    /// Triangulates a point seen by two cameras, by the linear (DLT) method.
+    ///
+    /// @param x_c1   bearing of the observation in camera 1, normalised so z == 1
+    /// @param x_c2   the same for camera 2
+    /// @param Tc1w   3x4 world-to-camera-1 transform
+    /// @param Tc2w   3x4 world-to-camera-2 transform
+    /// @param x3D    the triangulated point, in world coordinates
+    /// @return false when the solution is at infinity, leaving x3D untouched
+    bool Triangulate(const Eigen::Vector3f &x_c1, const Eigen::Vector3f &x_c2, const Eigen::Matrix<float, 3, 4> &Tc1w,
+                     const Eigen::Matrix<float, 3, 4> &Tc2w, Eigen::Vector3f &x3D);
 
 } // namespace ORB_SLAM3::GeometricTools

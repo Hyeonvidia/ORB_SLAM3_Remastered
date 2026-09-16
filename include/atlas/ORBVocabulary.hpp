@@ -25,10 +25,10 @@
 namespace ORB_SLAM3
 {
 
-// Was DBoW2::TemplatedVocabulary directly, which only ORB-SLAM3's edited
-// copy could load from ORBvoc.txt.  vendor_ext supplies that format as a
-// subclass of untouched upstream instead; see docs/WRAPPERS.md.
-typedef orbslam3r::ORBVocabulary ORBVocabulary;
+    // Was DBoW2::TemplatedVocabulary directly, which only ORB-SLAM3's edited
+    // copy could load from ORBvoc.txt.  vendor_ext supplies that format as a
+    // subclass of untouched upstream instead; see docs/WRAPPERS.md.
+    typedef orbslam3r::ORBVocabulary ORBVocabulary;
 
 } // namespace ORB_SLAM3
 

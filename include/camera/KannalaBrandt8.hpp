@@ -32,104 +32,104 @@
 namespace ORB_SLAM3
 {
 
-class KannalaBrandt8 : public GeometricCamera
-{
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive &ar, const unsigned int version)
+    class KannalaBrandt8 : public GeometricCamera
     {
-        // clang-format off
-        ar & boost::serialization::base_object<GeometricCamera>(*this);
-        ar & const_cast<float&>(precision);
-        // clang-format on
-    }
+        friend class boost::serialization::access;
 
-public:
-    KannalaBrandt8() : precision(1e-6)
-    {
-        mvParameters.resize(8);
-        mnId = nNextId++;
-        mnType = CAM_FISHEYE;
-    }
-    KannalaBrandt8(const std::vector<float> _vParameters)
-        : GeometricCamera(_vParameters), precision(1e-6), mvLappingArea(2, 0), tvr(nullptr)
-    {
-        assert(mvParameters.size() == 8);
-        mnId = nNextId++;
-        mnType = CAM_FISHEYE;
-    }
+        template<class Archive>
+        void serialize(Archive &ar, const unsigned int version)
+        {
+            // clang-format off
+            ar & boost::serialization::base_object<GeometricCamera>(*this);
+            ar & const_cast<float&>(precision);
+            // clang-format on
+        }
 
-    KannalaBrandt8(const std::vector<float> _vParameters, const float _precision)
-        : GeometricCamera(_vParameters), precision(_precision), mvLappingArea(2, 0)
-    {
-        assert(mvParameters.size() == 8);
-        mnId = nNextId++;
-        mnType = CAM_FISHEYE;
-    }
-    KannalaBrandt8(KannalaBrandt8* pKannala)
-        : GeometricCamera(pKannala->mvParameters), precision(pKannala->precision), mvLappingArea(2, 0), tvr(nullptr)
-    {
-        assert(mvParameters.size() == 8);
-        mnId = nNextId++;
-        mnType = CAM_FISHEYE;
-    }
+    public:
+        KannalaBrandt8() : precision(1e-6)
+        {
+            mvParameters.resize(8);
+            mnId = nNextId++;
+            mnType = CAM_FISHEYE;
+        }
+        KannalaBrandt8(const std::vector<float> _vParameters)
+            : GeometricCamera(_vParameters), precision(1e-6), mvLappingArea(2, 0), tvr(nullptr)
+        {
+            assert(mvParameters.size() == 8);
+            mnId = nNextId++;
+            mnType = CAM_FISHEYE;
+        }
 
-    // Defined in the .cpp: unique_ptr needs TwoViewReconstruction
-    // complete to destroy it, and this header only forward-declares it.
-    ~KannalaBrandt8() override;
+        KannalaBrandt8(const std::vector<float> _vParameters, const float _precision)
+            : GeometricCamera(_vParameters), precision(_precision), mvLappingArea(2, 0)
+        {
+            assert(mvParameters.size() == 8);
+            mnId = nNextId++;
+            mnType = CAM_FISHEYE;
+        }
+        KannalaBrandt8(KannalaBrandt8* pKannala)
+            : GeometricCamera(pKannala->mvParameters), precision(pKannala->precision), mvLappingArea(2, 0), tvr(nullptr)
+        {
+            assert(mvParameters.size() == 8);
+            mnId = nNextId++;
+            mnType = CAM_FISHEYE;
+        }
 
-    cv::Point2f project(const cv::Point3f &p3D);
-    Eigen::Vector2d project(const Eigen::Vector3d &v3D);
-    Eigen::Vector2f project(const Eigen::Vector3f &v3D);
-    Eigen::Vector2f projectMat(const cv::Point3f &p3D);
+        // Defined in the .cpp: unique_ptr needs TwoViewReconstruction
+        // complete to destroy it, and this header only forward-declares it.
+        ~KannalaBrandt8() override;
 
-    float uncertainty2(const Eigen::Matrix<double, 2, 1> &p2D);
+        cv::Point2f project(const cv::Point3f &p3D);
+        Eigen::Vector2d project(const Eigen::Vector3d &v3D);
+        Eigen::Vector2f project(const Eigen::Vector3f &v3D);
+        Eigen::Vector2f projectMat(const cv::Point3f &p3D);
 
-    Eigen::Vector3f unprojectEig(const cv::Point2f &p2D);
-    cv::Point3f unproject(const cv::Point2f &p2D);
+        float uncertainty2(const Eigen::Matrix<double, 2, 1> &p2D);
 
-    Eigen::Matrix<double, 2, 3> projectJac(const Eigen::Vector3d &v3D);
+        Eigen::Vector3f unprojectEig(const cv::Point2f &p2D);
+        cv::Point3f unproject(const cv::Point2f &p2D);
 
-    bool ReconstructWithTwoViews(const std::vector<cv::KeyPoint> &vKeys1, const std::vector<cv::KeyPoint> &vKeys2,
-                                 const std::vector<int> &vMatches12, Sophus::SE3f &T21, std::vector<cv::Point3f> &vP3D,
-                                 std::vector<bool> &vbTriangulated);
+        Eigen::Matrix<double, 2, 3> projectJac(const Eigen::Vector3d &v3D);
 
-    cv::Mat toK();
-    Eigen::Matrix3f toK_();
+        bool ReconstructWithTwoViews(const std::vector<cv::KeyPoint> &vKeys1, const std::vector<cv::KeyPoint> &vKeys2,
+                                     const std::vector<int> &vMatches12, Sophus::SE3f &T21,
+                                     std::vector<cv::Point3f> &vP3D, std::vector<bool> &vbTriangulated);
 
-    bool epipolarConstrain(GeometricCamera* pCamera2, const cv::KeyPoint &kp1, const cv::KeyPoint &kp2,
-                           const Eigen::Matrix3f &R12, const Eigen::Vector3f &t12, const float sigmaLevel,
-                           const float unc);
+        cv::Mat toK();
+        Eigen::Matrix3f toK_();
 
-    float TriangulateMatches(GeometricCamera* pCamera2, const cv::KeyPoint &kp1, const cv::KeyPoint &kp2,
-                             const Eigen::Matrix3f &R12, const Eigen::Vector3f &t12, const float sigmaLevel,
-                             const float unc, Eigen::Vector3f &p3D);
+        bool epipolarConstrain(GeometricCamera* pCamera2, const cv::KeyPoint &kp1, const cv::KeyPoint &kp2,
+                               const Eigen::Matrix3f &R12, const Eigen::Vector3f &t12, const float sigmaLevel,
+                               const float unc);
 
-    std::vector<int> mvLappingArea;
+        float TriangulateMatches(GeometricCamera* pCamera2, const cv::KeyPoint &kp1, const cv::KeyPoint &kp2,
+                                 const Eigen::Matrix3f &R12, const Eigen::Vector3f &t12, const float sigmaLevel,
+                                 const float unc, Eigen::Vector3f &p3D);
 
-    bool matchAndtriangulate(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, GeometricCamera* pOther,
-                             Sophus::SE3f &Tcw1, Sophus::SE3f &Tcw2, const float sigmaLevel1, const float sigmaLevel2,
-                             Eigen::Vector3f &x3Dtriangulated);
+        std::vector<int> mvLappingArea;
 
-    friend std::ostream &operator<<(std::ostream &os, const KannalaBrandt8 &kb);
-    friend std::istream &operator>>(std::istream &is, KannalaBrandt8 &kb);
+        bool matchAndtriangulate(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, GeometricCamera* pOther,
+                                 Sophus::SE3f &Tcw1, Sophus::SE3f &Tcw2, const float sigmaLevel1,
+                                 const float sigmaLevel2, Eigen::Vector3f &x3Dtriangulated);
 
-    float GetPrecision() { return precision; }
+        friend std::ostream &operator<<(std::ostream &os, const KannalaBrandt8 &kb);
+        friend std::istream &operator>>(std::istream &is, KannalaBrandt8 &kb);
 
-    bool IsEqual(GeometricCamera* pCam);
+        float GetPrecision() { return precision; }
 
-private:
-    const float precision;
+        bool IsEqual(GeometricCamera* pCam);
 
-    //Parameters vector corresponds to
-    //[fx, fy, cx, cy, k0, k1, k2, k3]
+    private:
+        const float precision;
 
-    std::unique_ptr<TwoViewReconstruction> tvr;
+        //Parameters vector corresponds to
+        //[fx, fy, cx, cy, k0, k1, k2, k3]
 
-    void Triangulate(const cv::Point2f &p1, const cv::Point2f &p2, const Eigen::Matrix<float, 3, 4> &Tcw1,
-                     const Eigen::Matrix<float, 3, 4> &Tcw2, Eigen::Vector3f &x3D);
-};
+        std::unique_ptr<TwoViewReconstruction> tvr;
+
+        void Triangulate(const cv::Point2f &p1, const cv::Point2f &p2, const Eigen::Matrix<float, 3, 4> &Tcw1,
+                         const Eigen::Matrix<float, 3, 4> &Tcw2, Eigen::Vector3f &x3D);
+    };
 } // namespace ORB_SLAM3
 
 #endif //CAMERAMODELS_KANNALABRANDT8_H

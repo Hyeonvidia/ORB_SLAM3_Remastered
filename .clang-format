@@ -22,12 +22,14 @@ IndentWidth: 4            # 98.8% of block openings already step by exactly 4
 TabWidth: 4
 AccessModifierOffset: -4  # `public:` sits flush with `class`; 94.7% already do
 
-# None, although the editor that prompted this file used All. Every file here is a
-# single namespace wrapping the whole file, so the indent disambiguates nothing
-# while taxing ~32,000 lines: switching to All doubles the first commit (26k ->
-# 55k changed lines) and pushes lines past 100 columns from 1,805 to 2,038 — it
-# makes the wrapping worse. The tree already votes None 56:13.
-NamespaceIndentation: None
+# All: scope is shown by indentation here like any other block, which is also what
+# the editor was already producing before this file existed.
+#
+# It is the more expensive of the two and the cost is worth knowing: every line
+# inside a namespace — almost the whole tree — shifts 4 columns, so lines past
+# 100 columns go from roughly 1,805 to 2,038 and the initial reformat is about
+# twice the size of the flush alternative. `None` is a one-word change back.
+NamespaceIndentation: All
 
 # 36 files close `namespace ORB_SLAM3` with a comment that says ORB_SLAM or
 # ORB_SLAM2 — ORB-SLAM1/2 leftovers. With flush namespaces that marker is what

@@ -24,35 +24,35 @@
 namespace ORB_SLAM3
 {
 
-/// Level-filtered logging.
-///
-/// This used to live in System.hpp, which meant that every file wanting to
-/// print a line had to depend on the whole System class -- and most of them got
-/// it by accident, through some other header's include. It is its own header
-/// now so that dependency says what it means.
-class Verbose
-{
-public:
-    enum eLevel
+    /// Level-filtered logging.
+    ///
+    /// This used to live in System.hpp, which meant that every file wanting to
+    /// print a line had to depend on the whole System class -- and most of them got
+    /// it by accident, through some other header's include. It is its own header
+    /// now so that dependency says what it means.
+    class Verbose
     {
-        VERBOSITY_QUIET = 0,
-        VERBOSITY_NORMAL = 1,
-        VERBOSITY_VERBOSE = 2,
-        VERBOSITY_VERY_VERBOSE = 3,
-        VERBOSITY_DEBUG = 4
-    };
-
-    static eLevel th;
-
-    static void PrintMess(const std::string &str, eLevel lev)
-    {
-        if(lev <= th)
+    public:
+        enum eLevel
         {
-            std::cout << str << std::endl;
-        }
-    }
+            VERBOSITY_QUIET = 0,
+            VERBOSITY_NORMAL = 1,
+            VERBOSITY_VERBOSE = 2,
+            VERBOSITY_VERY_VERBOSE = 3,
+            VERBOSITY_DEBUG = 4
+        };
 
-    static void SetTh(eLevel _th) { th = _th; }
-};
+        static eLevel th;
+
+        static void PrintMess(const std::string &str, eLevel lev)
+        {
+            if(lev <= th)
+            {
+                std::cout << str << std::endl;
+            }
+        }
+
+        static void SetTh(eLevel _th) { th = _th; }
+    };
 
 } // namespace ORB_SLAM3

@@ -32,15 +32,15 @@
 namespace g2o
 {
 
-// Upstream folded the SBA-specific point vertex into the shared slam3d types
-// and dropped the "SBA" prefix.  Same base class, same estimate type:
-//   BaseVertex<3, Vector3>
-// ORB-SLAM3 names this 66 times across Optimizer.cc alone.
-using VertexSBAPointXYZ = VertexPointXYZ;
+    // Upstream folded the SBA-specific point vertex into the shared slam3d types
+    // and dropped the "SBA" prefix.  Same base class, same estimate type:
+    //   BaseVertex<3, Vector3>
+    // ORB-SLAM3 names this 66 times across Optimizer.cc alone.
+    using VertexSBAPointXYZ = VertexPointXYZ;
 
-// Upstream's fixed-size vector aliases are Vector2/Vector3/.../Vector7 (built
-// on VectorN<N>); ORB-SLAM3 inherited the older `...d` spelling from se3quat.h,
-// where it was a plain Matrix<double,7,1>.  Identical type, different name.
-using Vector7d = Vector7;
+    // Upstream's fixed-size vector aliases are Vector2/Vector3/.../Vector7 (built
+    // on VectorN<N>); ORB-SLAM3 inherited the older `...d` spelling from se3quat.h,
+    // where it was a plain Matrix<double,7,1>.  Identical type, different name.
+    using Vector7d = Vector7;
 
 } // namespace g2o
