@@ -9,6 +9,12 @@
 #   --no-open   do not launch Screen Sharing; just print the URL
 #   --port N    use a different local port (default 5900)
 #
+# The VNC password defaults to "orbslam3r"; override with ORBSLAM3R_VNC_PASSWORD.
+# It is not optional: macOS Screen Sharing never finishes the handshake against
+# a server that offers only RFB security type 1 (None) -- it sits on
+# "Connecting..." forever. Setting a password makes x11vnc offer type 2, VNC
+# Authentication, which Apple's client does support.
+#
 # WHY VNC AND NOT X11
 #   Forwarding X11 to XQuartz does not work for this viewer. XQuartz reaches the
 #   container fine, but its indirect GLX exposes only OpenGL 1.4 with no direct
@@ -24,13 +30,14 @@
 #   and macOS has a VNC client built in.
 #
 #   The port is published on 127.0.0.1 only, so the screen is not reachable from
-#   the network. x11vnc runs without a password, which is why that matters.
+#   the network.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 PORT=5900
 OPEN=1
+VNC_PASSWORD="${ORBSLAM3R_VNC_PASSWORD:-orbslam3r}"
 ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -100,14 +107,18 @@ docker run -d --rm --name "$NAME" \
   -p "127.0.0.1:${PORT}:5900" \
   -e ORBSLAM3R_VIEWER=1 \
   -e XVFB_RESOLUTION=1600x900x24 \
+  -e "VNC_PASSWORD=${VNC_PASSWORD}" \
   -v "${ROOT}:/workspace" \
   -v "$(cd "$ROOT/.." && pwd)/Datasets:/datasets:ro" \
   -w /workspace \
   orbslam3r/dev:24.04 \
   bash -c "
     # The entrypoint has already started Xvfb on \$DISPLAY.
-    x11vnc -display \$DISPLAY -forever -shared -nopw -rfbport 5900 -quiet \
-           -bg -o /workspace/results/live/${TAG}/x11vnc.log
+    # -rfbauth, not -nopw: with no password x11vnc offers only RFB security
+    # type 1 (None), and macOS Screen Sharing never completes that handshake.
+    x11vnc -storepasswd \"\$VNC_PASSWORD\" /tmp/vncpass >/dev/null 2>&1
+    x11vnc -display \$DISPLAY -forever -shared -rfbauth /tmp/vncpass \
+           -rfbport 5900 -quiet -bg -o /workspace/results/live/${TAG}/x11vnc.log
     exec /workspace/build/bin/${BIN} ${SLAM_ARGS} \
       > /workspace/results/live/${TAG}/run.log 2>&1
   " >/dev/null
@@ -123,7 +134,8 @@ for _ in $(seq 1 60); do
 done
 nc -z 127.0.0.1 "$PORT" 2>/dev/null || { echo "VNC port ${PORT} never opened" >&2; exit 1; }
 
-echo "== VNC ready at vnc://localhost:${PORT}  (no password)"
+echo "== VNC ready at vnc://localhost:${PORT}"
+echo "== password: ${VNC_PASSWORD}"
 if [ "$OPEN" = 1 ]; then
   open "vnc://localhost:${PORT}"
   echo "== opened in Screen Sharing"

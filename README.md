@@ -177,9 +177,15 @@ quietly wrong if the frame or the alignment group is chosen carelessly.
 ./tools/monitor.sh euroc stereo MH01
 ```
 
-Runs the sequence with the viewer on and opens it in Screen Sharing. Rendering
+Runs the sequence with the viewer on and opens it in Screen Sharing; the
+password is `orbslam3r` (override with `ORBSLAM3R_VNC_PASSWORD`). Rendering
 stays in the container on Mesa's llvmpipe and x11vnc exports the screen; only
 pixels cross over, on a port published to 127.0.0.1 only.
+
+The password is not decoration: macOS Screen Sharing never finishes the
+handshake against a server offering only RFB security type 1 (None) — it sits on
+"Connecting…" indefinitely. A password makes x11vnc offer type 2, VNC
+Authentication, which Apple's client does support.
 
 Forwarding X11 to XQuartz does **not** work for this viewer: XQuartz is
 reachable, but its indirect GLX offers only OpenGL 1.4 and Pangolin then finds
