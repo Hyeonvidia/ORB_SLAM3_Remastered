@@ -201,7 +201,7 @@ private:
     void SaveAtlas(int type);
     bool LoadAtlas(int type);
 
-    std::string CalculateCheckSum(std::string filename, int type);
+    std::string CalculateCheckSum(const std::string &filename, int type);
 
     // Input sensor
     eSensor mSensor;

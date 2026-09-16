@@ -10,8 +10,17 @@
 #                      been getting through a leaked `using namespace std`
 #   3. port_fixes.py   targeted source fixes the first two cannot express
 #
-# WARNING: this discards any hand edit in src/ or include/.  Put changes in
-# tools/port_fixes.py instead.
+# THE TREE IS NOW HAND-MAINTAINED.
+#   This pipeline was the bootstrap: it derived src/, include/ and Examples/
+#   from the pristine reference and recorded, as three readable scripts, exactly
+#   what the remaster changes. That job is done. Refactoring is structural work
+#   -- moving types, splitting files, changing ownership -- which cannot be
+#   expressed as string replacements, so from here the tree is edited directly
+#   and this script would destroy that work.
+#
+#   It is kept because it is the record of how the tree was derived, and because
+#   re-deriving from a different upstream pin may one day be worth doing. It now
+#   refuses to run without --bootstrap, on top of --force.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -19,9 +28,26 @@ cd "$ROOT"
 REF=reference/ORB_SLAM3
 [ -d "$REF/src" ] || { echo "missing $REF -- run tools/init_submodules.sh"; exit 1; }
 
-if [ "${1:-}" != "--force" ]; then
-  echo "This rewrites src/ and include/ from $REF, discarding hand edits."
-  echo "Re-run with --force to proceed."
+want_bootstrap=0
+want_force=0
+for arg in "$@"; do
+  case "$arg" in
+    --bootstrap) want_bootstrap=1 ;;
+    --force)     want_force=1 ;;
+  esac
+done
+
+if [ "$want_force" != 1 ] || [ "$want_bootstrap" != 1 ]; then
+  cat >&2 <<'MSG'
+src/, include/ and Examples/ are hand-maintained now -- this pipeline was the
+one-time bootstrap that derived them, and re-running it would discard every
+refactoring since.
+
+Read the header of this file. If you really mean to re-derive the whole tree
+from reference/ORB_SLAM3, discarding local work:
+
+    ./tools/port_all.sh --bootstrap --force
+MSG
   exit 1
 fi
 

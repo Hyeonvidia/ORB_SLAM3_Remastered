@@ -23,7 +23,8 @@
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
+#include <sstream>
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/archive/text_iarchive.hpp>
@@ -1523,44 +1524,46 @@ bool System::LoadAtlas(int type)
     return false;
 }
 
-std::string System::CalculateCheckSum(std::string filename, int type)
+std::string System::CalculateCheckSum(const std::string &filename, int type)
 {
-    std::string checksum = "";
-
-    unsigned char c[MD5_DIGEST_LENGTH];
-
+    // Still MD5, so checksums written by earlier versions still match -- but
+    // through the EVP interface, since OpenSSL 3 deprecated MD5_Init and
+    // friends.
     std::ios_base::openmode flags = std::ios::in;
-    if(type == BINARY_FILE) // Binary file
+    if(type == BINARY_FILE)
         flags = std::ios::in | std::ios::binary;
 
-    std::ifstream f(filename.c_str(), flags);
-    if ( !f.is_open() )
+    std::ifstream f(filename, flags);
+    if(!f.is_open())
     {
         std::cout << "[E] Unable to open the in file " << filename << " for Md5 hash." << std::endl;
-        return checksum;
+        return "";
     }
 
-    MD5_CTX md5Context;
-    char buffer[1024];
+    EVP_MD_CTX *pContext = EVP_MD_CTX_new();
+    if(!pContext)
+        return "";
+    EVP_DigestInit_ex(pContext, EVP_md5(), nullptr);
 
-    MD5_Init (&md5Context);
-    while ( int count = f.readsome(buffer, sizeof(buffer)))
-    {
-        MD5_Update(&md5Context, buffer, count);
-    }
-
+    // read() rather than readsome(): readsome only returns what the stream
+    // happens to have buffered, which the standard leaves implementation
+    // defined.
+    char buffer[4096];
+    while(f.read(buffer, sizeof(buffer)) || f.gcount() > 0)
+        EVP_DigestUpdate(pContext, buffer, static_cast<std::size_t>(f.gcount()));
     f.close();
 
-    MD5_Final(c, &md5Context );
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int nDigestLength = 0;
+    EVP_DigestFinal_ex(pContext, digest, &nDigestLength);
+    EVP_MD_CTX_free(pContext);
 
-    for(int i = 0; i < MD5_DIGEST_LENGTH; i++)
-    {
-        char aux[10];
-        sprintf(aux,"%02x", c[i]);
-        checksum = checksum + aux;
-    }
+    std::ostringstream checksum;
+    checksum << std::hex << std::setfill('0');
+    for(unsigned int i = 0; i < nDigestLength; i++)
+        checksum << std::setw(2) << static_cast<unsigned int>(digest[i]);
 
-    return checksum;
+    return checksum.str();
 }
 
 } //namespace ORB_SLAM
