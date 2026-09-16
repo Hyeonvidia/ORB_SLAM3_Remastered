@@ -6,41 +6,42 @@
 #   ./tools/monitor.sh kitti stereo 04
 #   ./tools/monitor.sh tum rgbd
 #
-#   --no-open   do not launch Screen Sharing; just print the URL
-#   --port N    use a different local port (default 5900)
+# TWO WAYS TO SEE IT
+#   --x11   (default)  the window opens directly on XQuartz, like any other X
+#                      client. Nothing to connect to and the mouse works
+#                      normally, but XQuartz must be running and must accept the
+#                      container (this script runs `xhost +localhost` for you).
+#   --vnc              the container renders to its own Xvfb and x11vnc exports
+#                      the screen; macOS opens it with Screen Sharing. Useful
+#                      when XQuartz is not installed, or over SSH.
+#
+# In BOTH cases Mesa renders in the container with llvmpipe -- the host GPU is
+# not involved. XQuartz's own GLX only advertises OpenGL 1.4 with no direct
+# rendering, which is not enough for Pangolin, but it never has to be: Mesa
+# rasterises locally and ships finished images to the X server.
+#
+#   --no-open   (vnc) do not launch Screen Sharing; just print the URL
+#   --port N    (vnc) use a different local port (default 5900)
 #
 # The VNC password defaults to "orbslam3r"; override with ORBSLAM3R_VNC_PASSWORD.
 # It is not optional: macOS Screen Sharing never finishes the handshake against
 # a server that offers only RFB security type 1 (None) -- it sits on
-# "Connecting..." forever. Setting a password makes x11vnc offer type 2, VNC
-# Authentication, which Apple's client does support.
-#
-# WHY VNC AND NOT X11
-#   Forwarding X11 to XQuartz does not work for this viewer. XQuartz reaches the
-#   container fine, but its indirect GLX exposes only OpenGL 1.4 with no direct
-#   rendering, and Pangolin then fails to find a usable framebuffer config:
-#
-#       No matching fbConfigs or visuals found
-#       glx: failed to create drisw screen
-#       MESA: error: Failed to attach to x11 shm      (repeatedly)
-#
-#   That is a limit of XQuartz's GLX, not something the container can fix. So
-#   rendering stays inside the container on Mesa's llvmpipe -- where the viewer
-#   already works -- and x11vnc exports the Xvfb screen. Only pixels cross over,
-#   and macOS has a VNC client built in.
-#
-#   The port is published on 127.0.0.1 only, so the screen is not reachable from
-#   the network.
+# "Connecting..." forever. A password makes x11vnc offer type 2, VNC
+# Authentication, which Apple's client does support. The port is published on
+# 127.0.0.1 only either way.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 PORT=5900
 OPEN=1
+MODE=x11
 VNC_PASSWORD="${ORBSLAM3R_VNC_PASSWORD:-orbslam3r}"
 ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
+    --x11)     MODE=x11; shift ;;
+    --vnc)     MODE=vnc; shift ;;
     --no-open) OPEN=0; shift ;;
     --port)    PORT="$2"; shift 2 ;;
     *)         ARGS+=("$1"); shift ;;
@@ -100,17 +101,55 @@ NAME=orbslam3r-monitor
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 mkdir -p "results/live/$TAG"
 
-echo "== ${DATASET} ${CONFIG} ${SEQ}  ->  results/live/${TAG}"
-docker run -d --rm --name "$NAME" \
-  --platform linux/arm64 \
-  --shm-size=2g \
+echo "== ${DATASET} ${CONFIG} ${SEQ}  ->  results/live/${TAG}  [${MODE}]"
+
+COMMON=(
+  --rm --name "$NAME"
+  --platform linux/arm64
+  --shm-size=2g
+  -e ORBSLAM3R_VIEWER=1
+  -v "${ROOT}:/workspace"
+  -v "$(cd "$ROOT/.." && pwd)/Datasets:/datasets:ro"
+  -w /workspace
+)
+
+cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+trap cleanup EXIT INT TERM
+
+if [ "$MODE" = x11 ]; then
+  if ! pgrep -qx Xquartz 2>/dev/null; then
+    echo "== starting XQuartz"
+    open -a XQuartz
+    for _ in $(seq 1 30); do pgrep -qx Xquartz 2>/dev/null && break; sleep 1; done
+  fi
+  pgrep -qx Xquartz 2>/dev/null || { echo "XQuartz did not start; try --vnc" >&2; exit 1; }
+  # The container connects over TCP, so the X server has to allow it.
+  /opt/X11/bin/xhost +localhost >/dev/null 2>&1 || true
+
+  echo "== the window will open on your desktop via XQuartz"
+  echo "== Ctrl-C stops the run"
+  echo
+  # Mesa logs "Failed to attach to x11 shm" once per frame: MIT-SHM cannot work
+  # over a TCP X connection, so it falls back to sending images. Harmless, and
+  # far too noisy to keep.
+  docker run "${COMMON[@]}" \
+    -e DISPLAY=host.docker.internal:0 \
+    -e ORBSLAM3R_DISPLAY_MODE=x11 \
+    -e LIBGL_ALWAYS_SOFTWARE=1 \
+    orbslam3r/dev:24.04 \
+    bash -c "
+      exec /workspace/build/bin/${BIN} ${SLAM_ARGS} \
+        > /workspace/results/live/${TAG}/run.log 2>&1
+    " 2>&1 | grep -v "Failed to attach to x11 shm" || true
+  tail -n 20 "results/live/${TAG}/run.log" 2>/dev/null || true
+  exit 0
+fi
+
+# --- VNC -------------------------------------------------------------------
+docker run -d "${COMMON[@]}" \
   -p "127.0.0.1:${PORT}:5900" \
-  -e ORBSLAM3R_VIEWER=1 \
   -e XVFB_RESOLUTION=1600x900x24 \
   -e "VNC_PASSWORD=${VNC_PASSWORD}" \
-  -v "${ROOT}:/workspace" \
-  -v "$(cd "$ROOT/.." && pwd)/Datasets:/datasets:ro" \
-  -w /workspace \
   orbslam3r/dev:24.04 \
   bash -c "
     # The entrypoint has already started Xvfb on \$DISPLAY.
@@ -122,9 +161,6 @@ docker run -d --rm --name "$NAME" \
     exec /workspace/build/bin/${BIN} ${SLAM_ARGS} \
       > /workspace/results/live/${TAG}/run.log 2>&1
   " >/dev/null
-
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
-trap cleanup EXIT INT TERM
 
 # Wait for x11vnc to accept connections rather than guessing at a sleep.
 for _ in $(seq 1 60); do

@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(glprobe LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+list(APPEND CMAKE_PREFIX_PATH /opt/orbslam3r)
+find_package(Pangolin REQUIRED)
+add_executable(probe probe.cpp)
+target_link_libraries(probe PRIVATE ${Pangolin_LIBRARIES})

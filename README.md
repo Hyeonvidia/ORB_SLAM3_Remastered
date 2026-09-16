@@ -177,20 +177,26 @@ quietly wrong if the frame or the alignment group is chosen carelessly.
 ./tools/monitor.sh euroc stereo MH01
 ```
 
-Runs the sequence with the viewer on and opens it in Screen Sharing; the
-password is `orbslam3r` (override with `ORBSLAM3R_VNC_PASSWORD`). Rendering
-stays in the container on Mesa's llvmpipe and x11vnc exports the screen; only
-pixels cross over, on a port published to 127.0.0.1 only.
+By default the window opens straight on your desktop through XQuartz — nothing
+to connect to, and the mouse works normally. The script starts XQuartz and runs
+`xhost +localhost` if needed.
 
-The password is not decoration: macOS Screen Sharing never finishes the
-handshake against a server offering only RFB security type 1 (None) — it sits on
-"Connecting…" indefinitely. A password makes x11vnc offer type 2, VNC
-Authentication, which Apple's client does support.
+```bash
+./tools/monitor.sh --vnc euroc stereo MH01   # Screen Sharing instead
+```
 
-Forwarding X11 to XQuartz does **not** work for this viewer: XQuartz is
-reachable, but its indirect GLX offers only OpenGL 1.4 and Pangolin then finds
-no usable framebuffer config (`No matching fbConfigs or visuals found`). That is
-a limit of XQuartz's GLX, not of the container.
+The `--vnc` path renders to the container's own Xvfb and exports it with x11vnc,
+for when XQuartz is not installed or you are on a remote machine. The password
+is `orbslam3r` (`ORBSLAM3R_VNC_PASSWORD` overrides), and it is not decoration:
+macOS Screen Sharing never finishes the handshake against a server offering only
+RFB security type 1 (None) — it sits on "Connecting…" indefinitely. A password
+makes x11vnc offer type 2, VNC Authentication, which Apple's client supports.
+The port is published to 127.0.0.1 only.
+
+Either way Mesa rasterises **inside the container** with llvmpipe; the host GPU
+is not involved. XQuartz's own GLX advertises only OpenGL 1.4 with no direct
+rendering, which would not be enough for Pangolin — but it never has to be,
+because only finished images cross to the X server.
 
 Not ported: the RealSense examples (need librealsense2, unavailable for
 linux/arm64 here and with no camera reachable from a container) and the ROS
