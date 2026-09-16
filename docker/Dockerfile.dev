@@ -20,6 +20,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 # capture whatever is stacked on top of it. Moving and raising windows is the
 # only way to capture them cleanly.
 #
+# Xephyr is a nested X server: it gives Mesa a local framebuffer to render into
+# -- where MIT-SHM works, because it is the same kernel -- and repaints its own
+# window on the outer X server with ordinary drawing requests. That is the one
+# transport that could put the viewer on a macOS desktop directly, since Mesa
+# presenting straight to XQuartz fails its per-frame shm attach.
+#
 # x11vnc exports the Xvfb screen over VNC. That is how the viewer is watched
 # live from macOS: XQuartz cannot host it (its indirect GLX offers only OpenGL
 # 1.4, and Pangolin finds no usable fbConfig), but macOS ships a VNC client, so
@@ -35,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bash-completion \
         xdotool \
         x11vnc \
+        xserver-xephyr \
     && rm -rf /var/lib/apt/lists/*
 
 # ccache keeps incremental rebuilds of the SLAM library cheap across container

@@ -10,28 +10,27 @@
 #   --vnc   (default)  the container renders to its own Xvfb and x11vnc exports
 #                      the screen; macOS opens it with Screen Sharing. This is
 #                      the path that is verified to work.
-#   --x11              the window opens directly on XQuartz. It APPEARS, with
-#                      the right title and size, but stays blank on this setup
-#                      -- see below. Kept because it costs nothing and may work
-#                      on a different Mesa or XQuartz.
+#   --x11              a real window on the macOS desktop, via a nested X server.
 #
-# WHY --x11 COMES UP BLANK
-#   Rendering itself is fine: the probe in tools/glprobe reports a correct
-#   viewport, 199 frames and no GL error, and the same code renders correctly
-#   into Xvfb. What fails is presentation. Mesa logs
+# WHY --x11 GOES THROUGH XEPHYR RATHER THAN STRAIGHT TO XQUARTZ
+#   Pointing the viewer at XQuartz directly gets you a window that appears with
+#   the right title and size and then stays blank. Rendering is not the problem
+#   -- the probe in tools/glprobe reports a correct viewport, frames drawn and
+#   no GL error -- presentation is. Mesa logs
 #
 #       MESA: error: Failed to attach to x11 shm
 #
-#   exactly once per frame and the window never fills in. MIT-SHM cannot work
-#   here in principle -- the container is a Linux VM and XQuartz is macOS, so
-#   there is no shared memory segment to attach to -- and Mesa 25's software X11
-#   path has no working fallback for it. LIBGL_KOPPER_DISABLE,
-#   LIBGL_DRI3_DISABLE, GALLIUM_DRIVER=softpipe and LIBGL_ALWAYS_INDIRECT all
-#   leave the behaviour unchanged.
+#   exactly once per frame, and the window never fills in. MIT-SHM cannot work
+#   between the container's Linux VM and macOS, since there is no shared memory
+#   segment across two kernels, and Mesa 25's software X11 path has no working
+#   fallback. LIBGL_KOPPER_DISABLE, LIBGL_DRI3_DISABLE, GALLIUM_DRIVER=softpipe
+#   and LIBGL_ALWAYS_INDIRECT all leave it unchanged.
 #
-#   The VNC path sidesteps this entirely: Xvfb is a real framebuffer inside the
-#   container, so Mesa presents to it normally and only finished pixels cross to
-#   the host.
+#   Xephyr breaks the chain in the right place. It is an X server that runs in
+#   the container and owns a framebuffer there, so Mesa presents to it locally
+#   with shared memory working normally. Xephyr then repaints its own window on
+#   XQuartz -- and unlike Mesa it handles the missing extension, logging
+#   "Xephyr unable to use SHM XImages" once and falling back to plain XPutImage.
 #
 #   --no-open   (vnc) do not launch Screen Sharing; just print the URL
 #   --port N    (vnc) use a different local port (default 5900)
@@ -139,18 +138,23 @@ if [ "$MODE" = x11 ]; then
   # The container connects over TCP, so the X server has to allow it.
   /opt/X11/bin/xhost +localhost >/dev/null 2>&1 || true
 
-  echo "== the window will open on your desktop via XQuartz"
+  echo "== a window titled 'ORB-SLAM3 Viewer' will open on your desktop"
   echo "== Ctrl-C stops the run"
   echo
-  # Mesa logs "Failed to attach to x11 shm" once per frame: MIT-SHM cannot work
-  # over a TCP X connection, so it falls back to sending images. Harmless, and
-  # far too noisy to keep.
   docker run "${COMMON[@]}" \
-    -e DISPLAY=host.docker.internal:0 \
-    -e ORBSLAM3R_DISPLAY_MODE=x11 \
+    -e OUTER_DISPLAY=host.docker.internal:0 \
     -e LIBGL_ALWAYS_SOFTWARE=1 \
     orbslam3r/dev:24.04 \
     bash -c "
+      # Xephyr owns a framebuffer in this container, so Mesa presents to it with
+      # shared memory working; Xephyr repaints its own window on XQuartz with
+      # plain X requests, which need none.
+      DISPLAY=\$OUTER_DISPLAY Xephyr :100 -screen 1600x900 \
+          -title 'ORB-SLAM3 Viewer' -resizeable -nolisten tcp \
+          > /workspace/results/live/${TAG}/xephyr.log 2>&1 &
+      export DISPLAY=:100
+      for _ in \$(seq 1 30); do xdpyinfo >/dev/null 2>&1 && break; sleep 1; done
+      xdpyinfo >/dev/null 2>&1 || { echo 'Xephyr did not start'; cat /workspace/results/live/${TAG}/xephyr.log; exit 1; }
       exec /workspace/build/bin/${BIN} ${SLAM_ARGS} \
         > /workspace/results/live/${TAG}/run.log 2>&1
     " 2>&1 | grep -v "Failed to attach to x11 shm" || true

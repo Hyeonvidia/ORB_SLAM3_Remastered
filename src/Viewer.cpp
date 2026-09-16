@@ -238,7 +238,16 @@ void Viewer::Run()
     // a negative aspect, which was harmless when the 3D view owned the
     // whole window but covers its neighbours once it shares one.
     // (View::Resize, thirdparty/Pangolin/components/pango_display/src/view.cpp:75)
-    const double kMapViewRight = 0.58;
+    // How much of the width right of the menu the 3D map gets. The map
+    // is the thing you actually watch, so it takes the larger share;
+    // ORBSLAM3R_MAP_VIEW_FRACTION retunes it without a rebuild.
+    double dMapViewFraction = 0.72;
+    if(const char* f = std::getenv("ORBSLAM3R_MAP_VIEW_FRACTION"))
+    {
+        const double v = std::atof(f);
+        if(v > 0.2 && v < 0.95) dMapViewFraction = v;
+    }
+    const double kMapViewRight = dMapViewFraction;
 
     pangolin::View& d_cam = pangolin::CreateDisplay()
             .SetBounds(0.0, 1.0, pangolin::Attach::Pix(kMenuPanelWidth),
