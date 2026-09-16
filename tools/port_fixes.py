@@ -665,9 +665,197 @@ def fix_kitti_stereo_viewpoint(text, path):
     return text.replace(old, new, 1), 1
 
 
+# ---------------------------------------------------------------------------
+def add_viewer_log_panel(text, path):
+    """Show the system's own log messages inside the viewer.
+
+    ORB-SLAM3 reports everything worth watching -- map creation, IMU
+    initialisation, loop closures, resets -- through Verbose::PrintMess and
+    plain std::cout, which is invisible once the viewer is the only window you
+    are looking at.
+
+    A streambuf tee on std::cout keeps a ring buffer of recent lines while
+    still passing everything through to the real stdout, so run.log is
+    unaffected. The viewer draws the tail of that buffer in the space under the
+    tracked frame, which the frame's aspect ratio leaves empty anyway.
+    """
+    if path.name != "Viewer.cpp":
+        return text, 0
+
+    n = 0
+
+    # --- the tee ------------------------------------------------------------
+    anchor = "namespace ORB_SLAM3\n{"
+    if anchor not in text or "class ViewerLogTap" in text:
+        return text, 0
+
+    tap = '''namespace ORB_SLAM3
+{
+
+namespace
+{
+
+// Copies everything written to a stream into a bounded ring of recent lines,
+// while still forwarding it to wherever it was going. Installed on std::cout by
+// the viewer so it can show what the system is reporting; stdout, and so
+// run.log, is unchanged.
+class ViewerLogTap : public std::streambuf
+{
+public:
+    explicit ViewerLogTap(std::ostream &stream, std::size_t nMaxLines = 300)
+        : mStream(stream), mpOriginal(stream.rdbuf()), mnMaxLines(nMaxLines)
+    {
+        mStream.rdbuf(this);
+    }
+
+    ~ViewerLogTap() override
+    {
+        mStream.rdbuf(mpOriginal);
+    }
+
+    ViewerLogTap(const ViewerLogTap &) = delete;
+    ViewerLogTap &operator=(const ViewerLogTap &) = delete;
+
+    std::vector<std::string> Tail(std::size_t n) const
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        if(mvLines.size() <= n)
+            return mvLines;
+        return std::vector<std::string>(mvLines.end() - n, mvLines.end());
+    }
+
+protected:
+    int overflow(int c) override
+    {
+        if(c == EOF)
+            return c;
+
+        // Forward first, so a crash in the ring buffer cannot swallow output.
+        mpOriginal->sputc(static_cast<char>(c));
+
+        std::unique_lock<std::mutex> lock(mMutex);
+        if(c == '\\n')
+        {
+            if(!msPartial.empty())
+            {
+                mvLines.push_back(msPartial);
+                msPartial.clear();
+                if(mvLines.size() > mnMaxLines)
+                    mvLines.erase(mvLines.begin());
+            }
+        }
+        else if(c != '\\r')
+        {
+            msPartial.push_back(static_cast<char>(c));
+        }
+        return c;
+    }
+
+    int sync() override { return mpOriginal->pubsync(); }
+
+private:
+    std::ostream &mStream;
+    std::streambuf *mpOriginal;
+    std::size_t mnMaxLines;
+    mutable std::mutex mMutex;
+    std::vector<std::string> mvLines;
+    std::string msPartial;
+};
+
+}  // namespace
+'''
+    text = text.replace(anchor, tap, 1)
+    n += 1
+
+    # --- the view -----------------------------------------------------------
+    old = ("    pangolin::GlTexture imageTexture;\n"
+           "    int nLastImageCols = 0, nLastImageRows = 0;")
+    new = ("    // The frame's aspect ratio leaves the bottom of the right column\n"
+           "    // empty; the log goes there.\n"
+           "    pangolin::View& d_log = pangolin::CreateDisplay()\n"
+           "            .SetBounds(0.0, 0.0, kMapViewRight, 1.0);\n"
+           "\n"
+           "    // Installed for the lifetime of the viewer, then std::cout is\n"
+           "    // restored.\n"
+           "    ViewerLogTap logTap(std::cout);\n"
+           "\n"
+           "    pangolin::GlTexture imageTexture;\n"
+           "    int nLastImageCols = 0, nLastImageRows = 0;")
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    # --- give the frame an exact slot and the log the rest ------------------
+    old = ("                    d_cam.SetBounds(0.0, 1.0,\n"
+           "                                    pangolin::Attach::Pix(kMenuPanelWidth),\n"
+           "                                    dSplit, 1024.0f/768.0f);\n"
+           "                    d_img.SetBounds(0.0, 1.0, dSplit, 1.0);\n"
+           "                    d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);\n")
+    new = ("                    d_cam.SetBounds(0.0, 1.0,\n"
+           "                                    pangolin::Attach::Pix(kMenuPanelWidth),\n"
+           "                                    dSplit, 1024.0f/768.0f);\n"
+           "\n"
+           "                    // Give the frame a slot exactly its own shape, so\n"
+           "                    // nothing is letterboxed, and hand the space below\n"
+           "                    // it to the log.\n"
+           "                    const int nWinHeight = pangolin::DisplayBase().v.h > 0\n"
+           "                            ? pangolin::DisplayBase().v.h : kWindowHeight;\n"
+           "                    const double dFrameHeightFrac = std::min(\n"
+           "                            0.92, static_cast<double>(toShow.rows) / nWinHeight);\n"
+           "                    const double dFrameBottom = 1.0 - dFrameHeightFrac;\n"
+           "                    d_img.SetBounds(dFrameBottom, 1.0, dSplit, 1.0);\n"
+           "                    d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);\n"
+           "                    d_log.SetBounds(0.0, dFrameBottom, dSplit, 1.0);\n")
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    # --- draw it ------------------------------------------------------------
+    old = ("        pangolin::FinishFrame();\n"
+           "\n"
+           "        // cv::waitKey(mT) used to pace this loop")
+    new = ("        // The log, newest line at the bottom, in the space under the frame.\n"
+           "        if(d_log.v.h > 0)\n"
+           "        {\n"
+           "            d_log.Activate();\n"
+           "            pangolin::GlFont& font = pangolin::default_font();\n"
+           "            const float fLineHeight = font.Height() + 2.0f;\n"
+           "            const int nLines = std::max(\n"
+           "                    1, static_cast<int>(d_log.v.h / fLineHeight) - 1);\n"
+           "            const std::vector<std::string> vLines = logTap.Tail(nLines);\n"
+           "            glColor3f(0.15f, 0.15f, 0.15f);\n"
+           "            float fY = static_cast<float>(d_log.v.b) +\n"
+           "                       fLineHeight * (vLines.size() - 1) + 4.0f;\n"
+           "            for(const std::string &line : vLines)\n"
+           "            {\n"
+           "                font.Text(line).DrawWindow(\n"
+           "                        static_cast<float>(d_log.v.l) + 6.0f, fY);\n"
+           "                fY -= fLineHeight;\n"
+           "            }\n"
+           "        }\n"
+           "\n"
+           "        pangolin::FinishFrame();\n"
+           "\n"
+           "        // cv::waitKey(mT) used to pace this loop")
+    if old in text:
+        text = text.replace(old, new, 1)
+        n += 1
+
+    if n:
+        for inc, after in (("#include <streambuf>", "#include <mutex>"),
+                           ("#include <vector>", "#include <mutex>"),
+                           ("#include <pangolin/display/default_font.h>",
+                            "#include <pangolin/display/process.h>")):
+            if inc not in text:
+                text = text.replace(after, after + "\n" + inc, 1)
+
+    return text, n
+
+
 FIXES = [
     ("COMPILEDWITHC11 guards", drop_compiledwithc11_guards),
     ("viewer single-window layout", fix_viewer_layout),
+    ("viewer log panel", add_viewer_log_panel),
     ("unmatched glEnd in MapDrawer", fix_unmatched_glend),
     ("rectified-stereo startup crash", fix_rectified_stereo_crash),
     ("KITTI00-02 stereo ViewpointY", fix_kitti_stereo_viewpoint),

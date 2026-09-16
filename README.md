@@ -187,8 +187,10 @@ window to activate it first; macOS swallows the activating click unless
 *Click-through inactive windows* is enabled in XQuartz's settings.
 
 The tracked frame is shown at the video's own resolution — 1:1, so the status
-line FrameDrawer burns into it stays legible — and the 3D map takes the rest.
-`ORBSLAM3R_MAP_VIEW_FRACTION` pins the split instead, without a rebuild:
+line FrameDrawer burns into it stays legible — the 3D map takes the width the
+frame does not need, and the system's own log messages fill the space under the
+frame that its aspect ratio leaves empty. `ORBSLAM3R_MAP_VIEW_FRACTION` pins the
+split instead, without a rebuild:
 
 ```bash
 ORBSLAM3R_MAP_VIEW_FRACTION=0.85 ./tools/monitor.sh --x11 euroc stereo MH01

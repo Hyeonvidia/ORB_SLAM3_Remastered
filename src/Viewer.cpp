@@ -20,10 +20,13 @@
 #include "Viewer.hpp"
 #include <pangolin/pangolin.h>
 #include <pangolin/display/process.h>
+#include <pangolin/display/default_font.h>
 
 #include <algorithm>
 #include <chrono>
 #include <mutex>
+#include <vector>
+#include <streambuf>
 #include <thread>
 
 #include <iostream>
@@ -32,6 +35,79 @@
 
 namespace ORB_SLAM3
 {
+
+namespace
+{
+
+// Copies everything written to a stream into a bounded ring of recent lines,
+// while still forwarding it to wherever it was going. Installed on std::cout by
+// the viewer so it can show what the system is reporting; stdout, and so
+// run.log, is unchanged.
+class ViewerLogTap : public std::streambuf
+{
+public:
+    explicit ViewerLogTap(std::ostream &stream, std::size_t nMaxLines = 300)
+        : mStream(stream), mpOriginal(stream.rdbuf()), mnMaxLines(nMaxLines)
+    {
+        mStream.rdbuf(this);
+    }
+
+    ~ViewerLogTap() override
+    {
+        mStream.rdbuf(mpOriginal);
+    }
+
+    ViewerLogTap(const ViewerLogTap &) = delete;
+    ViewerLogTap &operator=(const ViewerLogTap &) = delete;
+
+    std::vector<std::string> Tail(std::size_t n) const
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        if(mvLines.size() <= n)
+            return mvLines;
+        return std::vector<std::string>(mvLines.end() - n, mvLines.end());
+    }
+
+protected:
+    int overflow(int c) override
+    {
+        if(c == EOF)
+            return c;
+
+        // Forward first, so a crash in the ring buffer cannot swallow output.
+        mpOriginal->sputc(static_cast<char>(c));
+
+        std::unique_lock<std::mutex> lock(mMutex);
+        if(c == '\n')
+        {
+            if(!msPartial.empty())
+            {
+                mvLines.push_back(msPartial);
+                msPartial.clear();
+                if(mvLines.size() > mnMaxLines)
+                    mvLines.erase(mvLines.begin());
+            }
+        }
+        else if(c != '\r')
+        {
+            msPartial.push_back(static_cast<char>(c));
+        }
+        return c;
+    }
+
+    int sync() override { return mpOriginal->pubsync(); }
+
+private:
+    std::ostream &mStream;
+    std::streambuf *mpOriginal;
+    std::size_t mnMaxLines;
+    mutable std::mutex mMutex;
+    std::vector<std::string> mvLines;
+    std::string msPartial;
+};
+
+}  // namespace
+
 
 Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking, const std::string &strSettingPath, Settings* settings):
     both(false), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer),mpMapDrawer(pMapDrawer), mpTracker(pTracking),
@@ -263,6 +339,15 @@ void Viewer::Run()
     pangolin::View& d_img = pangolin::CreateDisplay()
             .SetBounds(0.0, 1.0, kMapViewRight, 1.0);
 
+    // The frame's aspect ratio leaves the bottom of the right column
+    // empty; the log goes there.
+    pangolin::View& d_log = pangolin::CreateDisplay()
+            .SetBounds(0.0, 0.0, kMapViewRight, 1.0);
+
+    // Installed for the lifetime of the viewer, then std::cout is
+    // restored.
+    ViewerLogTap logTap(std::cout);
+
     pangolin::GlTexture imageTexture;
     int nLastImageCols = 0, nLastImageRows = 0;
 
@@ -429,8 +514,18 @@ void Viewer::Run()
                     d_cam.SetBounds(0.0, 1.0,
                                     pangolin::Attach::Pix(kMenuPanelWidth),
                                     dSplit, 1024.0f/768.0f);
-                    d_img.SetBounds(0.0, 1.0, dSplit, 1.0);
+
+                    // Give the frame a slot exactly its own shape, so
+                    // nothing is letterboxed, and hand the space below
+                    // it to the log.
+                    const int nWinHeight = pangolin::DisplayBase().v.h > 0
+                            ? pangolin::DisplayBase().v.h : kWindowHeight;
+                    const double dFrameHeightFrac = std::min(
+                            0.92, static_cast<double>(toShow.rows) / nWinHeight);
+                    const double dFrameBottom = 1.0 - dFrameHeightFrac;
+                    d_img.SetBounds(dFrameBottom, 1.0, dSplit, 1.0);
                     d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
+                    d_log.SetBounds(0.0, dFrameBottom, dSplit, 1.0);
                 }
 
                 nLastImageCols = toShow.cols;
@@ -446,6 +541,26 @@ void Viewer::Run()
             glColor3f(1.0f,1.0f,1.0f);
             // cv::Mat rows run top-down; OpenGL texture rows bottom-up.
             imageTexture.RenderToViewportFlipY();
+        }
+
+        // The log, newest line at the bottom, in the space under the frame.
+        if(d_log.v.h > 0)
+        {
+            d_log.Activate();
+            pangolin::GlFont& font = pangolin::default_font();
+            const float fLineHeight = font.Height() + 2.0f;
+            const int nLines = std::max(
+                    1, static_cast<int>(d_log.v.h / fLineHeight) - 1);
+            const std::vector<std::string> vLines = logTap.Tail(nLines);
+            glColor3f(0.15f, 0.15f, 0.15f);
+            float fY = static_cast<float>(d_log.v.b) +
+                       fLineHeight * (vLines.size() - 1) + 4.0f;
+            for(const std::string &line : vLines)
+            {
+                font.Text(line).DrawWindow(
+                        static_cast<float>(d_log.v.l) + 6.0f, fY);
+                fY -= fLineHeight;
+            }
         }
 
         pangolin::FinishFrame();
