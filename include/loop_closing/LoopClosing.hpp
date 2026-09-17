@@ -85,8 +85,6 @@ namespace ORB_SLAM3
 
         bool isFinished();
 
-        Viewer* mpViewer;
-
 #ifdef REGISTER_TIMES
 
         std::vector<double> vdDataQuery_ms;
