@@ -38,16 +38,16 @@ namespace ORB_SLAM3
 
     Map::Map()
         : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mnMapChange(0),
-          mpFirstRegionKF(static_cast<KeyFrame*>(NULL)), mbFail(false), mIsInUse(false), mHasTumbnail(false),
-          mbBad(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
+          mpFirstRegionKF(static_cast<KeyFrame*>(NULL)), mbFail(false), mIsInUse(false), mbBad(false),
+          mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
     {
         mnId = nNextId++;
     }
 
     Map::Map(int initKFid)
         : mnInitKFid(initKFid), mnMaxKFid(initKFid), /*mnLastLoopKFid(initKFid),*/ mnBigChangeIdx(0), mIsInUse(false),
-          mHasTumbnail(false), mbBad(false), mbImuInitialized(false), mpFirstRegionKF(static_cast<KeyFrame*>(NULL)),
-          mnMapChange(0), mbFail(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
+          mbBad(false), mbImuInitialized(false), mpFirstRegionKF(static_cast<KeyFrame*>(NULL)), mnMapChange(0),
+          mbFail(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
     {
         mnId = nNextId++;
     }

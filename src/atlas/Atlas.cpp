@@ -17,7 +17,6 @@
 */
 
 #include "atlas/Atlas.hpp"
-#include "viewer/Viewer.hpp"
 
 #include "camera/GeometricCamera.hpp"
 #include "camera/Pinhole.hpp"
@@ -42,7 +41,7 @@ namespace ORB_SLAM3
         mpCurrentMap = static_cast<Map*>(NULL);
     }
 
-    Atlas::Atlas(int initKFid) : mnLastInitKFidMap(initKFid), mHasViewer(false)
+    Atlas::Atlas(int initKFid) : mnLastInitKFidMap(initKFid)
     {
         mpCurrentMap = static_cast<Map*>(NULL);
         CreateNewMap();
@@ -77,9 +76,6 @@ namespace ORB_SLAM3
 
             mpCurrentMap->SetStoredMap();
             std::cout << "Stored map with ID: " << mpCurrentMap->GetId() << std::endl;
-
-            //if(mHasViewer)
-            //    mpViewer->AddMapToCreateThumbnail(mpCurrentMap);
         }
         std::cout << "Creation of new map with last KF id: " << mnLastInitKFidMap << std::endl;
 
@@ -105,12 +101,6 @@ namespace ORB_SLAM3
     {
         std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mnLastInitKFidMap;
-    }
-
-    void Atlas::SetViewer(Viewer* pViewer)
-    {
-        mpViewer = pViewer;
-        mHasViewer = true;
     }
 
     void Atlas::AddKeyFrame(KeyFrame* pKF)
