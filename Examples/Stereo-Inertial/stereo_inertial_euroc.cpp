@@ -242,13 +242,17 @@ void LoadImages(const std::string &strPathLeft, const std::string &strPathRight,
 {
     std::ifstream fTimes;
     fTimes.open(strPathTimes.c_str());
+    if(!fTimes.is_open())
+    {
+        std::cerr << "ERROR: could not open " << strPathTimes << std::endl;
+        return;
+    }
     vTimeStamps.reserve(5000);
     vstrImageLeft.reserve(5000);
     vstrImageRight.reserve(5000);
-    while(!fTimes.eof())
+    std::string s;
+    while(std::getline(fTimes, s))
     {
-        std::string s;
-        std::getline(fTimes, s);
         if(!s.empty())
         {
             std::stringstream ss;
@@ -267,14 +271,18 @@ void LoadIMU(const std::string &strImuPath, std::vector<double> &vTimeStamps, st
 {
     std::ifstream fImu;
     fImu.open(strImuPath.c_str());
+    if(!fImu.is_open())
+    {
+        std::cerr << "ERROR: could not open " << strImuPath << std::endl;
+        return;
+    }
     vTimeStamps.reserve(5000);
     vAcc.reserve(5000);
     vGyro.reserve(5000);
 
-    while(!fImu.eof())
+    std::string s;
+    while(std::getline(fImu, s))
     {
-        std::string s;
-        std::getline(fImu, s);
         if(s[0] == '#')
             continue;
 

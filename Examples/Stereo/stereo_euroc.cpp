@@ -83,6 +83,11 @@ int main(int argc, char** argv)
         std::cout << "LOADED!" << std::endl;
 
         nImages[seq] = vstrImageLeft[seq].size();
+        if(nImages[seq] <= 0)
+        {
+            std::cerr << "ERROR: Failed to load images for sequence " << seq << std::endl;
+            return 1;
+        }
         tot_images += nImages[seq];
     }
 
@@ -188,13 +193,17 @@ void LoadImages(const std::string &strPathLeft, const std::string &strPathRight,
 {
     std::ifstream fTimes;
     fTimes.open(strPathTimes.c_str());
+    if(!fTimes.is_open())
+    {
+        std::cerr << "ERROR: could not open " << strPathTimes << std::endl;
+        return;
+    }
     vTimeStamps.reserve(5000);
     vstrImageLeft.reserve(5000);
     vstrImageRight.reserve(5000);
-    while(!fTimes.eof())
+    std::string s;
+    while(std::getline(fTimes, s))
     {
-        std::string s;
-        std::getline(fTimes, s);
         if(!s.empty())
         {
             std::stringstream ss;

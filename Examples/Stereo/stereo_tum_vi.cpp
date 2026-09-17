@@ -222,34 +222,6 @@ int main(int argc, char** argv)
     return 0;
 }
 
-/*void LoadImages(const string &strPathLeft, const string &strPathRight, const string &strPathTimes,
-                vector<string> &vstrImageLeft, vector<string> &vstrImageRight, vector<double> &vTimeStamps)
-{
-    ifstream fTimes;
-    cout << strPathLeft << endl;
-    cout << strPathRight << endl;
-    cout << strPathTimes << endl;
-    fTimes.open(strPathTimes.c_str());
-    vTimeStamps.reserve(5000);
-    vstrImageLeft.reserve(5000);
-    vstrImageRight.reserve(5000);
-    while(!fTimes.eof())
-    {
-        string s;
-        getline(fTimes,s);
-        if(!s.empty())
-        {
-            stringstream ss;
-            ss << s;
-            vstrImageLeft.push_back(strPathLeft + "/" + ss.str() + ".png");
-            vstrImageRight.push_back(strPathRight + "/" + ss.str() + ".png");
-            double t;
-            ss >> t;
-            vTimeStamps.push_back(t/1e9);
-        }
-    }
-}*/
-
 void LoadImages(const std::string &strPathLeft, const std::string &strPathRight, const std::string &strPathTimes,
                 std::vector<std::string> &vstrImageLeft, std::vector<std::string> &vstrImageRight,
                 std::vector<double> &vTimeStamps)
@@ -259,14 +231,17 @@ void LoadImages(const std::string &strPathLeft, const std::string &strPathRight,
     std::cout << strPathRight << std::endl;
     std::cout << strPathTimes << std::endl;
     fTimes.open(strPathTimes.c_str());
+    if(!fTimes.is_open())
+    {
+        std::cerr << "ERROR: could not open " << strPathTimes << std::endl;
+        return;
+    }
     vTimeStamps.reserve(5000);
     vstrImageLeft.reserve(5000);
     vstrImageRight.reserve(5000);
-    while(!fTimes.eof())
+    std::string s;
+    while(std::getline(fTimes, s))
     {
-        std::string s;
-        std::getline(fTimes, s);
-
         if(!s.empty())
         {
             if(s[0] == '#')

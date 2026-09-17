@@ -149,10 +149,14 @@ void LoadImages(const std::string &strAssociationFilename, std::vector<std::stri
 {
     std::ifstream fAssociation;
     fAssociation.open(strAssociationFilename.c_str());
-    while(!fAssociation.eof())
+    if(!fAssociation.is_open())
     {
-        std::string s;
-        std::getline(fAssociation, s);
+        std::cerr << "ERROR: could not open " << strAssociationFilename << std::endl;
+        return;
+    }
+    std::string s;
+    while(std::getline(fAssociation, s))
+    {
         if(!s.empty())
         {
             std::stringstream ss;

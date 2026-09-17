@@ -48,6 +48,11 @@ int main(int argc, char** argv)
     LoadImages(std::string(argv[3]), vstrImageFilenames, vTimestamps);
 
     int nImages = vstrImageFilenames.size();
+    if(nImages <= 0)
+    {
+        std::cerr << "ERROR: Failed to load images" << std::endl;
+        return 1;
+    }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::MONOCULAR, true);
@@ -148,10 +153,14 @@ void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &
     std::ifstream fTimes;
     std::string strPathTimeFile = strPathToSequence + "/times.txt";
     fTimes.open(strPathTimeFile.c_str());
-    while(!fTimes.eof())
+    if(!fTimes.is_open())
     {
-        std::string s;
-        std::getline(fTimes, s);
+        std::cerr << "ERROR: could not open " << strPathTimeFile << std::endl;
+        return;
+    }
+    std::string s;
+    while(std::getline(fTimes, s))
+    {
         if(!s.empty())
         {
             std::stringstream ss;
