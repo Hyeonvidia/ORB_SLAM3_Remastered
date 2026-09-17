@@ -37,11 +37,11 @@ namespace ORB_SLAM3
 
         EdgeSE3ProjectXYZOnlyPose() {}
 
-        bool read(std::istream &is);
+        bool read(std::istream &is) override;
 
-        bool write(std::ostream &os) const;
+        bool write(std::ostream &os) const override;
 
-        void computeError()
+        void computeError() override
         {
             const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
             Eigen::Vector2d obs(_measurement);
@@ -54,7 +54,7 @@ namespace ORB_SLAM3
             return (v1->estimate().map(Xw))(2) > 0.0;
         }
 
-        virtual void linearizeOplus();
+        virtual void linearizeOplus() override;
 
         Eigen::Vector3d Xw;
         GeometricCamera* pCamera;
@@ -67,11 +67,11 @@ namespace ORB_SLAM3
 
         EdgeSE3ProjectXYZOnlyPoseToBody() {}
 
-        bool read(std::istream &is);
+        bool read(std::istream &is) override;
 
-        bool write(std::ostream &os) const;
+        bool write(std::ostream &os) const override;
 
-        void computeError()
+        void computeError() override
         {
             const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
             Eigen::Vector2d obs(_measurement);
@@ -84,7 +84,7 @@ namespace ORB_SLAM3
             return ((mTrl * v1->estimate()).map(Xw))(2) > 0.0;
         }
 
-        virtual void linearizeOplus();
+        virtual void linearizeOplus() override;
 
         Eigen::Vector3d Xw;
         GeometricCamera* pCamera;
@@ -100,11 +100,11 @@ namespace ORB_SLAM3
 
         EdgeSE3ProjectXYZ();
 
-        bool read(std::istream &is);
+        bool read(std::istream &is) override;
 
-        bool write(std::ostream &os) const;
+        bool write(std::ostream &os) const override;
 
-        void computeError()
+        void computeError() override
         {
             const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[1]);
             const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
@@ -119,7 +119,7 @@ namespace ORB_SLAM3
             return ((v1->estimate().map(v2->estimate()))(2) > 0.0);
         }
 
-        virtual void linearizeOplus();
+        virtual void linearizeOplus() override;
 
         GeometricCamera* pCamera;
     };
@@ -132,11 +132,11 @@ namespace ORB_SLAM3
 
         EdgeSE3ProjectXYZToBody();
 
-        bool read(std::istream &is);
+        bool read(std::istream &is) override;
 
-        bool write(std::ostream &os) const;
+        bool write(std::ostream &os) const override;
 
-        void computeError()
+        void computeError() override
         {
             const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[1]);
             const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
@@ -151,7 +151,7 @@ namespace ORB_SLAM3
             return ((mTrl * v1->estimate()).map(v2->estimate()))(2) > 0.0;
         }
 
-        virtual void linearizeOplus();
+        virtual void linearizeOplus() override;
 
         GeometricCamera* pCamera;
         g2o::SE3Quat mTrl;
@@ -162,12 +162,12 @@ namespace ORB_SLAM3
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         VertexSim3Expmap();
-        virtual bool read(std::istream &is);
-        virtual bool write(std::ostream &os) const;
+        virtual bool read(std::istream &is) override;
+        virtual bool write(std::ostream &os) const override;
 
-        virtual void setToOriginImpl() { _estimate = g2o::Sim3(); }
+        virtual void setToOriginImpl() override { _estimate = g2o::Sim3(); }
 
-        virtual void oplusImpl(const double* update_)
+        virtual void oplusImpl(const double* update_) override
         {
             Eigen::Map<g2o::Vector7d> update(const_cast<double*>(update_));
 
@@ -189,10 +189,10 @@ namespace ORB_SLAM3
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         EdgeSim3ProjectXYZ();
-        virtual bool read(std::istream &is);
-        virtual bool write(std::ostream &os) const;
+        virtual bool read(std::istream &is) override;
+        virtual bool write(std::ostream &os) const override;
 
-        void computeError()
+        void computeError() override
         {
             const ORB_SLAM3::VertexSim3Expmap* v1 = static_cast<const ORB_SLAM3::VertexSim3Expmap*>(_vertices[1]);
             const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
@@ -210,10 +210,10 @@ namespace ORB_SLAM3
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         EdgeInverseSim3ProjectXYZ();
-        virtual bool read(std::istream &is);
-        virtual bool write(std::ostream &os) const;
+        virtual bool read(std::istream &is) override;
+        virtual bool write(std::ostream &os) const override;
 
-        void computeError()
+        void computeError() override
         {
             const ORB_SLAM3::VertexSim3Expmap* v1 = static_cast<const ORB_SLAM3::VertexSim3Expmap*>(_vertices[1]);
             const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
