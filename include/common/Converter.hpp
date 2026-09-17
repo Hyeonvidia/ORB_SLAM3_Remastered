@@ -23,7 +23,6 @@
 
 #include <Eigen/Dense>
 #include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/compat.hpp>
 
 #include <sophus/geometry.hpp>
 #include <sophus/sim3.hpp>

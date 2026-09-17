@@ -21,7 +21,6 @@
 
 #include <g2o/core/base_unary_edge.h>
 #include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/compat.hpp>
 
 #include <Eigen/Geometry>
 #include "camera/GeometricCamera.hpp"

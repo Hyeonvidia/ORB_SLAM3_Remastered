@@ -36,8 +36,6 @@
 namespace ORB_SLAM3
 {
 
-    class System;
-
     //TODO: change to double instead of float
 
     class Settings

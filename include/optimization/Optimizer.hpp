@@ -32,7 +32,6 @@
 #include <g2o/core/optimization_algorithm_levenberg.h>
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
 #include <g2o/core/robust_kernel_impl.h>
 #include <g2o/solvers/dense/linear_solver_dense.h>
 
