@@ -74,6 +74,12 @@ namespace ORB_SLAM3
         System(const std::string &strVocFile, const std::string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer = true, const int initFr = 0, const std::string &strSequence = std::string());
 
+        // Waits for the worker threads. Shutdown() is still the way to end a
+        // session -- it also saves the atlas -- but every example main has error
+        // paths that return without calling it, and those used to leave three
+        // threads running through a System that was being destroyed.
+        ~System();
+
         // Proccess the given stereo frame. Images must be synchronized and rectified.
         // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
         // Returns the camera pose (empty if tracking fails).
@@ -206,13 +212,19 @@ namespace ORB_SLAM3
 
         // System threads: Local Mapping, Loop Closing, Viewer.
         // The Tracking thread "lives" in the main execution thread that creates the System object.
-        // Null by default, because mptViewer is only assigned when the viewer is
-        // enabled: headless runs left it holding whatever the allocation
-        // contained, which did not matter while nothing read it and does now
-        // that Shutdown() joins these.
-        std::thread* mptLocalMapping = nullptr;
-        std::thread* mptLoopClosing = nullptr;
-        std::thread* mptViewer = nullptr;
+        //
+        // Held by value. A default-constructed std::thread already is the "no
+        // thread" state, so the viewer being disabled needs no null test -- the
+        // pointers these replaced had to be given an explicit nullptr because a
+        // headless run otherwise left mptViewer holding whatever the allocation
+        // contained. Owning them also means they cannot be leaked, which all
+        // three were, and makes System non-copyable, which nothing relied on.
+        std::thread mtLocalMapping;
+        std::thread mtLoopClosing;
+        std::thread mtViewer;
+
+        // Asks the three to finish and waits for them. Idempotent.
+        void StopAndJoinThreads();
 
         // Reset flag
         std::mutex mMutexReset;

@@ -213,7 +213,7 @@ namespace ORB_SLAM3
         mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor == MONOCULAR || mSensor == IMU_MONOCULAR,
                                          mSensor == IMU_MONOCULAR || mSensor == IMU_STEREO || mSensor == IMU_RGBD,
                                          strSequence);
-        mptLocalMapping = new std::thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
+        mtLocalMapping = std::thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
         mpLocalMapper->mInitFr = initFr;
         if(settings_)
             mpLocalMapper->mThFarPoints = settings_->thFarPoints();
@@ -232,7 +232,7 @@ namespace ORB_SLAM3
         // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
         mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor != MONOCULAR,
                                        activeLC); // mSensor!=MONOCULAR);
-        mptLoopClosing = new std::thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
+        mtLoopClosing = std::thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         //Set pointers between threads
         mpTracker->SetLocalMapper(mpLocalMapper);
@@ -258,7 +258,7 @@ namespace ORB_SLAM3
         //if(false) // TODO
         {
             mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile, settings_);
-            mptViewer = new std::thread(&Viewer::Run, mpViewer);
+            mtViewer = std::thread(&Viewer::Run, mpViewer);
             mpTracker->SetViewer(mpViewer);
             mpViewer->both = mpFrameDrawer->both;
         }
@@ -546,6 +546,54 @@ namespace ORB_SLAM3
         mbResetActiveMap = true;
     }
 
+    System::~System()
+    {
+        // Shutdown() is where a session ends, but every one of the twelve example
+        // mains has error paths that never reach it: 14 "return 1"s inside their
+        // tracking loops, all on a failed image load, each of them leaving this
+        // System with three threads still running through it while it is
+        // destroyed. This closes them without touching a single main. After a
+        // Shutdown() the threads are already gone and this does nothing.
+        StopAndJoinThreads();
+    }
+
+    // Ask the worker threads to finish, then wait until they actually have.
+    //
+    // join(), not a poll on isFinished(): the flag says the Run loop broke, join
+    // says the thread has gone. The two worker loops test CheckFinish() every
+    // 3-5 ms and break, including from inside LocalMapping's stopped-wait -- but
+    // the LoopClosing join is not that quick, because LoopClosing::Run() stops
+    // and joins the global bundle adjustment before it reports finished, and g2o
+    // only notices the stop flag at points of its own choosing. Under a second on
+    // the KITTI sequences measured; not instant.
+    //
+    // Idempotent: RequestFinish only raises a flag, and a thread that has been
+    // joined is no longer joinable.
+    void System::StopAndJoinThreads()
+    {
+        mpLocalMapper->RequestFinish();
+        mpLoopCloser->RequestFinish();
+        if(mpViewer)
+            mpViewer->RequestFinish();
+
+        // Local Mapping first: a global bundle adjustment that is past its stop
+        // check waits for Local Mapping to stop or finish, and LoopClosing::Run()
+        // waits for that BA.
+        for(std::thread* t : {&mtLocalMapping, &mtLoopClosing, &mtViewer})
+        {
+            // Never the calling thread. The viewer's Stop button runs Shutdown()
+            // on the viewer thread itself (Viewer.cpp, menuStop), and a thread
+            // joining itself is the deadlock the standard reports as
+            // resource_deadlock_would_occur. It has had RequestFinish() either
+            // way, so its loop ends at the next check and the join lands on the
+            // second Shutdown(), the one main() makes -- or on ~System, which
+            // runs on the thread that owns the System and so is never one of
+            // these three.
+            if(t->joinable() && t->get_id() != std::this_thread::get_id())
+                t->join();
+        }
+    }
+
     void System::Shutdown()
     {
         {
@@ -555,13 +603,6 @@ namespace ORB_SLAM3
 
         std::cout << "Shutdown" << std::endl;
 
-        mpLocalMapper->RequestFinish();
-        mpLoopCloser->RequestFinish();
-        if(mpViewer)
-            mpViewer->RequestFinish();
-
-        // Then actually wait for them, which is what this function was missing.
-        //
         // Upstream asked the three threads to finish and carried straight on --
         // the viewer was never even asked, and the loop that waited for the
         // other two was commented out. So Shutdown() returned with all three
@@ -570,30 +611,7 @@ namespace ORB_SLAM3
         // threads that were still using what they were tearing down. That is
         // the intermittent segfault at exit, which lands *after* the trajectory
         // is safely on disk and so looks like it does not matter.
-        //
-        // join(), not a poll on isFinished(): the flag says the Run loop broke,
-        // join says the thread has actually gone. The two worker loops test
-        // CheckFinish() every 3-5 ms and break, including from inside
-        // LocalMapping's stopped-wait -- but the LoopClosing join is not that
-        // quick, because LoopClosing::Run() now stops and joins the global
-        // bundle adjustment before it reports finished, and g2o only notices the
-        // stop flag at points of its own choosing. Under a second on the KITTI
-        // sequences measured; not instant.
-        for(std::thread* t : {mptLocalMapping, mptLoopClosing, mptViewer})
-        {
-            // Never the calling thread. The viewer's Stop button runs Shutdown()
-            // on the viewer thread itself (Viewer.cpp, menuStop), and a thread
-            // joining itself is the deadlock the standard reports as
-            // resource_deadlock_would_occur. It has had RequestFinish() either
-            // way, so its loop ends at the next check and the join lands on the
-            // second Shutdown(), the one main() makes.
-            if(t && t->joinable() && t->get_id() != std::this_thread::get_id())
-                t->join();
-        }
-
-        // The global bundle adjustment runs on a fourth thread, owned by
-        // LoopClosing. Joining mptLoopClosing covers it too: LoopClosing::Run()
-        // stops and joins that thread before it reports itself finished.
+        StopAndJoinThreads();
 
         if(!mStrSaveAtlasToFile.empty())
         {
