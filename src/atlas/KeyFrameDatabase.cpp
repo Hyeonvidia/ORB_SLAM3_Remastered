@@ -879,9 +879,10 @@ namespace ORB_SLAM3
 
     void KeyFrameDatabase::SetORBVocabulary(ORBVocabulary* pORBVoc)
     {
-        ORBVocabulary** ptr;
-        ptr = (ORBVocabulary**)(&mpVoc);
-        *ptr = pORBVoc;
+        // mpVoc is a pointer to const, not a const pointer, and this is not a
+        // const member function -- so this is an ordinary assignment. The cast
+        // through ORBVocabulary** was doing nothing but hiding that.
+        mpVoc = pORBVoc;
 
         mvInvertedFile.clear();
         mvInvertedFile.resize(mpVoc->size());

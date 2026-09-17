@@ -116,9 +116,11 @@ void serializeDiagonalMatrix(Archive &ar, Eigen::DiagonalMatrix<float, dim> &D, 
 
         if (Archive::is_loading::value)
         {
-            cv::Mat* ptr;
-            ptr = (cv::Mat*)( &mat );
-            *ptr = matAux;
+            // The same const_cast the rest of the archive uses to load into const
+            // members -- KeyFrame::serialize writes it out at every one of them.
+            // Spelled as a C-style cast through a pointer, it was the one place
+            // grepping for const_cast would not find.
+            const_cast<cv::Mat &>(mat) = matAux;
         }
         // clang-format on
     }
@@ -164,9 +166,7 @@ void serializeDiagonalMatrix(Archive &ar, Eigen::DiagonalMatrix<float, dim> &D, 
 
         if (Archive::is_loading::value)
         {
-            std::vector<cv::KeyPoint> *ptr;
-            ptr = (std::vector<cv::KeyPoint>*)( &vKP );
-            *ptr = vKPaux;
+            const_cast<std::vector<cv::KeyPoint> &>(vKP) = vKPaux;
         }
         // clang-format on
     }
