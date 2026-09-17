@@ -65,6 +65,9 @@ namespace ORB_SLAM3
 
         std::string msStatusText;
 
+        // System::eSensor, taken from Tracking. -1 until the first update.
+        int mnSensor = -1;
+
         // Info of the frame to be drawn
         cv::Mat mIm, mImRight;
         int N;

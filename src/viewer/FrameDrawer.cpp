@@ -18,6 +18,7 @@
 
 #include "viewer/FrameDrawer.hpp"
 #include "tracking/Tracking.hpp"
+#include "System.hpp"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -329,9 +330,36 @@ namespace ORB_SLAM3
         return im;
     }
 
+    // Which sensors the run was started with. Constant for the life of the
+    // system, but the viewer is often the only thing being looked at, and the
+    // trajectory alone does not say whether the IMU was in the loop.
+    static const char* SensorName(int nSensor)
+    {
+        switch(nSensor)
+        {
+            case System::MONOCULAR:
+                return "MONOCULAR";
+            case System::STEREO:
+                return "STEREO";
+            case System::RGBD:
+                return "RGB-D";
+            case System::IMU_MONOCULAR:
+                return "MONOCULAR-INERTIAL";
+            case System::IMU_STEREO:
+                return "STEREO-INERTIAL";
+            case System::IMU_RGBD:
+                return "RGB-D-INERTIAL";
+            default:
+                return "";
+        }
+    }
+
     void FrameDrawer::UpdateStatusText(int nState)
     {
         std::stringstream s;
+        if(const char* pSensor = SensorName(mnSensor); pSensor[0] != '\0')
+            s << pSensor << "  |  ";
+
         if(nState == Tracking::NO_IMAGES_YET)
             s << " WAITING FOR IMAGES";
         else if(nState == Tracking::NOT_INITIALIZED)
@@ -372,6 +400,7 @@ namespace ORB_SLAM3
     void FrameDrawer::Update(Tracking* pTracker)
     {
         std::unique_lock<std::mutex> lock(mMutex);
+        mnSensor = pTracker->mSensor;
         pTracker->mImGray.copyTo(mIm);
         mvCurrentKeys = pTracker->mCurrentFrame.mvKeys;
         mThDepth = pTracker->mCurrentFrame.mThDepth;

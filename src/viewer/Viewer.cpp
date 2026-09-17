@@ -628,25 +628,16 @@ namespace ORB_SLAM3
                 imageTexture.RenderToViewportFlipY();
             }
 
-            // The status row: what the system is doing on the left, how the map is
-            // being looked at on the right. The view mode belongs here rather than
-            // floating over the map, because "Camera View" and "Top View" are
-            // momentary buttons -- they pop back up and leave nothing on screen
-            // saying which one is in effect.
+            // The status row, drawn by the viewer at window resolution rather
+            // than into the image: written into the image it is part of the
+            // texture and comes apart whenever the frame is scaled under 1:1.
             if(d_status.v.h > 0)
             {
                 d_status.Activate();
                 pangolin::GlFont &statusFont = pangolin::default_font();
                 const float fY = static_cast<float>(d_status.v.b) + (d_status.v.h - statusFont.Height()) * 0.5f + 1.0f;
-
                 glColor3f(0.10f, 0.10f, 0.10f);
                 statusFont.Text(mpFrameDrawer->StatusText()).DrawWindow(static_cast<float>(d_status.v.l) + 8.0f, fY);
-
-                const std::string sMode = std::string(bCameraView ? "Camera View" : "Top View") +
-                                          (menuFollowCamera ? "  |  following" : "  |  free look");
-                pangolin::GlText mode = statusFont.Text(sMode);
-                glColor3f(0.45f, 0.45f, 0.45f);
-                mode.DrawWindow(static_cast<float>(d_status.v.l + d_status.v.w) - mode.Width() - 10.0f, fY);
             }
 
             // The log, newest line at the bottom, in the space under the frame.
