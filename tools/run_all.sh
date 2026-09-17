@@ -28,7 +28,13 @@ dataset_plan "$WHICH" > "$OUT/plan.full.txt"
 touch "$OUT/status.txt"
 # Drop anything already completed so an interrupted run resumes.
 awk -F' ' '{print $1}' "$OUT/status.txt" | sort -u > "$OUT/.done"
-awk -F'|' 'NR==FNR {done[$1]; next} !($1 in done)' "$OUT/.done" "$OUT/plan.full.txt" > "$OUT/plan.txt"
+# Read the done-list in BEGIN rather than with the usual NR==FNR two-file
+# trick: awk never enters the body for an empty first file, so NR==FNR stayed
+# true while reading the plan and every run looked already-done. A fresh matrix
+# -- the case where status.txt is empty -- therefore ran nothing and exited 0.
+awk -F'|' -v donefile="$OUT/.done" \
+    'BEGIN { while ((getline line < donefile) > 0) done[line] } !($1 in done)' \
+    "$OUT/plan.full.txt" > "$OUT/plan.txt"
 TOTAL=$(wc -l < "$OUT/plan.txt" | tr -d ' ')
 DONE=$(wc -l < "$OUT/.done" | tr -d ' ')
 echo "== ${TOTAL} runs left (${DONE} already done), ${JOBS} at a time -> results/matrix/"

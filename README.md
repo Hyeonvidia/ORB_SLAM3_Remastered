@@ -201,14 +201,39 @@ alignment and ground-truth frame each configuration actually calls for:
 
 | Dataset | Runs | Median ATE | Median ATE / path |
 |---|---:|---:|---:|
-| EuRoC (11 seq × 4 configs) | 44 | **0.043 m** | — |
-| KITTI odometry 00–10 (mono + stereo) | 22 | 3.09 m | **0.204 %** |
+| EuRoC (11 seq × 4 configs) | 44 | **0.045 m** | — |
+| KITTI odometry 00–10 (mono + stereo) | 22 | 3.42 m | **0.228 %** |
 | TUM RGB-D fr1_desk | 3 | **0.017 m** | — |
 
-KITTI stereo alone lands between 0.03 % and 0.59 % of path length (median
-0.09 %). Monocular is far worse there, as expected: no metric scale over
+KITTI stereo alone lands between 0.03 % and 0.62 % of path length (median
+0.11 %). Monocular is far worse there, as expected: no metric scale over
 kilometre-long drives, with the 2.5 km highway sequence 01 the known failure at
 11.6 %.
+
+Read those as one sample, not as the system's output. ORB-SLAM3 is several
+threads racing, and how many keyframes a run ends up with depends on whether
+Local Mapping kept up -- so the numbers move when nothing in the code has. Two
+matrices built from the same binary and run the same way differ per cell by:
+
+| Configuration | Cells | Median ΔATE | Worst cell |
+|---|---:|---:|---:|
+| RGB-D | 2 | 3 % | 5 % |
+| stereo | 22 | 9 % | 38 % |
+| stereo-inertial | 11 | 12 % | 63 % |
+| mono | 23 | 15 % | **19x** |
+| mono-inertial | 11 | 22 % | **7x** |
+
+The two worst are not noise around a value, they are different runs: KITTI 08
+mono scored 2.76 m once and 55.5 m the next time, because the first lost
+tracking at 253 keyframes and the second kept all 2922. V103 mono swings 8x the
+same way. Those cells cannot support a claim about a code change in either
+direction.
+
+The practical consequence, learned the hard way: a single re-run of the matrix
+cannot tell you whether a change regressed anything. Run it twice on the same
+build first, and compare the change against that spread -- and do not compare a
+JOBS=4 matrix against sequential runs, which produce 17 % more keyframes on the
+same sequence and are a different measurement.
 
 ```bash
 ./tools/run_all.sh                                   # the whole matrix

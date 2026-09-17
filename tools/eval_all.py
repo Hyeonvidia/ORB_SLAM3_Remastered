@@ -35,7 +35,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path("/workspace")
-MATRIX = ROOT / "results/matrix"
+# Which run directory to score. Defaults to the matrix, but a path can be given
+# so that a repeat of a handful of sequences can be scored the same way -- the
+# alternative is an ad-hoc evaluate_ate.py call, which silently uses the wrong
+# ground-truth frame and the wrong alignment group and produces a number 50x off.
+MATRIX = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "results/matrix"
 DATASETS = Path("/datasets")
 EVAL = ROOT / "tools/evaluate_ate.py"
 
