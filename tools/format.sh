@@ -46,13 +46,17 @@ case "$MODE" in
     # --dry-run -Werror reports differences on stderr and exits non-zero
     # without writing anything.
     OUT=$(./docker/run.sh -- bash -c "$FIND | xargs -0 clang-format --dry-run -Werror --style=file" 2>&1 || true)
-    N=$(printf '%s\n' "$OUT" | grep -c "code should be clang-formatted" || true)
+    # Unique paths, not matching lines: clang-format reports one line per
+    # violation, so counting matches called a single file with four misplaced
+    # line breaks "4 files".
+    N=$(printf '%s\n' "$OUT" | grep "code should be clang-formatted" | cut -d: -f1 | sort -u | grep -c . || true)
     if [ "$N" = "0" ]; then
       echo "clean: every source already matches .clang-format"
       exit 0
     fi
     [ "$MODE" = diff ] && printf '%s\n' "$OUT"
-    echo "${N} files differ from .clang-format  (run ./tools/format.sh to fix)"
+    [ "$N" = 1 ] && SUBJ="1 file differs" || SUBJ="${N} files differ"
+    echo "${SUBJ} from .clang-format  (run ./tools/format.sh to fix)"
     exit 1
     ;;
 esac
