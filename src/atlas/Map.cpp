@@ -42,7 +42,6 @@ namespace ORB_SLAM3
           mbBad(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
     {
         mnId = nNextId++;
-        mThumbnail = static_cast<GLubyte*>(NULL);
     }
 
     Map::Map(int initKFid)
@@ -51,7 +50,6 @@ namespace ORB_SLAM3
           mnMapChange(0), mbFail(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false)
     {
         mnId = nNextId++;
-        mThumbnail = static_cast<GLubyte*>(NULL);
     }
 
     Map::~Map()
@@ -61,10 +59,6 @@ namespace ORB_SLAM3
 
         //TODO: erase all keyframes from memory
         mspKeyFrames.clear();
-
-        if(mThumbnail)
-            delete mThumbnail;
-        mThumbnail = static_cast<GLubyte*>(NULL);
 
         mvpReferenceMapPoints.clear();
         mvpKeyFrameOrigins.clear();

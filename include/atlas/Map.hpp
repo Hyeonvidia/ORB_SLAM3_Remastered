@@ -20,7 +20,6 @@
 #define MAP_H
 
 #include <set>
-#include <pangolin/pangolin.h>
 #include <mutex>
 
 #include <boost/serialization/base_object.hpp>
@@ -100,7 +99,6 @@ namespace ORB_SLAM3
         void SetCurrentMap();
         void SetStoredMap();
 
-        bool HasThumbnail();
         bool IsInUse();
 
         void SetBad();
@@ -190,7 +188,6 @@ namespace ORB_SLAM3
         int mnBigChangeIdx;
 
         // View of the map in aerial sight (for the AtlasViewer)
-        GLubyte* mThumbnail;
 
         bool mIsInUse;
         bool mHasTumbnail;

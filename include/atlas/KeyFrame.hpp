@@ -22,7 +22,6 @@
 #include <DBoW2/BowVector.h>
 #include <DBoW2/FeatureVector.h>
 #include "atlas/ORBVocabulary.hpp"
-#include "features/ORBextractor.hpp"
 #include "common/ImuTypes.hpp"
 #include "common/NavState.hpp"
 
