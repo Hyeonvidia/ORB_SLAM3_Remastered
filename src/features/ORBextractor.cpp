@@ -65,8 +65,6 @@
 #include <list>
 #include <utility>
 
-using namespace cv;
-
 // WHERE THIS FILE CAME FROM
 //
 // The BSD notice above is OpenCV's, and the ancestor is OpenCV *2.4.x*
@@ -97,7 +95,7 @@ namespace ORB_SLAM3
     const int HALF_PATCH_SIZE = 15;
     const int EDGE_THRESHOLD = 19;
 
-    static float IC_Angle(const Mat &image, Point2f pt, const std::vector<int> &u_max)
+    static float IC_Angle(const cv::Mat &image, cv::Point2f pt, const std::vector<int> &u_max)
     {
         int m_01 = 0, m_10 = 0;
 
@@ -123,11 +121,11 @@ namespace ORB_SLAM3
             m_01 += v * v_sum;
         }
 
-        return fastAtan2((float)m_01, (float)m_10);
+        return cv::fastAtan2((float)m_01, (float)m_10);
     }
 
     const float factorPI = (float)(CV_PI / 180.f);
-    static void computeOrbDescriptor(const KeyPoint &kpt, const Mat &img, const Point* pattern, uchar* desc)
+    static void computeOrbDescriptor(const cv::KeyPoint &kpt, const cv::Mat &img, const cv::Point* pattern, uchar* desc)
     {
         float angle = (float)kpt.angle * factorPI;
         float a = (float)cos(angle), b = (float)sin(angle);
@@ -474,7 +472,7 @@ namespace ORB_SLAM3
         mnFeaturesPerLevel[nlevels - 1] = std::max(nfeatures - sumFeatures, 0);
 
         const int npoints = 512;
-        const Point* pattern0 = (const Point*)bit_pattern_31_;
+        const cv::Point* pattern0 = (const cv::Point*)bit_pattern_31_;
         std::copy(pattern0, pattern0 + npoints, std::back_inserter(pattern));
 
         //This is for orientation
@@ -497,9 +495,10 @@ namespace ORB_SLAM3
         }
     }
 
-    static void computeOrientation(const Mat &image, std::vector<KeyPoint> &keypoints, const std::vector<int> &umax)
+    static void computeOrientation(const cv::Mat &image, std::vector<cv::KeyPoint> &keypoints,
+                                   const std::vector<int> &umax)
     {
-        for(std::vector<KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
+        for(std::vector<cv::KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
             keypoint != keypointEnd; ++keypoint)
         {
             keypoint->angle = IC_Angle(image, keypoint->pt, umax);
@@ -810,7 +809,7 @@ namespace ORB_SLAM3
         return vResultKeys;
     }
 
-    void ORBextractor::ComputeKeyPointsOctTree(std::vector<std::vector<KeyPoint>> &allKeypoints)
+    void ORBextractor::ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint>> &allKeypoints)
     {
         allKeypoints.resize(nlevels);
 
@@ -900,7 +899,7 @@ namespace ORB_SLAM3
                 }
             }
 
-            std::vector<KeyPoint> &keypoints = allKeypoints[level];
+            std::vector<cv::KeyPoint> &keypoints = allKeypoints[level];
             keypoints.reserve(nfeatures);
 
             keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX, minBorderY, maxBorderY,
@@ -924,32 +923,32 @@ namespace ORB_SLAM3
             computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
     }
 
-    static void computeDescriptors(const Mat &image, std::vector<KeyPoint> &keypoints, Mat &descriptors,
-                                   const std::vector<Point> &pattern)
+    static void computeDescriptors(const cv::Mat &image, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors,
+                                   const std::vector<cv::Point> &pattern)
     {
-        descriptors = Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
+        descriptors = cv::Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
 
         for(size_t i = 0; i < keypoints.size(); i++)
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
-    int ORBextractor::operator()(InputArray _image, InputArray _mask, std::vector<KeyPoint> &_keypoints,
-                                 OutputArray _descriptors, std::vector<int> &vLappingArea)
+    int ORBextractor::operator()(cv::InputArray _image, cv::InputArray _mask, std::vector<cv::KeyPoint> &_keypoints,
+                                 cv::OutputArray _descriptors, std::vector<int> &vLappingArea)
     {
         //cout << "[ORBextractor]: Max Features: " << nfeatures << endl;
         if(_image.empty())
             return -1;
 
-        Mat image = _image.getMat();
+        cv::Mat image = _image.getMat();
         assert(image.type() == CV_8UC1);
 
         // Pre-compute the scale pyramid
         ComputePyramid(image);
 
-        std::vector<std::vector<KeyPoint>> allKeypoints;
+        std::vector<std::vector<cv::KeyPoint>> allKeypoints;
         ComputeKeyPointsOctTree(allKeypoints);
 
-        Mat descriptors;
+        cv::Mat descriptors;
 
         int nkeypoints = 0;
         for(int level = 0; level < nlevels; ++level)
@@ -971,26 +970,26 @@ namespace ORB_SLAM3
         int monoIndex = 0, stereoIndex = nkeypoints - 1;
         for(int level = 0; level < nlevels; ++level)
         {
-            std::vector<KeyPoint> &keypoints = allKeypoints[level];
+            std::vector<cv::KeyPoint> &keypoints = allKeypoints[level];
             int nkeypointsLevel = (int)keypoints.size();
 
             if(nkeypointsLevel == 0)
                 continue;
 
             // preprocess the resized image
-            Mat workingMat = mvImagePyramid[level].clone();
-            GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
+            cv::Mat workingMat = mvImagePyramid[level].clone();
+            GaussianBlur(workingMat, workingMat, cv::Size(7, 7), 2, 2, cv::BORDER_REFLECT_101);
 
             // Compute the descriptors
-            //Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-            Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
+            //cv::Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
+            cv::Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
             computeDescriptors(workingMat, keypoints, desc, pattern);
 
             offset += nkeypointsLevel;
 
             float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
             int i = 0;
-            for(std::vector<KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
+            for(std::vector<cv::KeyPoint>::iterator keypoint = keypoints.begin(), keypointEnd = keypoints.end();
                 keypoint != keypointEnd; ++keypoint)
             {
                 // Scale keypoint coordinates
@@ -1023,23 +1022,23 @@ namespace ORB_SLAM3
         for(int level = 0; level < nlevels; ++level)
         {
             float scale = mvInvScaleFactor[level];
-            Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
-            Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
-            Mat temp(wholeSize, image.type()), masktemp;
-            mvImagePyramid[level] = temp(Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
+            cv::Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
+            cv::Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
+            cv::Mat temp(wholeSize, image.type()), masktemp;
+            mvImagePyramid[level] = temp(cv::Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
 
             // Compute the resized image
             if(level != 0)
             {
-                resize(mvImagePyramid[level - 1], mvImagePyramid[level], sz, 0, 0, INTER_LINEAR);
+                resize(mvImagePyramid[level - 1], mvImagePyramid[level], sz, 0, 0, cv::INTER_LINEAR);
 
                 copyMakeBorder(mvImagePyramid[level], temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                               EDGE_THRESHOLD, BORDER_REFLECT_101 + BORDER_ISOLATED);
+                               EDGE_THRESHOLD, cv::BORDER_REFLECT_101 + cv::BORDER_ISOLATED);
             }
             else
             {
                 copyMakeBorder(image, temp, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD,
-                               BORDER_REFLECT_101);
+                               cv::BORDER_REFLECT_101);
             }
         }
     }
