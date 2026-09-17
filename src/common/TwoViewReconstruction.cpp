@@ -16,9 +16,8 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "tracking/TwoViewReconstruction.hpp"
+#include "common/TwoViewReconstruction.hpp"
 
-#include "common/Converter.hpp"
 #include "common/GeometricTools.hpp"
 
 #include <DUtils/Random.h>

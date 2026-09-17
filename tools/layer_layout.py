@@ -41,14 +41,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 LAYERS = {
     "atlas": ["Atlas", "Map", "MapPoint", "KeyFrame", "KeyFrameDatabase", "ORBVocabulary"],
-    "tracking": ["Tracking", "Frame", "TwoViewReconstruction", "MLPnPsolver"],
+    "tracking": ["Tracking", "Frame", "MLPnPsolver"],
     "local_mapping": ["LocalMapping"],
     "loop_closing": ["LoopClosing", "Sim3Solver"],
     "optimization": ["Optimizer", "G2oTypes", "OptimizableTypes"],
     "camera": ["GeometricCamera", "Pinhole", "KannalaBrandt8"],
     "features": ["ORBextractor", "ORBmatcher"],
     "common": ["Converter", "GeometricTools", "Settings", "Verbose",
-               "SerializationUtils", "ImuTypes"],
+               "SerializationUtils", "ImuTypes", "TwoViewReconstruction"],
     "viewer": ["Viewer", "FrameDrawer", "MapDrawer"],
 }
 # System sits above the layers and stays at the root of each tree.

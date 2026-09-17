@@ -24,7 +24,7 @@
 #include <istream>
 #include <ostream>
 #include <vector>
-#include "tracking/TwoViewReconstruction.hpp"
+#include "common/TwoViewReconstruction.hpp"
 
 //BOOST_CLASS_EXPORT_IMPLEMENT(ORB_SLAM3::Pinhole)
 

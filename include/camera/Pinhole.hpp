@@ -22,7 +22,7 @@
 #include <assert.h>
 
 #include "camera/GeometricCamera.hpp"
-#include "tracking/TwoViewReconstruction.hpp"
+#include "common/TwoViewReconstruction.hpp"
 
 #include <istream>
 #include <ostream>
@@ -65,8 +65,10 @@ namespace ORB_SLAM3
             mnType = CAM_PINHOLE;
         }
 
-        // Defined in the .cpp: unique_ptr needs TwoViewReconstruction
-        // complete to destroy it, and this header only forward-declares it.
+        // Defined in the .cpp: unique_ptr needs TwoViewReconstruction complete
+        // to destroy it. The header does include it -- a forward declaration
+        // would not be enough while the inline default constructor below can
+        // throw, because the cleanup it needs destroys the member.
         ~Pinhole() override;
 
         cv::Point2f project(const cv::Point3f &p3D);
