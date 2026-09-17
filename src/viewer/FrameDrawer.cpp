@@ -22,6 +22,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <algorithm>
 #include <mutex>
 
 #include <map>
@@ -359,14 +360,27 @@ namespace ORB_SLAM3
             s << " LOADING ORB VOCABULARY. PLEASE WAIT...";
         }
 
-        int baseline = 0;
-        cv::Size textSize = cv::getTextSize(s.str(), cv::FONT_HERSHEY_PLAIN, 1, 1, &baseline);
+        msStatusText = s.str();
 
-        imText = cv::Mat(im.rows + textSize.height + 10, im.cols, im.type());
+        // Sized from the image rather than fixed, because the viewer scales the
+        // whole frame to fit its row. FONT_HERSHEY_PLAIN at scale 1 with
+        // single-pixel strokes was what broke: resampling to anything under 1:1
+        // drops half of a one-pixel stroke and the line comes out in fragments.
+        // A stroke two pixels wide survives that, and tying the size to the
+        // image height keeps it proportionate on a 370-row KITTI frame and a
+        // 480-row EuRoC one alike.
+        const double dFontScale = std::max(0.9, im.rows / 480.0);
+        const int nThickness = 2;
+        int baseline = 0;
+        const cv::Size textSize = cv::getTextSize(msStatusText, cv::FONT_HERSHEY_SIMPLEX, dFontScale, nThickness,
+                                                  &baseline);
+        mnStatusBandRows = textSize.height + baseline + 10;
+
+        imText = cv::Mat(im.rows + mnStatusBandRows, im.cols, im.type());
         im.copyTo(imText.rowRange(0, im.rows).colRange(0, im.cols));
-        imText.rowRange(im.rows, imText.rows) = cv::Mat::zeros(textSize.height + 10, im.cols, im.type());
-        cv::putText(imText, s.str(), cv::Point(5, imText.rows - 5), cv::FONT_HERSHEY_PLAIN, 1,
-                    cv::Scalar(255, 255, 255), 1, 8);
+        imText.rowRange(im.rows, imText.rows) = cv::Mat::zeros(mnStatusBandRows, im.cols, im.type());
+        cv::putText(imText, msStatusText, cv::Point(6, imText.rows - baseline - 4), cv::FONT_HERSHEY_SIMPLEX,
+                    dFontScale, cv::Scalar(255, 255, 255), nThickness, cv::LINE_AA);
     }
 
     void FrameDrawer::Update(Tracking* pTracker)

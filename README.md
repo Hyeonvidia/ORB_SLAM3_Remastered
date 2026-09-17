@@ -221,9 +221,27 @@ quietly wrong if the frame or the alignment group is chosen carelessly.
 ## Watching the viewer live from macOS
 
 ```bash
-./tools/monitor.sh euroc stereo-inertial V203          # a window on your desktop
-./tools/monitor.sh --vnc euroc stereo-inertial V203    # or over Screen Sharing
+./tools/run_gui.sh euroc                     # every EuRoC sequence, all 4 configurations
+./tools/run_gui.sh euroc stereo              # one configuration
+./tools/run_gui.sh kitti stereo 04 05        # named sequences
+./tools/run_gui.sh --list all                # what would run, without running it
+./tools/run_gui.sh --vnc tum                 # over Screen Sharing instead
+
+./tools/monitor.sh euroc stereo-inertial V203   # one sequence; a thin alias for the above
 ```
+
+`run_gui.sh` walks a whole dataset with the viewer on, one sequence after
+another, under a single nested X server — the window opens once and stays up for
+the series rather than flickering in and out between runs. Trajectories land in
+`results/gui/<tag>/`, one directory per run, which is what lets
+`tools/evaluate_ate.py` score them afterwards.
+
+These are slow: rendering is software llvmpipe inside the container, so a full
+EuRoC sweep is 44 runs and takes hours. `--list` first.
+
+Which binary and which arguments each (dataset, configuration, sequence) needs
+lives in one place, `tools/dataset_plan.sh`, shared with the headless
+`tools/run_all.sh`.
 
 A real window opens on the macOS desktop through XQuartz, and the mouse
 works — toggling a menu checkbox moves the map-point pixel count between 638, 0
@@ -233,15 +251,24 @@ both the clicks and the keys. If a click seems to do nothing, click once on the
 window to activate it first; macOS swallows the activating click unless
 *Click-through inactive windows* is enabled in XQuartz's settings.
 
-The tracked frame is shown at the video's own resolution — 1:1, so the status
-line FrameDrawer burns into it stays legible — the 3D map takes the width the
-frame does not need, and the system's own log messages fill the space under the
-frame that its aspect ratio leaves empty. `ORBSLAM3R_MAP_VIEW_FRACTION` pins the
-split instead, without a rebuild:
+The window is three rows to the right of the menu: the tracked frame on top, the
+3D map in the middle, the system's own log messages at the bottom. Side by side
+was worse, and a wide sensor shows why — a KITTI frame is 1226x370, so a column
+wide enough to show it left two thirds of that column empty underneath while the
+map was squeezed into what remained. Stacking gives the map the full window
+width, which is also the shape a driving trajectory wants.
+
+The frame takes the height its own aspect needs, capped so it cannot crowd out
+the map; `ORBSLAM3R_FRAME_VIEW_FRACTION` pins it instead, without a rebuild:
 
 ```bash
-ORBSLAM3R_MAP_VIEW_FRACTION=0.85 ./tools/monitor.sh --x11 euroc stereo MH01
+ORBSLAM3R_FRAME_VIEW_FRACTION=0.5 ./tools/run_gui.sh euroc stereo MH01
 ```
+
+The status line along the bottom of the frame and the view mode in the map's
+corner are drawn by the viewer at screen resolution, not burned into the image:
+`cv::putText` writes at a fixed ten pixels tall, and any frame shown below 1:1
+resampled those strokes into fragments.
 
 ### Why it goes through a nested X server
 

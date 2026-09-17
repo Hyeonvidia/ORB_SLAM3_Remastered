@@ -26,6 +26,7 @@
 #include <opencv2/features2d/features2d.hpp>
 
 #include <mutex>
+#include <string>
 #include <unordered_set>
 
 #include <map>
@@ -53,8 +54,23 @@ namespace ORB_SLAM3
 
         bool both;
 
+        // The status line is NOT burned into the image any more. cv::putText
+        // draws it at a fixed ten pixels tall, and the viewer then scales the
+        // whole frame to fit its row -- at anything below 1:1 the strokes are
+        // resampled into fragments. The image keeps the black band so the text
+        // has something to sit on, and the viewer draws these on top of it with
+        // its own font, at screen resolution, so it stays sharp at any scale.
+        std::string StatusText() const { return msStatusText; }
+
+        // Height of that band, in image rows, so the viewer can find it after
+        // the frame has been scaled.
+        int StatusBandRows() const { return mnStatusBandRows; }
+
     protected:
         void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);
+
+        std::string msStatusText;
+        int mnStatusBandRows = 0;
 
         // Info of the frame to be drawn
         cv::Mat mIm, mImRight;

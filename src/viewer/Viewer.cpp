@@ -292,14 +292,18 @@ namespace ORB_SLAM3
         pangolin::Var<bool> menuShowPoints("menu.Show Points", true, true);
         pangolin::Var<bool> menuShowKeyFrames("menu.Show KeyFrames", true, true);
         pangolin::Var<bool> menuShowGraph("menu.Show Graph", false, true);
-        pangolin::Var<bool> menuShowInertialGraph("menu.Show Inertial Graph", true, true);
+        // Off by default: the inertial graph only has anything to draw on an
+        // inertial sequence, and on the others it was a checked box doing nothing.
+        pangolin::Var<bool> menuShowInertialGraph("menu.Show Inertial Graph", false, true);
         pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode", false, true);
         pangolin::Var<bool> menuReset("menu.Reset", false, false);
         pangolin::Var<bool> menuStop("menu.Stop", false, false);
         pangolin::Var<bool> menuStepByStep("menu.Step By Step", false, true); // false, true
         pangolin::Var<bool> menuStep("menu.Step", false, false);
 
-        pangolin::Var<bool> menuShowOptLba("menu.Show LBA opt", false, true);
+        // On by default instead: this marks the keyframes local bundle adjustment
+        // is currently touching, which is the part of the map actually moving.
+        pangolin::Var<bool> menuShowOptLba("menu.Show LBA opt", true, true);
         // Define Camera Render Object (for view / scene browsing)
         pangolin::OpenGlRenderState s_cam(
             pangolin::ProjectionMatrix(1024, 768, mViewpointF, mViewpointF, 512, 389, 0.1, 1000),
@@ -315,36 +319,77 @@ namespace ORB_SLAM3
         // a negative aspect, which was harmless when the 3D view owned the
         // whole window but covers its neighbours once it shares one.
         // (View::Resize, thirdparty/Pangolin/components/pango_display/src/view.cpp:75)
-        // Where the 3D map ends and the tracked frame begins, as a fraction
-        // of window width. Recomputed from the image once its size is known
-        // (see below); this is only the value used before the first frame.
-        // ORBSLAM3R_MAP_VIEW_FRACTION pins it instead, without a rebuild.
-        double dMapViewFraction = 0.72;
-        bool bMapFractionPinned = false;
-        if(const char* f = std::getenv("ORBSLAM3R_MAP_VIEW_FRACTION"))
+        // THE LAYOUT: three rows to the right of the menu, stacked.
+        //
+        //   +------+---------------------------+
+        //   |      |  tracked frame            |
+        //   | menu +---------------------------+
+        //   |      |  3D map                   |
+        //   |      +---------------------------+
+        //   |      |  log                      |
+        //   +------+---------------------------+
+        //
+        // Side by side was worse and the reason is visible the moment a wide
+        // sensor is used: a KITTI frame is 1226x370, so a column wide enough to
+        // show it left two thirds of that column empty underneath, while the map
+        // was squeezed into what remained on the left. Stacking gives the map the
+        // full window width -- which is also the shape a driving trajectory wants
+        // -- and leaves no dead region.
+        //
+        // The frame keeps its own aspect inside its row, so a tall frame (EuRoC
+        // is 752x480) is centred with margins rather than stretched. Those
+        // margins are the price of the arrangement; kMaxFrameFraction is what
+        // stops a tall frame from taking the window, because the map is the view
+        // being watched. ORBSLAM3R_FRAME_VIEW_FRACTION pins it without a rebuild.
+        const double kMaxFrameFraction = 0.40;
+        double dFrameFraction = 0.30;
+        bool bFrameFractionPinned = false;
+        if(const char* f = std::getenv("ORBSLAM3R_FRAME_VIEW_FRACTION"))
         {
             const double v = std::atof(f);
-            if(v > 0.2 && v < 0.95)
+            if(v > 0.05 && v < 0.8)
             {
-                dMapViewFraction = v;
-                bMapFractionPinned = true;
+                dFrameFraction = v;
+                bFrameFractionPinned = true;
             }
         }
-        const double kMapViewRight = dMapViewFraction;
 
-        pangolin::View &d_cam = pangolin::CreateDisplay()
-                                    .SetBounds(0.0, 1.0, pangolin::Attach::Pix(kMenuPanelWidth), kMapViewRight,
-                                               1024.0f / 768.0f)
-                                    .SetHandler(new pangolin::Handler3D(s_cam));
+        // Enough for a handful of recent lines; the map gets everything else.
+        const int kLogHeightPx = 96;
 
         // The tracked frame, which used to be a separate cv::imshow window.
-        // Its aspect comes from the first frame, since it depends on the
-        // sensor and on whether the right image is concatenated.
-        pangolin::View &d_img = pangolin::CreateDisplay().SetBounds(0.0, 1.0, kMapViewRight, 1.0);
+        // Its aspect comes from the first frame, since it depends on the sensor
+        // and on whether the right image is concatenated.
+        pangolin::View &d_img = pangolin::CreateDisplay().SetBounds(1.0 - dFrameFraction, 1.0,
+                                                                    pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
 
-        // The frame's aspect ratio leaves the bottom of the right column
-        // empty; the log goes there.
-        pangolin::View &d_log = pangolin::CreateDisplay().SetBounds(0.0, 0.0, kMapViewRight, 1.0);
+        // No aspect argument, deliberately: a positive aspect letterboxes, which
+        // would hand back most of the width this layout exists to give the map.
+        // The projection is what follows the view's shape instead; see
+        // MapProjection below.
+        pangolin::View &d_cam = pangolin::CreateDisplay()
+                                    .SetBounds(pangolin::Attach::Pix(kLogHeightPx), 1.0 - dFrameFraction,
+                                               pangolin::Attach::Pix(kMenuPanelWidth), 1.0)
+                                    .SetHandler(new pangolin::Handler3D(s_cam));
+
+        // ProjectionMatrix's first two arguments are the viewport it is built
+        // for. They were fixed at 1024x768 no matter what the layout gave the
+        // view, which stretched the map horizontally the moment the view stopped
+        // being 4:3. Remembering the focal length and far plane in use lets the
+        // projection be rebuilt whenever the view is resized.
+        double dProjFocal = mViewpointF, dProjFar = 1000.0;
+        int nLastCamW = 0, nLastCamH = 0;
+        auto MapProjection = [&d_cam, &dProjFocal, &dProjFar](double focal, double far)
+        {
+            dProjFocal = focal;
+            dProjFar = far;
+            const int w = d_cam.v.w > 0 ? d_cam.v.w : 1024;
+            const int h = d_cam.v.h > 0 ? d_cam.v.h : 768;
+            return pangolin::ProjectionMatrix(w, h, focal, focal, w / 2.0, h / 2.0, 0.1, far);
+        };
+
+        pangolin::View &d_log = pangolin::CreateDisplay().SetBounds(0.0, pangolin::Attach::Pix(kLogHeightPx),
+                                                                    pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
 
         // Installed for the lifetime of the viewer, then std::cout is
         // restored.
@@ -395,15 +440,14 @@ namespace ORB_SLAM3
             {
                 if(bCameraView)
                 {
-                    s_cam.SetProjectionMatrix(
-                        pangolin::ProjectionMatrix(1024, 768, mViewpointF, mViewpointF, 512, 389, 0.1, 1000));
+                    s_cam.SetProjectionMatrix(MapProjection(mViewpointF, 1000));
                     s_cam.SetModelViewMatrix(
                         pangolin::ModelViewLookAt(mViewpointX, mViewpointY, mViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
                     s_cam.Follow(Twc);
                 }
                 else
                 {
-                    s_cam.SetProjectionMatrix(pangolin::ProjectionMatrix(1024, 768, 3000, 3000, 512, 389, 0.1, 1000));
+                    s_cam.SetProjectionMatrix(MapProjection(3000, 1000));
                     s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, 0.01, 10, 0, 0, 0, 0.0, 0.0, 1.0));
                     s_cam.Follow(Ow);
                 }
@@ -418,8 +462,7 @@ namespace ORB_SLAM3
             {
                 menuCamView = false;
                 bCameraView = true;
-                s_cam.SetProjectionMatrix(
-                    pangolin::ProjectionMatrix(1024, 768, mViewpointF, mViewpointF, 512, 389, 0.1, 10000));
+                s_cam.SetProjectionMatrix(MapProjection(mViewpointF, 10000));
                 s_cam.SetModelViewMatrix(
                     pangolin::ModelViewLookAt(mViewpointX, mViewpointY, mViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
                 s_cam.Follow(Twc);
@@ -429,7 +472,7 @@ namespace ORB_SLAM3
             {
                 menuTopView = false;
                 bCameraView = false;
-                s_cam.SetProjectionMatrix(pangolin::ProjectionMatrix(1024, 768, 3000, 3000, 512, 389, 0.1, 10000));
+                s_cam.SetProjectionMatrix(MapProjection(3000, 10000));
                 s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, 0.01, 50, 0, 0, 0, 0.0, 0.0, 1.0));
                 s_cam.Follow(Ow);
             }
@@ -461,6 +504,15 @@ namespace ORB_SLAM3
             {
                 mpTracker->mbStep = true;
                 menuStep = false;
+            }
+
+            // The row changes height when the frame's aspect is first known, and
+            // again if the window is resized; the projection has to follow.
+            if(d_cam.v.w != nLastCamW || d_cam.v.h != nLastCamH)
+            {
+                nLastCamW = d_cam.v.w;
+                nLastCamH = d_cam.v.h;
+                s_cam.SetProjectionMatrix(MapProjection(dProjFocal, dProjFar));
             }
 
             d_cam.Activate(s_cam);
@@ -505,31 +557,27 @@ namespace ORB_SLAM3
                     imageTexture.Reinitialise(toShow.cols, toShow.rows, GL_RGB8, false, 0, GL_BGR, GL_UNSIGNED_BYTE);
                     d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
 
-                    // Size the frame view from the image's own resolution.
+                    // Height of the top row, from the image's own resolution.
                     // FrameDrawer burns its status line into the image with
-                    // FONT_HERSHEY_PLAIN at scale 1, roughly ten pixels tall,
-                    // so displaying below 1:1 resamples the text into mush.
-                    // Give the frame its native width where the window can
-                    // spare it and let the map have the rest.
-                    if(!bMapFractionPinned)
+                    // FONT_HERSHEY_PLAIN at scale 1, roughly ten pixels tall, so
+                    // displaying below 1:1 resamples the text into mush: ask for
+                    // the height the frame needs at the full window width, and
+                    // take the cap only when that would crowd out the map.
+                    if(!bFrameFractionPinned)
                     {
                         const int nWinWidth = pangolin::DisplayBase().v.w > 0 ? pangolin::DisplayBase().v.w
                                                                               : kWindowWidth;
-                        const double dFrameFrac = std::min(0.55, static_cast<double>(toShow.cols) / nWinWidth);
-                        const double dSplit = 1.0 - dFrameFrac;
-                        d_cam.SetBounds(0.0, 1.0, pangolin::Attach::Pix(kMenuPanelWidth), dSplit, 1024.0f / 768.0f);
-
-                        // Give the frame a slot exactly its own shape, so
-                        // nothing is letterboxed, and hand the space below
-                        // it to the log.
                         const int nWinHeight = pangolin::DisplayBase().v.h > 0 ? pangolin::DisplayBase().v.h
                                                                                : kWindowHeight;
-                        const double dFrameHeightFrac = std::min(0.92, static_cast<double>(toShow.rows) / nWinHeight);
-                        const double dFrameBottom = 1.0 - dFrameHeightFrac;
-                        d_img.SetBounds(dFrameBottom, 1.0, dSplit, 1.0);
-                        d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
-                        d_log.SetBounds(0.0, dFrameBottom, dSplit, 1.0);
+                        const int nRowWidth = std::max(1, nWinWidth - kMenuPanelWidth);
+                        const double dNatural = static_cast<double>(toShow.rows) * nRowWidth / toShow.cols;
+                        dFrameFraction = std::min(kMaxFrameFraction, dNatural / nWinHeight);
+
+                        d_img.SetBounds(1.0 - dFrameFraction, 1.0, pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
+                        d_cam.SetBounds(pangolin::Attach::Pix(kLogHeightPx), 1.0 - dFrameFraction,
+                                        pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
                     }
+                    d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
 
                     nLastImageCols = toShow.cols;
                     nLastImageRows = toShow.rows;
@@ -538,12 +586,39 @@ namespace ORB_SLAM3
                 // Upload reads rows*cols*3 bytes contiguously, so a Mat that
                 // is a view into a larger buffer has to be compacted first.
                 const cv::Mat contiguous = toShow.isContinuous() ? toShow : toShow.clone();
+
+                // GL_UNPACK_ALIGNMENT defaults to 4: OpenGL expects every row of
+                // the source to start on a 4-byte boundary. A cv::Mat packs its
+                // rows with no padding at all, so whenever cols*3 is not a
+                // multiple of 4 the reader slips a little further into the next
+                // row each time and the picture shears diagonally, with the last
+                // rows running off the end of the buffer. KITTI is 1226 wide --
+                // 3678 bytes a row, 2 over -- which is why it showed the tilt
+                // while EuRoC (752) and TUM (640) did not.
+                GLint nUnpackAlign = 4;
+                glGetIntegerv(GL_UNPACK_ALIGNMENT, &nUnpackAlign);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 imageTexture.Upload(contiguous.data, GL_BGR, GL_UNSIGNED_BYTE);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, nUnpackAlign);
 
                 d_img.Activate();
                 glColor3f(1.0f, 1.0f, 1.0f);
                 // cv::Mat rows run top-down; OpenGL texture rows bottom-up.
                 imageTexture.RenderToViewportFlipY();
+            }
+
+            // "Camera View" and "Top View" are momentary buttons: they fire once and
+            // pop back up, leaving nothing on screen to say which one is in effect.
+            // Follow Camera is a checkbox, but its own state and the view mode
+            // combine, so both are reported here.
+            if(d_cam.v.h > 0)
+            {
+                d_cam.Activate();
+                const std::string sMode = std::string(bCameraView ? "Camera View" : "Top View") +
+                                          (menuFollowCamera ? "  |  following" : "  |  free look");
+                glColor3f(0.25f, 0.25f, 0.25f);
+                pangolin::default_font().Text(sMode).DrawWindow(static_cast<float>(d_cam.v.l) + 8.0f,
+                                                                static_cast<float>(d_cam.v.b + d_cam.v.h) - 16.0f);
             }
 
             // The log, newest line at the bottom, in the space under the frame.
