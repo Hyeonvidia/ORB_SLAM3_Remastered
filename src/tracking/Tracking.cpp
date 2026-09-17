@@ -3592,14 +3592,22 @@ namespace ORB_SLAM3
         }
 
         // Include also some not-already-included keyframes that are neighbors to already-included keyframes
-        for(std::vector<KeyFrame*>::const_iterator itKF = mvpLocalKeyFrames.begin(), itEndKF = mvpLocalKeyFrames.end();
-            itKF != itEndKF; itKF++)
+        //
+        // By index, over the size the list had on entry. The body push_backs into
+        // mvpLocalKeyFrames three times, and a vector that reallocates invalidates
+        // every iterator into it -- so the iterators this loop used to cache,
+        // including its end, were read after they had been freed. The reserve at
+        // the top of this function hides it whenever 3 * keyframeCounter.size()
+        // happens to cover the neighbours as well, which is why it survives most
+        // frames. Visiting only the original entries is what the cached end meant.
+        const size_t nLocalKeyFramesOnEntry = mvpLocalKeyFrames.size();
+        for(size_t iKF = 0; iKF < nLocalKeyFramesOnEntry; iKF++)
         {
             // Limit the number of keyframes
             if(mvpLocalKeyFrames.size() > 80) // 80
                 break;
 
-            KeyFrame* pKF = *itKF;
+            KeyFrame* pKF = mvpLocalKeyFrames[iKF];
 
             const std::vector<KeyFrame*> vNeighs = pKF->GetBestCovisibilityKeyFrames(10);
 
