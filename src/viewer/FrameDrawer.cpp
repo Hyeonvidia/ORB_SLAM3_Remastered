@@ -67,7 +67,7 @@ namespace ORB_SLAM3
 
         //Copy variables within scoped mutex
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
             state = mState;
             if(mState == Tracking::SYSTEM_NOT_READY)
                 mState = Tracking::NO_IMAGES_YET;
@@ -217,7 +217,7 @@ namespace ORB_SLAM3
 
         //Copy variables within scoped mutex
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
             state = mState;
             if(mState == Tracking::SYSTEM_NOT_READY)
                 mState = Tracking::NO_IMAGES_YET;
@@ -399,7 +399,7 @@ namespace ORB_SLAM3
 
     void FrameDrawer::Update(Tracking* pTracker)
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
         mnSensor = pTracker->mSensor;
         pTracker->mImGray.copyTo(mIm);
         mvCurrentKeys = pTracker->mCurrentFrame.mvKeys;

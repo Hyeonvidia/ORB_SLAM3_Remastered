@@ -72,7 +72,7 @@ namespace ORB_SLAM3
 
     void Map::AddKeyFrame(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         if(mspKeyFrames.empty())
         {
             std::cout << "First KF:" << pKF->mnId << "; Map init KF:" << mnInitKFid << std::endl;
@@ -93,25 +93,25 @@ namespace ORB_SLAM3
 
     void Map::AddMapPoint(MapPoint* pMP)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mspMapPoints.insert(pMP);
     }
 
     void Map::SetImuInitialized()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mbImuInitialized = true;
     }
 
     bool Map::isImuInitialized()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mbImuInitialized;
     }
 
     void Map::EraseMapPoint(MapPoint* pMP)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mspMapPoints.erase(pMP);
 
         // TODO: This only erase the pointer.
@@ -120,7 +120,7 @@ namespace ORB_SLAM3
 
     void Map::EraseKeyFrame(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mspKeyFrames.erase(pKF);
         if(mspKeyFrames.size() > 0)
         {
@@ -142,49 +142,49 @@ namespace ORB_SLAM3
 
     void Map::SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mvpReferenceMapPoints = vpMPs;
     }
 
     void Map::InformNewBigChange()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mnBigChangeIdx++;
     }
 
     int Map::GetLastBigChangeIdx()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mnBigChangeIdx;
     }
 
     std::vector<KeyFrame*> Map::GetAllKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return std::vector<KeyFrame*>(mspKeyFrames.begin(), mspKeyFrames.end());
     }
 
     std::vector<MapPoint*> Map::GetAllMapPoints()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return std::vector<MapPoint*>(mspMapPoints.begin(), mspMapPoints.end());
     }
 
     long unsigned int Map::MapPointsInMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mspMapPoints.size();
     }
 
     long unsigned int Map::KeyFramesInMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mspKeyFrames.size();
     }
 
     std::vector<MapPoint*> Map::GetReferenceMapPoints()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mvpReferenceMapPoints;
     }
 
@@ -194,19 +194,19 @@ namespace ORB_SLAM3
     }
     long unsigned int Map::GetInitKFid()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mnInitKFid;
     }
 
     void Map::SetInitKFid(long unsigned int initKFif)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mnInitKFid = initKFif;
     }
 
     long unsigned int Map::GetMaxKFid()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mnMaxKFid;
     }
 
@@ -264,7 +264,7 @@ namespace ORB_SLAM3
 
     void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
         Sophus::SE3f Tyw = T;
@@ -296,37 +296,37 @@ namespace ORB_SLAM3
 
     void Map::SetInertialSensor()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mbIsInertial = true;
     }
 
     bool Map::IsInertial()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mbIsInertial;
     }
 
     void Map::SetIniertialBA1()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mbIMU_BA1 = true;
     }
 
     void Map::SetIniertialBA2()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mbIMU_BA2 = true;
     }
 
     bool Map::GetIniertialBA1()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mbIMU_BA1;
     }
 
     bool Map::GetIniertialBA2()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mbIMU_BA2;
     }
 
@@ -337,7 +337,7 @@ namespace ORB_SLAM3
 
     unsigned int Map::GetLowerKFID()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         if(mpKFlowerID)
         {
             return mpKFlowerID->mnId;
@@ -347,25 +347,25 @@ namespace ORB_SLAM3
 
     int Map::GetMapChangeIndex()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mnMapChange;
     }
 
     void Map::IncreaseChangeIndex()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mnMapChange++;
     }
 
     int Map::GetLastMapChange()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mnMapChangeNotified;
     }
 
     void Map::SetLastMapChange(int currentChangeId)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mnMapChangeNotified = currentChangeId;
     }
 

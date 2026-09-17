@@ -301,7 +301,7 @@ namespace ORB_SLAM3
 
         // Check mode change
         {
-            std::unique_lock<std::mutex> lock(mMutexMode);
+            std::lock_guard<std::mutex> lock(mMutexMode);
             if(mbActivateLocalizationMode)
             {
                 mpLocalMapper->RequestStop();
@@ -325,7 +325,7 @@ namespace ORB_SLAM3
 
         // Check reset
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             if(mbReset)
             {
                 mpTracker->Reset();
@@ -348,7 +348,7 @@ namespace ORB_SLAM3
 
         // std::cout << "out grabber" << std::endl;
 
-        std::unique_lock<std::mutex> lock2(mMutexState);
+        std::lock_guard<std::mutex> lock2(mMutexState);
         mTrackingState = mpTracker->mState;
         mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
         mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
@@ -378,7 +378,7 @@ namespace ORB_SLAM3
 
         // Check mode change
         {
-            std::unique_lock<std::mutex> lock(mMutexMode);
+            std::lock_guard<std::mutex> lock(mMutexMode);
             if(mbActivateLocalizationMode)
             {
                 mpLocalMapper->RequestStop();
@@ -402,7 +402,7 @@ namespace ORB_SLAM3
 
         // Check reset
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             if(mbReset)
             {
                 mpTracker->Reset();
@@ -422,7 +422,7 @@ namespace ORB_SLAM3
 
         Sophus::SE3f Tcw = mpTracker->GrabImageRGBD(imToFeed, imDepthToFeed, timestamp, filename);
 
-        std::unique_lock<std::mutex> lock2(mMutexState);
+        std::lock_guard<std::mutex> lock2(mMutexState);
         mTrackingState = mpTracker->mState;
         mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
         mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
@@ -433,7 +433,7 @@ namespace ORB_SLAM3
                                         const std::vector<IMU::Point> &vImuMeas, std::string filename)
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             if(mbShutDown)
                 return Sophus::SE3f();
         }
@@ -456,7 +456,7 @@ namespace ORB_SLAM3
 
         // Check mode change
         {
-            std::unique_lock<std::mutex> lock(mMutexMode);
+            std::lock_guard<std::mutex> lock(mMutexMode);
             if(mbActivateLocalizationMode)
             {
                 mpLocalMapper->RequestStop();
@@ -480,7 +480,7 @@ namespace ORB_SLAM3
 
         // Check reset
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             if(mbReset)
             {
                 mpTracker->Reset();
@@ -501,7 +501,7 @@ namespace ORB_SLAM3
 
         Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed, timestamp, filename);
 
-        std::unique_lock<std::mutex> lock2(mMutexState);
+        std::lock_guard<std::mutex> lock2(mMutexState);
         mTrackingState = mpTracker->mState;
         mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
         mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
@@ -511,13 +511,13 @@ namespace ORB_SLAM3
 
     void System::ActivateLocalizationMode()
     {
-        std::unique_lock<std::mutex> lock(mMutexMode);
+        std::lock_guard<std::mutex> lock(mMutexMode);
         mbActivateLocalizationMode = true;
     }
 
     void System::DeactivateLocalizationMode()
     {
-        std::unique_lock<std::mutex> lock(mMutexMode);
+        std::lock_guard<std::mutex> lock(mMutexMode);
         mbDeactivateLocalizationMode = true;
     }
 
@@ -536,13 +536,13 @@ namespace ORB_SLAM3
 
     void System::Reset()
     {
-        std::unique_lock<std::mutex> lock(mMutexReset);
+        std::lock_guard<std::mutex> lock(mMutexReset);
         mbReset = true;
     }
 
     void System::ResetActiveMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexReset);
+        std::lock_guard<std::mutex> lock(mMutexReset);
         mbResetActiveMap = true;
     }
 
@@ -597,7 +597,7 @@ namespace ORB_SLAM3
     void System::Shutdown()
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             mbShutDown = true;
         }
 
@@ -629,7 +629,7 @@ namespace ORB_SLAM3
 
     bool System::isShutDown()
     {
-        std::unique_lock<std::mutex> lock(mMutexReset);
+        std::lock_guard<std::mutex> lock(mMutexReset);
         return mbShutDown;
     }
 
@@ -1396,19 +1396,19 @@ namespace ORB_SLAM3
 
     int System::GetTrackingState()
     {
-        std::unique_lock<std::mutex> lock(mMutexState);
+        std::lock_guard<std::mutex> lock(mMutexState);
         return mTrackingState;
     }
 
     std::vector<MapPoint*> System::GetTrackedMapPoints()
     {
-        std::unique_lock<std::mutex> lock(mMutexState);
+        std::lock_guard<std::mutex> lock(mMutexState);
         return mTrackedMapPoints;
     }
 
     std::vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
     {
-        std::unique_lock<std::mutex> lock(mMutexState);
+        std::lock_guard<std::mutex> lock(mMutexState);
         return mTrackedKeyPointsUn;
     }
 

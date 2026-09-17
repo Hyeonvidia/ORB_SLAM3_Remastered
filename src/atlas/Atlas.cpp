@@ -68,7 +68,7 @@ namespace ORB_SLAM3
 
     void Atlas::CreateNewMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         std::cout << "Creation of new map with id: " << Map::nNextId << std::endl;
         if(mpCurrentMap)
         {
@@ -90,7 +90,7 @@ namespace ORB_SLAM3
 
     void Atlas::ChangeMap(Map* pMap)
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         std::cout << "Change to map with id: " << pMap->GetId() << std::endl;
         if(mpCurrentMap)
         {
@@ -103,7 +103,7 @@ namespace ORB_SLAM3
 
     unsigned long int Atlas::GetLastInitKFid()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mnLastInitKFidMap;
     }
 
@@ -176,55 +176,55 @@ namespace ORB_SLAM3
 
     void Atlas::SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs)
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         mpCurrentMap->SetReferenceMapPoints(vpMPs);
     }
 
     void Atlas::InformNewBigChange()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         mpCurrentMap->InformNewBigChange();
     }
 
     int Atlas::GetLastBigChangeIdx()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->GetLastBigChangeIdx();
     }
 
     long unsigned int Atlas::MapPointsInMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->MapPointsInMap();
     }
 
     long unsigned Atlas::KeyFramesInMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->KeyFramesInMap();
     }
 
     std::vector<KeyFrame*> Atlas::GetAllKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->GetAllKeyFrames();
     }
 
     std::vector<MapPoint*> Atlas::GetAllMapPoints()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->GetAllMapPoints();
     }
 
     std::vector<MapPoint*> Atlas::GetReferenceMapPoints()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->GetReferenceMapPoints();
     }
 
     std::vector<Map*> Atlas::GetAllMaps()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         struct compFunctor
         {
             inline bool operator()(Map* elem1, Map* elem2) { return elem1->GetId() < elem2->GetId(); }
@@ -236,19 +236,19 @@ namespace ORB_SLAM3
 
     int Atlas::CountMaps()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mspMaps.size();
     }
 
     void Atlas::clearMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         mpCurrentMap->clear();
     }
 
     void Atlas::clearAtlas()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         /*for(std::set<Map*>::iterator it=mspMaps.begin(), send=mspMaps.end(); it!=send; it++)
     {
         (*it)->clear();
@@ -261,7 +261,7 @@ namespace ORB_SLAM3
 
     Map* Atlas::GetCurrentMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         if(!mpCurrentMap)
             CreateNewMap();
         while(mpCurrentMap->IsBad())
@@ -290,25 +290,25 @@ namespace ORB_SLAM3
 
     bool Atlas::isInertial()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->IsInertial();
     }
 
     void Atlas::SetInertialSensor()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         mpCurrentMap->SetInertialSensor();
     }
 
     void Atlas::SetImuInitialized()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         mpCurrentMap->SetImuInitialized();
     }
 
     bool Atlas::isImuInitialized()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         return mpCurrentMap->isImuInitialized();
     }
 
@@ -386,7 +386,7 @@ namespace ORB_SLAM3
 
     long unsigned int Atlas::GetNumLivedKF()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         long unsigned int num = 0;
         for(Map* pMap_i : mspMaps)
         {
@@ -398,7 +398,7 @@ namespace ORB_SLAM3
 
     long unsigned int Atlas::GetNumLivedMP()
     {
-        std::unique_lock<std::mutex> lock(mMutexAtlas);
+        std::lock_guard<std::mutex> lock(mMutexAtlas);
         long unsigned int num = 0;
         for(Map* pMap_i : mspMaps)
         {

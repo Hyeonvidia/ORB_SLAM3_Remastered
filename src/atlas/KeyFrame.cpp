@@ -120,81 +120,81 @@ namespace ORB_SLAM3
 
     void KeyFrame::SetPose(const Sophus::SE3f &Tcw)
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
 
         mState.SetPose(Tcw, mImuCalib);
     }
 
     void KeyFrame::SetVelocity(const Eigen::Vector3f &Vw)
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         mState.SetVelocity(Vw);
     }
 
     Sophus::SE3f KeyFrame::GetPose()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.Tcw();
     }
 
     Sophus::SE3f KeyFrame::GetPoseInverse()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.Twc();
     }
 
     Eigen::Vector3f KeyFrame::GetCameraCenter()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.Ow();
     }
 
     Eigen::Vector3f KeyFrame::GetImuPosition()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.Owb();
     }
 
     Eigen::Matrix3f KeyFrame::GetImuRotation()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.ImuRotation(mImuCalib);
     }
 
     Sophus::SE3f KeyFrame::GetImuPose()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.ImuPose(mImuCalib);
     }
 
     Eigen::Matrix3f KeyFrame::GetRotation()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.Rcw();
     }
 
     Eigen::Vector3f KeyFrame::GetTranslation()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.tcw();
     }
 
     Eigen::Vector3f KeyFrame::GetVelocity()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.Velocity();
     }
 
     bool KeyFrame::isVelocitySet()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mState.HasVelocity();
     }
 
     void KeyFrame::AddConnection(KeyFrame* pKF, const int &weight)
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexConnections);
+            std::lock_guard<std::mutex> lock(mMutexConnections);
             if(!mConnectedKeyFrameWeights.count(pKF))
                 mConnectedKeyFrameWeights[pKF] = weight;
             else if(mConnectedKeyFrameWeights[pKF] != weight)
@@ -208,7 +208,7 @@ namespace ORB_SLAM3
 
     void KeyFrame::UpdateBestCovisibles()
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         std::vector<std::pair<int, KeyFrame*>> vPairs;
         vPairs.reserve(mConnectedKeyFrameWeights.size());
         for(std::map<KeyFrame*, int>::iterator mit = mConnectedKeyFrameWeights.begin(),
@@ -234,7 +234,7 @@ namespace ORB_SLAM3
 
     std::set<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         std::set<KeyFrame*> s;
         for(std::map<KeyFrame*, int>::iterator mit = mConnectedKeyFrameWeights.begin();
             mit != mConnectedKeyFrameWeights.end(); mit++)
@@ -244,13 +244,13 @@ namespace ORB_SLAM3
 
     std::vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         return mvpOrderedConnectedKeyFrames;
     }
 
     std::vector<KeyFrame*> KeyFrame::GetBestCovisibilityKeyFrames(const int &N)
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         if((int)mvpOrderedConnectedKeyFrames.size() < N)
             return mvpOrderedConnectedKeyFrames;
         else
@@ -260,7 +260,7 @@ namespace ORB_SLAM3
 
     std::vector<KeyFrame*> KeyFrame::GetCovisiblesByWeight(const int &w)
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
 
         if(mvpOrderedConnectedKeyFrames.empty())
         {
@@ -284,7 +284,7 @@ namespace ORB_SLAM3
 
     int KeyFrame::GetWeight(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         if(mConnectedKeyFrameWeights.count(pKF))
             return mConnectedKeyFrameWeights[pKF];
         else
@@ -293,7 +293,7 @@ namespace ORB_SLAM3
 
     int KeyFrame::GetNumberMPs()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         int numberMPs = 0;
         for(size_t i = 0, iend = mvpMapPoints.size(); i < iend; i++)
         {
@@ -306,13 +306,13 @@ namespace ORB_SLAM3
 
     void KeyFrame::AddMapPoint(MapPoint* pMP, const size_t &idx)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         mvpMapPoints[idx] = pMP;
     }
 
     void KeyFrame::EraseMapPointMatch(const int &idx)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         mvpMapPoints[idx] = static_cast<MapPoint*>(NULL);
     }
 
@@ -333,7 +333,7 @@ namespace ORB_SLAM3
 
     std::set<MapPoint*> KeyFrame::GetMapPoints()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         std::set<MapPoint*> s;
         for(size_t i = 0, iend = mvpMapPoints.size(); i < iend; i++)
         {
@@ -348,7 +348,7 @@ namespace ORB_SLAM3
 
     int KeyFrame::TrackedMapPoints(const int &minObs)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
 
         int nPoints = 0;
         const bool bCheckObs = minObs > 0;
@@ -375,13 +375,13 @@ namespace ORB_SLAM3
 
     std::vector<MapPoint*> KeyFrame::GetMapPointMatches()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mvpMapPoints;
     }
 
     MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mvpMapPoints[idx];
     }
 
@@ -392,7 +392,7 @@ namespace ORB_SLAM3
         std::vector<MapPoint*> vpMP;
 
         {
-            std::unique_lock<std::mutex> lockMPs(mMutexFeatures);
+            std::lock_guard<std::mutex> lockMPs(mMutexFeatures);
             vpMP = mvpMapPoints;
         }
 
@@ -466,7 +466,7 @@ namespace ORB_SLAM3
         }
 
         {
-            std::unique_lock<std::mutex> lockCon(mMutexConnections);
+            std::lock_guard<std::mutex> lockCon(mMutexConnections);
 
             mConnectedKeyFrameWeights = KFcounter;
             mvpOrderedConnectedKeyFrames = std::vector<KeyFrame*>(lKFs.begin(), lKFs.end());
@@ -483,19 +483,19 @@ namespace ORB_SLAM3
 
     void KeyFrame::AddChild(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         mspChildrens.insert(pKF);
     }
 
     void KeyFrame::EraseChild(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         mspChildrens.erase(pKF);
     }
 
     void KeyFrame::ChangeParent(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         if(pKF == this)
         {
             std::cout << "ERROR: Change parent KF, the parent and child are the same KF" << std::endl;
@@ -508,64 +508,64 @@ namespace ORB_SLAM3
 
     std::set<KeyFrame*> KeyFrame::GetChilds()
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         return mspChildrens;
     }
 
     KeyFrame* KeyFrame::GetParent()
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         return mpParent;
     }
 
     bool KeyFrame::hasChild(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         return mspChildrens.count(pKF);
     }
 
     void KeyFrame::SetFirstConnection(bool bFirst)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         mbFirstConnection = bFirst;
     }
 
     void KeyFrame::AddLoopEdge(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         mbNotErase = true;
         mspLoopEdges.insert(pKF);
     }
 
     std::set<KeyFrame*> KeyFrame::GetLoopEdges()
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         return mspLoopEdges;
     }
 
     void KeyFrame::AddMergeEdge(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         mbNotErase = true;
         mspMergeEdges.insert(pKF);
     }
 
     std::set<KeyFrame*> KeyFrame::GetMergeEdges()
     {
-        std::unique_lock<std::mutex> lockCon(mMutexConnections);
+        std::lock_guard<std::mutex> lockCon(mMutexConnections);
         return mspMergeEdges;
     }
 
     void KeyFrame::SetNotErase()
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         mbNotErase = true;
     }
 
     void KeyFrame::SetErase()
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexConnections);
+            std::lock_guard<std::mutex> lock(mMutexConnections);
             if(mspLoopEdges.empty())
             {
                 mbNotErase = false;
@@ -581,7 +581,7 @@ namespace ORB_SLAM3
     void KeyFrame::SetBadFlag()
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexConnections);
+            std::lock_guard<std::mutex> lock(mMutexConnections);
             if(mnId == mpMap->GetInitKFid())
             {
                 return;
@@ -609,8 +609,7 @@ namespace ORB_SLAM3
         }
 
         {
-            std::unique_lock<std::mutex> lock(mMutexConnections);
-            std::unique_lock<std::mutex> lock1(mMutexFeatures);
+            std::scoped_lock lock(mMutexConnections, mMutexFeatures);
 
             mConnectedKeyFrameWeights.clear();
             mvpOrderedConnectedKeyFrames.clear();
@@ -693,7 +692,7 @@ namespace ORB_SLAM3
 
     bool KeyFrame::isBad()
     {
-        std::unique_lock<std::mutex> lock(mMutexConnections);
+        std::lock_guard<std::mutex> lock(mMutexConnections);
         return mbBad;
     }
 
@@ -701,7 +700,7 @@ namespace ORB_SLAM3
     {
         bool bUpdate = false;
         {
-            std::unique_lock<std::mutex> lock(mMutexConnections);
+            std::lock_guard<std::mutex> lock(mMutexConnections);
             if(mConnectedKeyFrameWeights.count(pKF))
             {
                 mConnectedKeyFrameWeights.erase(pKF);
@@ -778,7 +777,7 @@ namespace ORB_SLAM3
             const float y = (v - cy) * z * invfy;
             Eigen::Vector3f x3Dc(x, y, z);
 
-            std::unique_lock<std::mutex> lock(mMutexPose);
+            std::lock_guard<std::mutex> lock(mMutexPose);
             x3D = mState.Rwc() * x3Dc + mState.Ow();
             return true;
         }
@@ -795,8 +794,7 @@ namespace ORB_SLAM3
         Eigen::Matrix3f Rcw;
         Eigen::Vector3f tcw;
         {
-            std::unique_lock<std::mutex> lock(mMutexFeatures);
-            std::unique_lock<std::mutex> lock2(mMutexPose);
+            std::scoped_lock lock(mMutexFeatures, mMutexPose);
             vpMapPoints = mvpMapPoints;
             tcw = mState.tcw();
             Rcw = mState.Rcw();
@@ -824,7 +822,7 @@ namespace ORB_SLAM3
 
     void KeyFrame::SetNewBias(const IMU::Bias &b)
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         mImuBias = b;
         if(mpImuPreintegrated)
             mpImuPreintegrated->SetNewBias(b);
@@ -832,31 +830,31 @@ namespace ORB_SLAM3
 
     Eigen::Vector3f KeyFrame::GetGyroBias()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return Eigen::Vector3f(mImuBias.bwx, mImuBias.bwy, mImuBias.bwz);
     }
 
     Eigen::Vector3f KeyFrame::GetAccBias()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return Eigen::Vector3f(mImuBias.bax, mImuBias.bay, mImuBias.baz);
     }
 
     IMU::Bias KeyFrame::GetImuBias()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mImuBias;
     }
 
     Map* KeyFrame::GetMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mpMap;
     }
 
     void KeyFrame::UpdateMap(Map* pMap)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mpMap = pMap;
     }
 
@@ -1131,47 +1129,47 @@ namespace ORB_SLAM3
 
     Sophus::SE3f KeyFrame::GetRelativePoseTrl()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mTrl;
     }
 
     Sophus::SE3f KeyFrame::GetRelativePoseTlr()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return mTlr;
     }
 
     Sophus::SE3<float> KeyFrame::GetRightPose()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
 
         return mTrl * mState.Tcw();
     }
 
     Sophus::SE3<float> KeyFrame::GetRightPoseInverse()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
 
         return mState.Twc() * mTlr;
     }
 
     Eigen::Vector3f KeyFrame::GetRightCameraCenter()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
 
         return (mState.Twc() * mTlr).translation();
     }
 
     Eigen::Matrix<float, 3, 3> KeyFrame::GetRightRotation()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
 
         return (mTrl.so3() * mState.Tcw().so3()).matrix();
     }
 
     Eigen::Vector3f KeyFrame::GetRightTranslation()
     {
-        std::unique_lock<std::mutex> lock(mMutexPose);
+        std::lock_guard<std::mutex> lock(mMutexPose);
         return (mTrl * mState.Tcw()).translation();
     }
 

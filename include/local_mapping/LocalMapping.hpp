@@ -74,7 +74,7 @@ namespace ORB_SLAM3
 
         int KeyframesInQueue()
         {
-            std::unique_lock<std::mutex> lock(mMutexNewKFs);
+            std::lock_guard<std::mutex> lock(mMutexNewKFs);
             return mlNewKeyFrames.size();
         }
 

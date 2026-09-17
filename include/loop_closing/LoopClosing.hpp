@@ -72,12 +72,12 @@ namespace ORB_SLAM3
 
         bool isRunningGBA()
         {
-            std::unique_lock<std::mutex> lock(mMutexGBA);
+            std::lock_guard<std::mutex> lock(mMutexGBA);
             return mbRunningGBA;
         }
         bool isFinishedGBA()
         {
-            std::unique_lock<std::mutex> lock(mMutexGBA);
+            std::lock_guard<std::mutex> lock(mMutexGBA);
             return mbFinishedGBA;
         }
 

@@ -62,7 +62,7 @@ namespace ORB_SLAM3
 
             std::vector<std::string> Tail(std::size_t n) const
             {
-                std::unique_lock<std::mutex> lock(mMutex);
+                std::lock_guard<std::mutex> lock(mMutex);
                 if(mvLines.size() <= n)
                     return mvLines;
                 return std::vector<std::string>(mvLines.end() - n, mvLines.end());
@@ -77,7 +77,7 @@ namespace ORB_SLAM3
                 // Forward first, so a crash in the ring buffer cannot swallow output.
                 mpOriginal->sputc(static_cast<char>(c));
 
-                std::unique_lock<std::mutex> lock(mMutex);
+                std::lock_guard<std::mutex> lock(mMutex);
                 if(c == '\n')
                 {
                     if(!msPartial.empty())
@@ -711,45 +711,44 @@ namespace ORB_SLAM3
 
     void Viewer::RequestFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         mbFinishRequested = true;
     }
 
     bool Viewer::CheckFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         return mbFinishRequested;
     }
 
     void Viewer::SetFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         mbFinished = true;
     }
 
     bool Viewer::isFinished()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         return mbFinished;
     }
 
     void Viewer::RequestStop()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         if(!mbStopped)
             mbStopRequested = true;
     }
 
     bool Viewer::isStopped()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         return mbStopped;
     }
 
     bool Viewer::Stop()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
-        std::unique_lock<std::mutex> lock2(mMutexFinish);
+        std::scoped_lock lock(mMutexStop, mMutexFinish);
 
         if(mbFinishRequested)
             return false;
@@ -765,7 +764,7 @@ namespace ORB_SLAM3
 
     void Viewer::Release()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         mbStopped = false;
     }
 

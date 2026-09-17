@@ -857,7 +857,7 @@ namespace ORB_SLAM3
         const float deltaStereo = std::sqrt(7.815);
 
         {
-            std::unique_lock<std::mutex> lock(MapPoint::mGlobalMutex);
+            std::lock_guard<std::mutex> lock(MapPoint::mGlobalMutex);
 
             for(int i = 0; i < N; i++)
             {
@@ -1476,7 +1476,7 @@ namespace ORB_SLAM3
         }
 
         // Get Map Mutex
-        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
 
         if(!vToErase.empty())
         {
@@ -1749,7 +1749,7 @@ namespace ORB_SLAM3
         optimizer.computeActiveErrors();
         optimizer.optimize(20);
         optimizer.computeActiveErrors();
-        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
 
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         for(size_t i = 0; i < vpKFs.size(); i++)
@@ -2081,7 +2081,7 @@ namespace ORB_SLAM3
         optimizer.initializeOptimization();
         optimizer.optimize(20);
 
-        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
 
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         for(KeyFrame* pKFi : vpNonFixedKFs)
@@ -2917,7 +2917,7 @@ namespace ORB_SLAM3
         }
 
         // Get Map Mutex and erase outliers
-        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
 
         // TODO: Some convergence problems have been detected here
         if((2 * err < err_end || std::isnan(err) || std::isnan(err_end)) && !bLarge) //bGN)
@@ -3846,7 +3846,7 @@ namespace ORB_SLAM3
                            Verbose::VERBOSITY_DEBUG);
 
         // Get Map Mutex
-        std::unique_lock<std::mutex> lock(pMainKF->GetMap()->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMainKF->GetMap()->mMutexMapUpdate);
 
         if(!vToErase.empty())
         {
@@ -4442,7 +4442,7 @@ namespace ORB_SLAM3
         }
 
         // Get Map Mutex and erase outliers
-        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
         if(!vToErase.empty())
         {
             for(size_t i = 0; i < vToErase.size(); i++)
@@ -4567,7 +4567,7 @@ namespace ORB_SLAM3
         const float thHuberStereo = std::sqrt(7.815);
 
         {
-            std::unique_lock<std::mutex> lock(MapPoint::mGlobalMutex);
+            std::lock_guard<std::mutex> lock(MapPoint::mGlobalMutex);
 
             for(int i = 0; i < N; i++)
             {
@@ -4948,7 +4948,7 @@ namespace ORB_SLAM3
         const float thHuberStereo = std::sqrt(7.815);
 
         {
-            std::unique_lock<std::mutex> lock(MapPoint::mGlobalMutex);
+            std::lock_guard<std::mutex> lock(MapPoint::mGlobalMutex);
 
             for(int i = 0; i < N; i++)
             {
@@ -5567,7 +5567,7 @@ namespace ORB_SLAM3
         optimizer.computeActiveErrors();
         optimizer.optimize(20);
 
-        std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
 
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         for(size_t i = 0; i < vpKFs.size(); i++)

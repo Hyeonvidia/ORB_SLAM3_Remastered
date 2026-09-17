@@ -161,7 +161,7 @@ namespace ORB_SLAM3
                                 if((mTinit < 10.f) && (dist < 0.02))
                                 {
                                     std::cout << "Not enough motion for initializing. Reseting..." << std::endl;
-                                    std::unique_lock<std::mutex> lock(mMutexReset);
+                                    std::lock_guard<std::mutex> lock(mMutexReset);
                                     mbResetRequestedActiveMap = true;
                                     mpMapToReset = mpCurrentKeyFrame->GetMap();
                                     mbBadImu = true;
@@ -316,21 +316,21 @@ namespace ORB_SLAM3
 
     void LocalMapping::InsertKeyFrame(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexNewKFs);
+        std::lock_guard<std::mutex> lock(mMutexNewKFs);
         mlNewKeyFrames.push_back(pKF);
         mbAbortBA = true;
     }
 
     bool LocalMapping::CheckNewKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexNewKFs);
+        std::lock_guard<std::mutex> lock(mMutexNewKFs);
         return (!mlNewKeyFrames.empty());
     }
 
     void LocalMapping::ProcessNewKeyFrame()
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexNewKFs);
+            std::lock_guard<std::mutex> lock(mMutexNewKFs);
             mpCurrentKeyFrame = mlNewKeyFrames.front();
             mlNewKeyFrames.pop_front();
         }
@@ -867,15 +867,14 @@ namespace ORB_SLAM3
 
     void LocalMapping::RequestStop()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::scoped_lock lock(mMutexStop, mMutexNewKFs);
         mbStopRequested = true;
-        std::unique_lock<std::mutex> lock2(mMutexNewKFs);
         mbAbortBA = true;
     }
 
     bool LocalMapping::Stop()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         if(mbStopRequested && !mbNotStop)
         {
             mbStopped = true;
@@ -888,20 +887,19 @@ namespace ORB_SLAM3
 
     bool LocalMapping::isStopped()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         return mbStopped;
     }
 
     bool LocalMapping::stopRequested()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         return mbStopRequested;
     }
 
     void LocalMapping::Release()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
-        std::unique_lock<std::mutex> lock2(mMutexFinish);
+        std::scoped_lock lock(mMutexStop, mMutexFinish);
         if(mbFinished)
             return;
         mbStopped = false;
@@ -916,19 +914,19 @@ namespace ORB_SLAM3
 
     bool LocalMapping::AcceptKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexAccept);
+        std::lock_guard<std::mutex> lock(mMutexAccept);
         return mbAcceptKeyFrames;
     }
 
     void LocalMapping::SetAcceptKeyFrames(bool flag)
     {
-        std::unique_lock<std::mutex> lock(mMutexAccept);
+        std::lock_guard<std::mutex> lock(mMutexAccept);
         mbAcceptKeyFrames = flag;
     }
 
     bool LocalMapping::SetNotStop(bool flag)
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
 
         if(flag && mbStopped)
             return false;
@@ -1105,7 +1103,7 @@ namespace ORB_SLAM3
     void LocalMapping::RequestReset()
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             std::cout << "LM: Map reset recieved" << std::endl;
             mbResetRequested = true;
         }
@@ -1114,7 +1112,7 @@ namespace ORB_SLAM3
         while(1)
         {
             {
-                std::unique_lock<std::mutex> lock2(mMutexReset);
+                std::lock_guard<std::mutex> lock2(mMutexReset);
                 if(!mbResetRequested)
                     break;
             }
@@ -1126,7 +1124,7 @@ namespace ORB_SLAM3
     void LocalMapping::RequestResetActiveMap(Map* pMap)
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             std::cout << "LM: Active map reset recieved" << std::endl;
             mbResetRequestedActiveMap = true;
             mpMapToReset = pMap;
@@ -1136,7 +1134,7 @@ namespace ORB_SLAM3
         while(1)
         {
             {
-                std::unique_lock<std::mutex> lock2(mMutexReset);
+                std::lock_guard<std::mutex> lock2(mMutexReset);
                 if(!mbResetRequestedActiveMap)
                     break;
             }
@@ -1149,7 +1147,7 @@ namespace ORB_SLAM3
     {
         bool executed_reset = false;
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             if(mbResetRequested)
             {
                 executed_reset = true;
@@ -1195,27 +1193,26 @@ namespace ORB_SLAM3
 
     void LocalMapping::RequestFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         mbFinishRequested = true;
     }
 
     bool LocalMapping::CheckFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         return mbFinishRequested;
     }
 
     void LocalMapping::SetFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::scoped_lock lock(mMutexFinish, mMutexStop);
         mbFinished = true;
-        std::unique_lock<std::mutex> lock2(mMutexStop);
         mbStopped = true;
     }
 
     bool LocalMapping::isFinished()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         return mbFinished;
     }
 
@@ -1327,7 +1324,7 @@ namespace ORB_SLAM3
 
         // Before this line we are not changing the map
         {
-            std::unique_lock<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+            std::lock_guard<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
             if((std::fabs(mScale - 1.f) > 0.00001) || !mbMonocular)
             {
                 Sophus::SE3f Twg(mRwg.cast<float>().transpose(), Eigen::Vector3f::Zero());
@@ -1367,7 +1364,7 @@ namespace ORB_SLAM3
         Verbose::PrintMess("Global Bundle Adjustment finished\nUpdating map ...", Verbose::VERBOSITY_NORMAL);
 
         // Get Map Mutex
-        std::unique_lock<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
 
         unsigned long GBAid = mpCurrentKeyFrame->mnId;
 
@@ -1528,7 +1525,7 @@ namespace ORB_SLAM3
 
         Sophus::SO3d so3wg(mRwg);
         // Before this line we are not changing the map
-        std::unique_lock<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
         if((std::fabs(mScale - 1.f) > 0.002) || !mbMonocular)
         {

@@ -339,14 +339,14 @@ namespace ORB_SLAM3
 
     void LoopClosing::InsertKeyFrame(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexLoopQueue);
+        std::lock_guard<std::mutex> lock(mMutexLoopQueue);
         if(pKF->mnId != 0)
             mlpLoopKeyFrameQueue.push_back(pKF);
     }
 
     bool LoopClosing::CheckNewKeyFrames()
     {
-        std::unique_lock<std::mutex> lock(mMutexLoopQueue);
+        std::lock_guard<std::mutex> lock(mMutexLoopQueue);
         return (!mlpLoopKeyFrameQueue.empty());
     }
 
@@ -357,7 +357,7 @@ namespace ORB_SLAM3
             return false;
 
         {
-            std::unique_lock<std::mutex> lock(mMutexLoopQueue);
+            std::lock_guard<std::mutex> lock(mMutexLoopQueue);
             mpCurrentKF = mlpLoopKeyFrameQueue.front();
             mlpLoopKeyFrameQueue.pop_front();
             // Avoid that a keyframe can be erased while it is being process by this thread
@@ -1092,7 +1092,7 @@ namespace ORB_SLAM3
 
         {
             // Get Map Mutex
-            std::unique_lock<std::mutex> lock(pLoopMap->mMutexMapUpdate);
+            std::lock_guard<std::mutex> lock(pLoopMap->mMutexMapUpdate);
 
             const bool bImuInit = pLoopMap->isImuInitialized();
 
@@ -1562,10 +1562,10 @@ namespace ORB_SLAM3
     }*/
 
         {
-            std::unique_lock<std::mutex> currentLock(
-                pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
-            std::unique_lock<std::mutex> mergeLock(
-                pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
+            // Both maps at once: the current one takes the merge information, and the
+            // merged area's keyframes and map points come out of the old one. Acquired
+            // together so the order these two are taken in cannot matter.
+            std::scoped_lock mapLock(pCurrentMap->mMutexMapUpdate, pMergeMap->mMutexMapUpdate);
 
             //std::cout << "Merge local window: " << spLocalWindowKFs.size() << std::endl;
             //std::cout << "[Merge]: init merging maps " << std::endl;
@@ -1715,7 +1715,7 @@ namespace ORB_SLAM3
         {
             if(mpTracker->mSensor == System::MONOCULAR)
             {
-                std::unique_lock<std::mutex> currentLock(
+                std::lock_guard<std::mutex> currentLock(
                     pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
 
                 for(KeyFrame* pKFi : vpCurrentMapKFs)
@@ -1790,10 +1790,10 @@ namespace ORB_SLAM3
 
             {
                 // Get Merge Map Mutex
-                std::unique_lock<std::mutex> currentLock(
-                    pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
-                std::unique_lock<std::mutex> mergeLock(
-                    pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
+                // Both maps at once: the current one takes the merge information, and the
+                // merged area's keyframes and map points come out of the old one. Acquired
+                // together so the order these two are taken in cannot matter.
+                std::scoped_lock mapLock(pCurrentMap->mMutexMapUpdate, pMergeMap->mMutexMapUpdate);
 
                 //std::cout << "Merge outside KFs: " << vpCurrentMapKFs.size() << std::endl;
                 for(KeyFrame* pKFi : vpCurrentMapKFs)
@@ -1897,7 +1897,7 @@ namespace ORB_SLAM3
             float s_on = mSold_new.scale();
             Sophus::SE3f T_on(mSold_new.rotation().cast<float>(), mSold_new.translation().cast<float>());
 
-            std::unique_lock<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+            std::lock_guard<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
 
             //cout << "KFs before empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap() << endl;
             mpLocalMapper->EmptyQueue();
@@ -1928,7 +1928,7 @@ namespace ORB_SLAM3
             ba << 0., 0., 0.;
             Optimizer::InertialOptimization(pCurrentMap, bg, ba);
             IMU::Bias b(ba[0], ba[1], ba[2], bg[0], bg[1], bg[2]);
-            std::unique_lock<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+            std::lock_guard<std::mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
             mpTracker->UpdateFrameIMU(1.0f, b, mpTracker->GetLastKeyFrame());
 
             // Set map initialized
@@ -1943,10 +1943,10 @@ namespace ORB_SLAM3
         //cout << "updating current map" << endl;
         {
             // Get Merge Map Mutex (This section stops tracking!!)
-            std::unique_lock<std::mutex> currentLock(
-                pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
-            std::unique_lock<std::mutex> mergeLock(
-                pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
+            // Both maps at once: the current one takes the merge information, and the
+            // merged area's keyframes and map points come out of the old one. Acquired
+            // together so the order these two are taken in cannot matter.
+            std::scoped_lock mapLock(pCurrentMap->mMutexMapUpdate, pMergeMap->mMutexMapUpdate);
 
             std::vector<KeyFrame*> vpMergeMapKFs = pMergeMap->GetAllKeyFrames();
             std::vector<MapPoint*> vpMergeMapMPs = pMergeMap->GetAllMapPoints();
@@ -2198,7 +2198,7 @@ namespace ORB_SLAM3
             int numFused = matcher.Fuse(pKFi, Scw, vpMapPoints, 4, vpReplacePoints);
 
             // Get Map Mutex
-            std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+            std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
             const int nLP = vpMapPoints.size();
             for(int i = 0; i < nLP; i++)
             {
@@ -2239,7 +2239,7 @@ namespace ORB_SLAM3
             matcher.Fuse(pKF, Scw, vpMapPoints, 4, vpReplacePoints);
 
             // Get Map Mutex
-            std::unique_lock<std::mutex> lock(pMap->mMutexMapUpdate);
+            std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
             const int nLP = vpMapPoints.size();
             for(int i = 0; i < nLP; i++)
             {
@@ -2259,14 +2259,14 @@ namespace ORB_SLAM3
     void LoopClosing::RequestReset()
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             mbResetRequested = true;
         }
 
         while(1)
         {
             {
-                std::unique_lock<std::mutex> lock2(mMutexReset);
+                std::lock_guard<std::mutex> lock2(mMutexReset);
                 if(!mbResetRequested)
                     break;
             }
@@ -2277,7 +2277,7 @@ namespace ORB_SLAM3
     void LoopClosing::RequestResetActiveMap(Map* pMap)
     {
         {
-            std::unique_lock<std::mutex> lock(mMutexReset);
+            std::lock_guard<std::mutex> lock(mMutexReset);
             mbResetActiveMapRequested = true;
             mpMapToReset = pMap;
         }
@@ -2285,7 +2285,7 @@ namespace ORB_SLAM3
         while(1)
         {
             {
-                std::unique_lock<std::mutex> lock2(mMutexReset);
+                std::lock_guard<std::mutex> lock2(mMutexReset);
                 if(!mbResetActiveMapRequested)
                     break;
             }
@@ -2295,7 +2295,7 @@ namespace ORB_SLAM3
 
     void LoopClosing::ResetIfRequested()
     {
-        std::unique_lock<std::mutex> lock(mMutexReset);
+        std::lock_guard<std::mutex> lock(mMutexReset);
         if(mbResetRequested)
         {
             std::cout << "Loop closer reset requested..." << std::endl;
@@ -2374,7 +2374,7 @@ namespace ORB_SLAM3
         // not included in the Global BA and they are not consistent with the updated map.
         // We need to propagate the correction through the spanning tree
         {
-            std::unique_lock<std::mutex> lock(mMutexGBA);
+            std::lock_guard<std::mutex> lock(mMutexGBA);
             if(idx != mnFullBAIdx)
                 return;
 
@@ -2395,7 +2395,7 @@ namespace ORB_SLAM3
                 }
 
                 // Get Map Mutex
-                std::unique_lock<std::mutex> lock(pActiveMap->mMutexMapUpdate);
+                std::lock_guard<std::mutex> mapLock(pActiveMap->mMutexMapUpdate);
                 // cout << "LC: Update Map Mutex adquired" << endl;
 
                 //pActiveMap->PrintEssentialGraph();
@@ -2607,9 +2607,6 @@ namespace ORB_SLAM3
             return;
 
         {
-            // lock_guard, not the unique_lock the rest of the file uses: this is a
-            // plain scoped lock that is never unlocked early, and saying so costs
-            // nothing.
             std::lock_guard<std::mutex> lock(mMutexGBA);
             mbStopGBA = true;
             mnFullBAIdx++;
@@ -2628,26 +2625,26 @@ namespace ORB_SLAM3
 
     void LoopClosing::RequestFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         // cout << "LC: Finish requested" << endl;
         mbFinishRequested = true;
     }
 
     bool LoopClosing::CheckFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         return mbFinishRequested;
     }
 
     void LoopClosing::SetFinish()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         mbFinished = true;
     }
 
     bool LoopClosing::isFinished()
     {
-        std::unique_lock<std::mutex> lock(mMutexFinish);
+        std::lock_guard<std::mutex> lock(mMutexFinish);
         return mbFinished;
     }
 

@@ -449,7 +449,7 @@ namespace ORB_SLAM3
 
     void MapDrawer::SetCurrentCameraPose(const Sophus::SE3f &Tcw)
     {
-        std::unique_lock<std::mutex> lock(mMutexCamera);
+        std::lock_guard<std::mutex> lock(mMutexCamera);
         mCameraPose = Tcw.inverse();
     }
 
@@ -457,7 +457,7 @@ namespace ORB_SLAM3
     {
         Eigen::Matrix4f Twc;
         {
-            std::unique_lock<std::mutex> lock(mMutexCamera);
+            std::lock_guard<std::mutex> lock(mMutexCamera);
             Twc = mCameraPose.matrix();
         }
 

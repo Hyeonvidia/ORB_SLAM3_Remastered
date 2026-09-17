@@ -59,7 +59,7 @@ namespace ORB_SLAM3
         mbTrackInView = false;
 
         // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-        std::unique_lock<std::mutex> lock(mpMap->mMutexPointCreation);
+        std::lock_guard<std::mutex> lock(mpMap->mMutexPointCreation);
         mnId = nNextId++;
     }
 
@@ -79,7 +79,7 @@ namespace ORB_SLAM3
 
         // Worldpos is not set
         // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-        std::unique_lock<std::mutex> lock(mpMap->mMutexPointCreation);
+        std::lock_guard<std::mutex> lock(mpMap->mMutexPointCreation);
         mnId = nNextId++;
     }
 
@@ -121,38 +121,37 @@ namespace ORB_SLAM3
         pFrame->mDescriptors.row(idxF).copyTo(mDescriptor);
 
         // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-        std::unique_lock<std::mutex> lock(mpMap->mMutexPointCreation);
+        std::lock_guard<std::mutex> lock(mpMap->mMutexPointCreation);
         mnId = nNextId++;
     }
 
     void MapPoint::SetWorldPos(const Eigen::Vector3f &Pos)
     {
-        std::unique_lock<std::mutex> lock2(mGlobalMutex);
-        std::unique_lock<std::mutex> lock(mMutexPos);
+        std::scoped_lock lock(mGlobalMutex, mMutexPos);
         mWorldPos = Pos;
     }
 
     Eigen::Vector3f MapPoint::GetWorldPos()
     {
-        std::unique_lock<std::mutex> lock(mMutexPos);
+        std::lock_guard<std::mutex> lock(mMutexPos);
         return mWorldPos;
     }
 
     Eigen::Vector3f MapPoint::GetNormal()
     {
-        std::unique_lock<std::mutex> lock(mMutexPos);
+        std::lock_guard<std::mutex> lock(mMutexPos);
         return mNormalVector;
     }
 
     KeyFrame* MapPoint::GetReferenceKeyFrame()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mpRefKF;
     }
 
     void MapPoint::AddObservation(KeyFrame* pKF, int idx)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         std::tuple<int, int> indexes;
 
         if(mObservations.count(pKF))
@@ -185,7 +184,7 @@ namespace ORB_SLAM3
     {
         bool bBad = false;
         {
-            std::unique_lock<std::mutex> lock(mMutexFeatures);
+            std::lock_guard<std::mutex> lock(mMutexFeatures);
             if(mObservations.count(pKF))
             {
                 std::tuple<int, int> indexes = mObservations[pKF];
@@ -220,13 +219,13 @@ namespace ORB_SLAM3
 
     std::map<KeyFrame*, std::tuple<int, int>> MapPoint::GetObservations()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mObservations;
     }
 
     int MapPoint::Observations()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return nObs;
     }
 
@@ -234,8 +233,7 @@ namespace ORB_SLAM3
     {
         std::map<KeyFrame*, std::tuple<int, int>> obs;
         {
-            std::unique_lock<std::mutex> lock1(mMutexFeatures);
-            std::unique_lock<std::mutex> lock2(mMutexPos);
+            std::scoped_lock lock(mMutexFeatures, mMutexPos);
             mbBad = true;
             obs = mObservations;
             mObservations.clear();
@@ -259,8 +257,7 @@ namespace ORB_SLAM3
 
     MapPoint* MapPoint::GetReplaced()
     {
-        std::unique_lock<std::mutex> lock1(mMutexFeatures);
-        std::unique_lock<std::mutex> lock2(mMutexPos);
+        std::scoped_lock lock(mMutexFeatures, mMutexPos);
         return mpReplaced;
     }
 
@@ -272,8 +269,7 @@ namespace ORB_SLAM3
         int nvisible, nfound;
         std::map<KeyFrame*, std::tuple<int, int>> obs;
         {
-            std::unique_lock<std::mutex> lock1(mMutexFeatures);
-            std::unique_lock<std::mutex> lock2(mMutexPos);
+            std::scoped_lock lock(mMutexFeatures, mMutexPos);
             obs = mObservations;
             mObservations.clear();
             mbBad = true;
@@ -324,28 +320,26 @@ namespace ORB_SLAM3
 
     bool MapPoint::isBad()
     {
-        std::unique_lock<std::mutex> lock1(mMutexFeatures, std::defer_lock);
-        std::unique_lock<std::mutex> lock2(mMutexPos, std::defer_lock);
-        lock(lock1, lock2);
+        std::scoped_lock lock(mMutexFeatures, mMutexPos);
 
         return mbBad;
     }
 
     void MapPoint::IncreaseVisible(int n)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         mnVisible += n;
     }
 
     void MapPoint::IncreaseFound(int n)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         mnFound += n;
     }
 
     float MapPoint::GetFoundRatio()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return static_cast<float>(mnFound) / mnVisible;
     }
 
@@ -357,7 +351,7 @@ namespace ORB_SLAM3
         std::map<KeyFrame*, std::tuple<int, int>> observations;
 
         {
-            std::unique_lock<std::mutex> lock1(mMutexFeatures);
+            std::lock_guard<std::mutex> lock1(mMutexFeatures);
             if(mbBad)
                 return;
             observations = mObservations;
@@ -424,20 +418,20 @@ namespace ORB_SLAM3
         }
 
         {
-            std::unique_lock<std::mutex> lock(mMutexFeatures);
+            std::lock_guard<std::mutex> lock(mMutexFeatures);
             mDescriptor = vDescriptors[BestIdx].clone();
         }
     }
 
     cv::Mat MapPoint::GetDescriptor()
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mDescriptor.clone();
     }
 
     std::tuple<int, int> MapPoint::GetIndexInKeyFrame(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         if(mObservations.count(pKF))
             return mObservations[pKF];
         else
@@ -446,7 +440,7 @@ namespace ORB_SLAM3
 
     bool MapPoint::IsInKeyFrame(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutexFeatures);
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
         return (mObservations.count(pKF));
     }
 
@@ -456,8 +450,7 @@ namespace ORB_SLAM3
         KeyFrame* pRefKF;
         Eigen::Vector3f Pos;
         {
-            std::unique_lock<std::mutex> lock1(mMutexFeatures);
-            std::unique_lock<std::mutex> lock2(mMutexPos);
+            std::scoped_lock lock(mMutexFeatures, mMutexPos);
             if(mbBad)
                 return;
             observations = mObservations;
@@ -519,7 +512,7 @@ namespace ORB_SLAM3
         const int nLevels = pRefKF->mnScaleLevels;
 
         {
-            std::unique_lock<std::mutex> lock3(mMutexPos);
+            std::lock_guard<std::mutex> lock3(mMutexPos);
             mfMaxDistance = dist * levelScaleFactor;
             mfMinDistance = mfMaxDistance / pRefKF->mvScaleFactors[nLevels - 1];
             mNormalVector = normal / n;
@@ -528,19 +521,19 @@ namespace ORB_SLAM3
 
     void MapPoint::SetNormalVector(const Eigen::Vector3f &normal)
     {
-        std::unique_lock<std::mutex> lock3(mMutexPos);
+        std::lock_guard<std::mutex> lock3(mMutexPos);
         mNormalVector = normal;
     }
 
     float MapPoint::GetMinDistanceInvariance()
     {
-        std::unique_lock<std::mutex> lock(mMutexPos);
+        std::lock_guard<std::mutex> lock(mMutexPos);
         return 0.8f * mfMinDistance;
     }
 
     float MapPoint::GetMaxDistanceInvariance()
     {
-        std::unique_lock<std::mutex> lock(mMutexPos);
+        std::lock_guard<std::mutex> lock(mMutexPos);
         return 1.2f * mfMaxDistance;
     }
 
@@ -548,7 +541,7 @@ namespace ORB_SLAM3
     {
         float ratio;
         {
-            std::unique_lock<std::mutex> lock(mMutexPos);
+            std::lock_guard<std::mutex> lock(mMutexPos);
             ratio = mfMaxDistance / currentDist;
         }
 
@@ -565,7 +558,7 @@ namespace ORB_SLAM3
     {
         float ratio;
         {
-            std::unique_lock<std::mutex> lock(mMutexPos);
+            std::lock_guard<std::mutex> lock(mMutexPos);
             ratio = mfMaxDistance / currentDist;
         }
 
@@ -593,13 +586,13 @@ namespace ORB_SLAM3
 
     Map* MapPoint::GetMap()
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         return mpMap;
     }
 
     void MapPoint::UpdateMap(Map* pMap)
     {
-        std::unique_lock<std::mutex> lock(mMutexMap);
+        std::lock_guard<std::mutex> lock(mMutexMap);
         mpMap = pMap;
     }
 

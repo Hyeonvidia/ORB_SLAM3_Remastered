@@ -1017,13 +1017,13 @@ namespace ORB_SLAM3
 
     bool Frame::imuIsPreintegrated()
     {
-        std::unique_lock<std::mutex> lock(*mpMutexImu);
+        std::lock_guard<std::mutex> lock(*mpMutexImu);
         return mbImuPreintegrated;
     }
 
     void Frame::setIntegrated()
     {
-        std::unique_lock<std::mutex> lock(*mpMutexImu);
+        std::lock_guard<std::mutex> lock(*mpMutexImu);
         mbImuPreintegrated = true;
     }
 

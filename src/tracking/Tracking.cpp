@@ -1638,7 +1638,7 @@ namespace ORB_SLAM3
 
     void Tracking::GrabImuData(const IMU::Point &imuMeasurement)
     {
-        std::unique_lock<std::mutex> lock(mMutexImuQueue);
+        std::lock_guard<std::mutex> lock(mMutexImuQueue);
         mlQueueImuData.push_back(imuMeasurement);
     }
 
@@ -1664,7 +1664,7 @@ namespace ORB_SLAM3
         {
             bool bSleep = false;
             {
-                std::unique_lock<std::mutex> lock(mMutexImuQueue);
+                std::lock_guard<std::mutex> lock(mMutexImuQueue);
                 if(!mlQueueImuData.empty())
                 {
                     IMU::Point* m = &mlQueueImuData.front();
@@ -1849,7 +1849,7 @@ namespace ORB_SLAM3
             if(mLastFrame.mTimeStamp > mCurrentFrame.mTimeStamp)
             {
                 std::cerr << "ERROR: Frame with a timestamp older than previous frame detected!" << std::endl;
-                std::unique_lock<std::mutex> lock(mMutexImuQueue);
+                std::lock_guard<std::mutex> lock(mMutexImuQueue);
                 mlQueueImuData.clear();
                 CreateMapInAtlas();
                 return;
@@ -1913,7 +1913,7 @@ namespace ORB_SLAM3
         mbCreatedMap = false;
 
         // Get Map Mutex -> Map cannot be changed
-        std::unique_lock<std::mutex> lock(pCurrentMap->mMutexMapUpdate);
+        std::lock_guard<std::mutex> lock(pCurrentMap->mMutexMapUpdate);
 
         mbMapUpdated = false;
 
@@ -4156,13 +4156,13 @@ namespace ORB_SLAM3
 #ifdef REGISTER_LOOP
     void Tracking::RequestStop()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         mbStopRequested = true;
     }
 
     bool Tracking::Stop()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         if(mbStopRequested && !mbNotStop)
         {
             mbStopped = true;
@@ -4175,19 +4175,19 @@ namespace ORB_SLAM3
 
     bool Tracking::stopRequested()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         return mbStopRequested;
     }
 
     bool Tracking::isStopped()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         return mbStopped;
     }
 
     void Tracking::Release()
     {
-        std::unique_lock<std::mutex> lock(mMutexStop);
+        std::lock_guard<std::mutex> lock(mMutexStop);
         mbStopped = false;
         mbStopRequested = false;
     }

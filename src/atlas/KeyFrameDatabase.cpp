@@ -40,7 +40,7 @@ namespace ORB_SLAM3
 
     void KeyFrameDatabase::add(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
 
         for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             mvInvertedFile[vit->first].push_back(pKF);
@@ -48,7 +48,7 @@ namespace ORB_SLAM3
 
     void KeyFrameDatabase::erase(KeyFrame* pKF)
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
 
         // Erase elements in the Inverse File for the entry
         for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
@@ -75,7 +75,7 @@ namespace ORB_SLAM3
 
     void KeyFrameDatabase::clearMap(Map* pMap)
     {
-        std::unique_lock<std::mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
 
         // Erase elements in the Inverse File for the entry
         for(std::vector<std::list<KeyFrame*>>::iterator vit = mvInvertedFile.begin(), vend = mvInvertedFile.end();
@@ -108,7 +108,7 @@ namespace ORB_SLAM3
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
 
             for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend;
                 vit++)
@@ -241,7 +241,7 @@ namespace ORB_SLAM3
         // Search all keyframes that share a word with current keyframes
         // Discard keyframes connected to the query keyframe
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
 
             for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend;
                 vit++)
@@ -494,7 +494,7 @@ namespace ORB_SLAM3
 
         // Search all keyframes that share a word with current frame
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
 
             spConnectedKF = pKF->GetConnectedKeyFrames();
 
@@ -634,7 +634,7 @@ namespace ORB_SLAM3
 
         // Search all keyframes that share a word with current frame
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
 
             spConnectedKF = pKF->GetConnectedKeyFrames();
 
@@ -765,7 +765,7 @@ namespace ORB_SLAM3
 
         // Search all keyframes that share a word with current frame
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::lock_guard<std::mutex> lock(mMutex);
 
             for(DBoW2::BowVector::const_iterator vit = F->mBowVec.begin(), vend = F->mBowVec.end(); vit != vend; vit++)
             {
