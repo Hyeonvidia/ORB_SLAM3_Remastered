@@ -259,7 +259,6 @@ namespace ORB_SLAM3
         {
             mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile, settings_);
             mtViewer = std::thread(&Viewer::Run, mpViewer);
-            mpTracker->SetViewer(mpViewer);
             mpViewer->both = mpFrameDrawer->both;
         }
 
@@ -325,18 +324,17 @@ namespace ORB_SLAM3
 
         // Check reset
         {
-            std::lock_guard<std::mutex> lock(mMutexReset);
-            if(mbReset)
+            bool bReset = false;
+            bool bResetActiveMap = false;
             {
-                mpTracker->Reset();
+                std::lock_guard<std::mutex> lock(mMutexReset);
+                bReset = mbReset;
+                bResetActiveMap = !mbReset && mbResetActiveMap;
                 mbReset = false;
                 mbResetActiveMap = false;
             }
-            else if(mbResetActiveMap)
-            {
-                mpTracker->ResetActiveMap();
-                mbResetActiveMap = false;
-            }
+            if(bReset || bResetActiveMap)
+                ResetTracking(bResetActiveMap);
         }
 
         if(mSensor == System::IMU_STEREO)
@@ -402,18 +400,17 @@ namespace ORB_SLAM3
 
         // Check reset
         {
-            std::lock_guard<std::mutex> lock(mMutexReset);
-            if(mbReset)
+            bool bReset = false;
+            bool bResetActiveMap = false;
             {
-                mpTracker->Reset();
+                std::lock_guard<std::mutex> lock(mMutexReset);
+                bReset = mbReset;
+                bResetActiveMap = !mbReset && mbResetActiveMap;
                 mbReset = false;
                 mbResetActiveMap = false;
             }
-            else if(mbResetActiveMap)
-            {
-                mpTracker->ResetActiveMap();
-                mbResetActiveMap = false;
-            }
+            if(bReset || bResetActiveMap)
+                ResetTracking(bResetActiveMap);
         }
 
         if(mSensor == System::IMU_RGBD)
@@ -480,19 +477,19 @@ namespace ORB_SLAM3
 
         // Check reset
         {
-            std::lock_guard<std::mutex> lock(mMutexReset);
-            if(mbReset)
+            bool bReset = false;
+            bool bResetActiveMap = false;
             {
-                mpTracker->Reset();
+                std::lock_guard<std::mutex> lock(mMutexReset);
+                bReset = mbReset;
+                bResetActiveMap = !mbReset && mbResetActiveMap;
                 mbReset = false;
                 mbResetActiveMap = false;
             }
-            else if(mbResetActiveMap)
-            {
+            if(bResetActiveMap)
                 std::cout << "SYSTEM-> Reseting active map in monocular case" << std::endl;
-                mpTracker->ResetActiveMap();
-                mbResetActiveMap = false;
-            }
+            if(bReset || bResetActiveMap)
+                ResetTracking(bResetActiveMap);
         }
 
         if(mSensor == System::IMU_MONOCULAR)
@@ -532,6 +529,35 @@ namespace ORB_SLAM3
         }
         else
             return false;
+    }
+
+    // A reset destroys the maps, keyframes and map points the viewer thread is
+    // drawing, so the viewer has to be stopped for the duration, not merely
+    // asked to stop. That handshake used to sit inside Tracking::Reset, which
+    // was the only reason the tracking layer knew what a Viewer was.
+    //
+    // It also has to happen with mMutexReset released. The reset blocks in
+    // TrackStereo and friends hold that mutex, and the viewer's own Reset
+    // button calls System::ResetActiveMap(), which takes it -- so a viewer
+    // thread blocked there never reaches the stop check this loop waits on and
+    // the two wait on each other. Reading the flags under the lock and
+    // resetting outside it is what keeps that from happening.
+    void System::ResetTracking(bool bActiveMapOnly)
+    {
+        if(mpViewer)
+        {
+            mpViewer->RequestStop();
+            while(!mpViewer->isStopped())
+                usleep(3000);
+        }
+
+        if(bActiveMapOnly)
+            mpTracker->ResetActiveMap();
+        else
+            mpTracker->Reset();
+
+        if(mpViewer)
+            mpViewer->Release();
     }
 
     void System::Reset()
@@ -1443,7 +1469,7 @@ namespace ORB_SLAM3
     {
         if(mpAtlas->GetCurrentMap()->KeyFramesInMap() < 12)
         {
-            mpTracker->ResetActiveMap();
+            ResetTracking(true);
         }
         else
         {

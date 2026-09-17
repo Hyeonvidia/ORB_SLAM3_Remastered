@@ -226,6 +226,9 @@ namespace ORB_SLAM3
         // Asks the three to finish and waits for them. Idempotent.
         void StopAndJoinThreads();
 
+        // Resets tracking with the viewer held still for the duration.
+        void ResetTracking(bool bActiveMapOnly);
+
         // Reset flag
         std::mutex mMutexReset;
         bool mbReset;

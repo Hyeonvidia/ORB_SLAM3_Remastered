@@ -43,7 +43,6 @@
 namespace ORB_SLAM3
 {
 
-    class Viewer;
     class FrameDrawer;
     class Atlas;
     class LocalMapping;
@@ -77,7 +76,6 @@ namespace ORB_SLAM3
 
         void SetLocalMapper(LocalMapping* pLocalMapper);
         void SetLoopClosing(LoopClosing* pLoopClosing);
-        void SetViewer(Viewer* pViewer);
         void SetStepByStep(bool bSet);
         bool GetStepByStep();
 
@@ -275,7 +273,6 @@ namespace ORB_SLAM3
         System* mpSystem;
 
         //Drawers
-        Viewer* mpViewer;
         FrameDrawer* mpFrameDrawer;
         MapDrawer* mpMapDrawer;
         bool bStepByStep;
