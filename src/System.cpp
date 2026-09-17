@@ -573,9 +573,13 @@ namespace ORB_SLAM3
         // is safely on disk and so looks like it does not matter.
         //
         // join(), not a poll on isFinished(): the flag says the Run loop broke,
-        // join says the thread has actually gone. Neither loop can hang here --
-        // both test CheckFinish() every 3-5 ms and break, including from inside
-        // LocalMapping's stopped-wait.
+        // join says the thread has actually gone. The two worker loops test
+        // CheckFinish() every 3-5 ms and break, including from inside
+        // LocalMapping's stopped-wait -- but the LoopClosing join is not that
+        // quick, because LoopClosing::Run() now stops and joins the global
+        // bundle adjustment before it reports finished, and g2o only notices the
+        // stop flag at points of its own choosing. Under a second on the KITTI
+        // sequences measured; not instant.
         for(std::thread* t : {mptLocalMapping, mptLoopClosing, mptViewer})
         {
             // Never the calling thread. The viewer's Stop button runs Shutdown()
@@ -588,10 +592,9 @@ namespace ORB_SLAM3
                 t->join();
         }
 
-        // Not covered: LoopClosing runs global bundle adjustment on a thread of
-        // its own that it detaches rather than keeps, so a global BA still in
-        // flight at exit is the same race. It needs mbStopGBA, which is
-        // LoopClosing's own, so it is a change to make there rather than here.
+        // The global bundle adjustment runs on a fourth thread, owned by
+        // LoopClosing. Joining mptLoopClosing covers it too: LoopClosing::Run()
+        // stops and joins that thread before it reports itself finished.
 
         if(!mStrSaveAtlasToFile.empty())
         {

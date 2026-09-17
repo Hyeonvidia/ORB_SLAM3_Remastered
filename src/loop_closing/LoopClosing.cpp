@@ -50,9 +50,9 @@ namespace ORB_SLAM3
                              const bool bActiveLC)
         : mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false), mbFinished(true),
           mpAtlas(pAtlas), mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0),
-          mbRunningGBA(false), mbFinishedGBA(true), mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale),
-          mnFullBAIdx(0), mnLoopNumCoincidences(0), mnMergeNumCoincidences(0), mbLoopDetected(false),
-          mbMergeDetected(false), mnLoopNumNotFound(0), mnMergeNumNotFound(0), mbActiveLC(bActiveLC)
+          mbRunningGBA(false), mbFinishedGBA(true), mbStopGBA(false), mbFixScale(bFixScale), mnFullBAIdx(0),
+          mnLoopNumCoincidences(0), mnMergeNumCoincidences(0), mbLoopDetected(false), mbMergeDetected(false),
+          mnLoopNumNotFound(0), mnMergeNumNotFound(0), mbActiveLC(bActiveLC)
     {
         mnCovisibilityConsistencyTh = 3;
         mpLastCurrentKF = static_cast<KeyFrame*>(NULL);
@@ -328,6 +328,11 @@ namespace ORB_SLAM3
 
             usleep(5000);
         }
+
+        // The global BA runs on a thread of its own and nothing used to wait for
+        // it. System::Shutdown() waits for this thread, so stopping the BA before
+        // reporting finished is what extends that wait to cover it.
+        StopAndJoinGBA();
 
         SetFinish();
     }
@@ -1020,27 +1025,26 @@ namespace ORB_SLAM3
     {
         //cout << "Loop detected!" << endl;
 
+        // If a Global Bundle Adjustment is running, abort it
+        //
+        // Ahead of the stop request, where the two merge paths already put it
+        // (MergeLocal, MergeLocal2). Stopping first and aborting second left
+        // Local Mapping stopped for however long the abort took -- and worse,
+        // the BA's own apply block ends in mpLocalMapper->Release(), which
+        // clears the stop *this* function just requested and then waits on, so
+        // an abort landing in that window left the wait below spinning on a
+        // stop nobody had asked for any more.
+        if(isRunningGBA())
+        {
+            std::cout << "Stoping Global Bundle Adjustment...";
+            StopAndJoinGBA();
+            std::cout << "  Done!!" << std::endl;
+        }
+
         // Send a stop signal to Local Mapping
         // Avoid new keyframes are inserted while correcting the loop
         mpLocalMapper->RequestStop();
         mpLocalMapper->EmptyQueue(); // Proccess keyframes in the queue
-
-        // If a Global Bundle Adjustment is running, abort it
-        if(isRunningGBA())
-        {
-            std::cout << "Stoping Global Bundle Adjustment...";
-            std::unique_lock<std::mutex> lock(mMutexGBA);
-            mbStopGBA = true;
-
-            mnFullBAIdx++;
-
-            if(mpThreadGBA)
-            {
-                mpThreadGBA->detach();
-                delete mpThreadGBA;
-            }
-            std::cout << "  Done!!" << std::endl;
-        }
 
         // Wait until Local Mapping has effectively stopped
         while(!mpLocalMapper->isStopped())
@@ -1260,12 +1264,17 @@ namespace ORB_SLAM3
         // Launch a new thread to perform Global Bundle Adjustment (Only if few keyframes, if not it would take too much time)
         if(!pLoopMap->isImuInitialized() || (pLoopMap->KeyFramesInMap() < 200 && mpAtlas->CountMaps() == 1))
         {
+            // Assigning over a joinable std::thread calls std::terminate, and the
+            // previous BA's thread object outlives the BA itself. Normally it has
+            // already returned and this join costs nothing.
+            StopAndJoinGBA();
+
             mbRunningGBA = true;
             mbFinishedGBA = false;
             mbStopGBA = false;
             mnCorrectionGBA = mnNumCorrection;
 
-            mpThreadGBA = new std::thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
+            mThreadGBA = std::thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
         }
 
         // Loop closed. Release Local Mapping.
@@ -1292,16 +1301,7 @@ namespace ORB_SLAM3
         // If a Global Bundle Adjustment is running, abort it
         if(isRunningGBA())
         {
-            std::unique_lock<std::mutex> lock(mMutexGBA);
-            mbStopGBA = true;
-
-            mnFullBAIdx++;
-
-            if(mpThreadGBA)
-            {
-                mpThreadGBA->detach();
-                delete mpThreadGBA;
-            }
+            StopAndJoinGBA();
             bRelaunchBA = true;
         }
 
@@ -1837,10 +1837,12 @@ namespace ORB_SLAM3
            (!pCurrentMap->isImuInitialized() || (pCurrentMap->KeyFramesInMap() < 200 && mpAtlas->CountMaps() == 1)))
         {
             // Launch a new thread to perform Global Bundle Adjustment
+            StopAndJoinGBA();
+
             mbRunningGBA = true;
             mbFinishedGBA = false;
             mbStopGBA = false;
-            mpThreadGBA = new std::thread(&LoopClosing::RunGlobalBundleAdjustment, this, pMergeMap, mpCurrentKF->mnId);
+            mThreadGBA = std::thread(&LoopClosing::RunGlobalBundleAdjustment, this, pMergeMap, mpCurrentKF->mnId);
         }
 
         mpMergeMatchedKF->AddMergeEdge(mpCurrentKF);
@@ -1875,16 +1877,7 @@ namespace ORB_SLAM3
         // If a Global Bundle Adjustment is running, abort it
         if(isRunningGBA())
         {
-            std::unique_lock<std::mutex> lock(mMutexGBA);
-            mbStopGBA = true;
-
-            mnFullBAIdx++;
-
-            if(mpThreadGBA)
-            {
-                mpThreadGBA->detach();
-                delete mpThreadGBA;
-            }
+            StopAndJoinGBA();
             bRelaunchBA = true;
         }
 
@@ -2343,6 +2336,17 @@ namespace ORB_SLAM3
         vnGBAMPs.push_back(pActiveMap->GetAllMapPoints().size());
 #endif
 
+        // Read before the optimization, where ORB-SLAM2 read it. Every abort bumps
+        // mnFullBAIdx, so a BA that reads the counter on the way out reads the
+        // value the abort already bumped, compares equal at the guard below and
+        // is not caught by it at all -- the guard was live only for an abort
+        // landing in the microseconds between the read and the lock. That was
+        // load-bearing while an abandoned BA could be un-cancelled by the next
+        // launch writing mbStopGBA = false; joining at the abort closes that, so
+        // this now restores what the guard was for rather than fixing a live
+        // defect.
+        const int idx = mnFullBAIdx;
+
         const bool bImuInit = pActiveMap->isImuInitialized();
 
         if(!bImuInit)
@@ -2363,7 +2367,6 @@ namespace ORB_SLAM3
         }
 #endif
 
-        int idx = mnFullBAIdx;
         // Optimizer::GlobalBundleAdjustemnt(mpMap,10,&mbStopGBA,nLoopKF,false);
 
         // Update all MapPoints and KeyFrames
@@ -2576,6 +2579,51 @@ namespace ORB_SLAM3
             mbFinishedGBA = true;
             mbRunningGBA = false;
         }
+    }
+
+    // Upstream detached the global BA's thread and deleted the std::thread
+    // object. That left mpThreadGBA dangling for the next abort site to detach a
+    // second time, and left nobody able to wait for the optimizer: a BA still
+    // running at exit had static destruction pulled out from under it. It also
+    // made an abort undoable, because the next launch writes mbStopGBA = false
+    // through the address the abandoned optimizer is still reading.
+    //
+    // The cost of keeping and joining the thread is a wait that is not short
+    // enough to promise a bound for: g2o tests the flag between iterations and
+    // inside the Levenberg trial loop, but not while it builds the graph, and
+    // the recovery pass after optimize() does not test it at all. Under a second
+    // on the KITTI sequences measured, but it scales with the map.
+    //
+    // mbStopGBA stays a plain bool, written here under mMutexGBA and read by g2o
+    // on another thread with no synchronisation: it cannot be std::atomic while
+    // g2o's setForceStopFlag takes bool*. The join's liveness rests on that read
+    // being reloaded, which it is in practice because the trial loop calls
+    // out-of-line virtuals on every pass.
+    void LoopClosing::StopAndJoinGBA()
+    {
+        // mThreadGBA is assigned only by the thread running Run(), which is the
+        // only thread that calls this, so the handle itself needs no lock.
+        if(!mThreadGBA.joinable())
+            return;
+
+        {
+            // lock_guard, not the unique_lock the rest of the file uses: this is a
+            // plain scoped lock that is never unlocked early, and saying so costs
+            // nothing.
+            std::lock_guard<std::mutex> lock(mMutexGBA);
+            mbStopGBA = true;
+            mnFullBAIdx++;
+        }
+
+        mThreadGBA.join();
+
+        // Set here, with the thread gone, whichever exit the BA took: an aborted
+        // run can return at the mnFullBAIdx guard without ever reaching the
+        // assignments at the end of RunGlobalBundleAdjustment, and isRunningGBA()
+        // would then go on claiming a BA that no longer exists.
+        std::lock_guard<std::mutex> lock(mMutexGBA);
+        mbRunningGBA = false;
+        mbFinishedGBA = true;
     }
 
     void LoopClosing::RequestFinish()

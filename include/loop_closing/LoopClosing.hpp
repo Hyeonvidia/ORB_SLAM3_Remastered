@@ -215,12 +215,23 @@ namespace ORB_SLAM3
 
         long unsigned int mLastLoopKFid;
 
+        // Stops a running global bundle adjustment and does not return until its
+        // thread has gone. A no-op when there is none. Only ever called by the
+        // thread running Run().
+        void StopAndJoinGBA();
+
         // Variables related to Global Bundle Adjustment
         bool mbRunningGBA;
         bool mbFinishedGBA;
         bool mbStopGBA;
         std::mutex mMutexGBA;
-        std::thread* mpThreadGBA;
+
+        // Owned, not a pointer, and never detached: see StopAndJoinGBA. The class
+        // must not be destroyed before Run() has returned -- destroying a
+        // joinable std::thread calls std::terminate, where the raw pointer this
+        // replaced merely leaked. Nothing destroys LoopClosing today; a
+        // destructor added later has to join.
+        std::thread mThreadGBA;
 
         // Fix scale in the stereo/RGB-D case
         bool mbFixScale;
