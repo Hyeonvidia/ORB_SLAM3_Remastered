@@ -206,9 +206,13 @@ namespace ORB_SLAM3
 
         // System threads: Local Mapping, Loop Closing, Viewer.
         // The Tracking thread "lives" in the main execution thread that creates the System object.
-        std::thread* mptLocalMapping;
-        std::thread* mptLoopClosing;
-        std::thread* mptViewer;
+        // Null by default, because mptViewer is only assigned when the viewer is
+        // enabled: headless runs left it holding whatever the allocation
+        // contained, which did not matter while nothing read it and does now
+        // that Shutdown() joins these.
+        std::thread* mptLocalMapping = nullptr;
+        std::thread* mptLoopClosing = nullptr;
+        std::thread* mptViewer = nullptr;
 
         // Reset flag
         std::mutex mMutexReset;

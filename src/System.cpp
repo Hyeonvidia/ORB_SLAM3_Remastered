@@ -558,27 +558,40 @@ namespace ORB_SLAM3
 
         mpLocalMapper->RequestFinish();
         mpLoopCloser->RequestFinish();
-        /*if(mpViewer)
-    {
-        mpViewer->RequestFinish();
-        while(!mpViewer->isFinished())
-            usleep(5000);
-    }*/
+        if(mpViewer)
+            mpViewer->RequestFinish();
 
-        // Wait until all thread have effectively stopped
-        /*while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA())
-    {
-        if(!mpLocalMapper->isFinished())
-            cout << "mpLocalMapper is not finished" << endl;*/
-        /*if(!mpLoopCloser->isFinished())
-            cout << "mpLoopCloser is not finished" << endl;
-        if(mpLoopCloser->isRunningGBA()){
-            cout << "mpLoopCloser is running GBA" << endl;
-            cout << "break anyway..." << endl;
-            break;
-        }*/
-        /*usleep(5000);
-    }*/
+        // Then actually wait for them, which is what this function was missing.
+        //
+        // Upstream asked the three threads to finish and carried straight on --
+        // the viewer was never even asked, and the loop that waited for the
+        // other two was commented out. So Shutdown() returned with all three
+        // still running: main() went on to print its timing statistics, save
+        // the trajectory and return, and the static destructors then ran under
+        // threads that were still using what they were tearing down. That is
+        // the intermittent segfault at exit, which lands *after* the trajectory
+        // is safely on disk and so looks like it does not matter.
+        //
+        // join(), not a poll on isFinished(): the flag says the Run loop broke,
+        // join says the thread has actually gone. Neither loop can hang here --
+        // both test CheckFinish() every 3-5 ms and break, including from inside
+        // LocalMapping's stopped-wait.
+        for(std::thread* t : {mptLocalMapping, mptLoopClosing, mptViewer})
+        {
+            // Never the calling thread. The viewer's Stop button runs Shutdown()
+            // on the viewer thread itself (Viewer.cpp, menuStop), and a thread
+            // joining itself is the deadlock the standard reports as
+            // resource_deadlock_would_occur. It has had RequestFinish() either
+            // way, so its loop ends at the next check and the join lands on the
+            // second Shutdown(), the one main() makes.
+            if(t && t->joinable() && t->get_id() != std::this_thread::get_id())
+                t->join();
+        }
+
+        // Not covered: LoopClosing runs global bundle adjustment on a thread of
+        // its own that it detaches rather than keeps, so a global BA still in
+        // flight at exit is the same race. It needs mbStopGBA, which is
+        // LoopClosing's own, so it is a change to make there rather than here.
 
         if(!mStrSaveAtlasToFile.empty())
         {
