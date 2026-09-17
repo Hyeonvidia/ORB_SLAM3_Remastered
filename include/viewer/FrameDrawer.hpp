@@ -54,23 +54,16 @@ namespace ORB_SLAM3
 
         bool both;
 
-        // The status line is NOT burned into the image any more. cv::putText
-        // draws it at a fixed ten pixels tall, and the viewer then scales the
-        // whole frame to fit its row -- at anything below 1:1 the strokes are
-        // resampled into fragments. The image keeps the black band so the text
-        // has something to sit on, and the viewer draws these on top of it with
-        // its own font, at screen resolution, so it stays sharp at any scale.
+        // What the system is doing, rebuilt from the Atlas on every frame. The
+        // viewer draws it in a row of its own at window resolution; it used to be
+        // written into the image with cv::putText, where it was part of the
+        // texture and came apart whenever the frame was scaled under 1:1.
         std::string StatusText() const { return msStatusText; }
 
-        // Height of that band, in image rows, so the viewer can find it after
-        // the frame has been scaled.
-        int StatusBandRows() const { return mnStatusBandRows; }
-
     protected:
-        void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);
+        void UpdateStatusText(int nState);
 
         std::string msStatusText;
-        int mnStatusBandRows = 0;
 
         // Info of the frame to be drawn
         cv::Mat mIm, mImRight;

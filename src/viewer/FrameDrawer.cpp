@@ -200,10 +200,9 @@ namespace ORB_SLAM3
             }
         }
 
-        cv::Mat imWithInfo;
-        DrawTextInfo(im, state, imWithInfo);
+        UpdateStatusText(state);
 
-        return imWithInfo;
+        return im;
     }
 
     cv::Mat FrameDrawer::DrawRightFrame(float imageScale)
@@ -325,13 +324,12 @@ namespace ORB_SLAM3
             }
         }
 
-        cv::Mat imWithInfo;
-        DrawTextInfo(im, state, imWithInfo);
+        UpdateStatusText(state);
 
-        return imWithInfo;
+        return im;
     }
 
-    void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
+    void FrameDrawer::UpdateStatusText(int nState)
     {
         std::stringstream s;
         if(nState == Tracking::NO_IMAGES_YET)
@@ -362,25 +360,13 @@ namespace ORB_SLAM3
 
         msStatusText = s.str();
 
-        // Sized from the image rather than fixed, because the viewer scales the
-        // whole frame to fit its row. FONT_HERSHEY_PLAIN at scale 1 with
-        // single-pixel strokes was what broke: resampling to anything under 1:1
-        // drops half of a one-pixel stroke and the line comes out in fragments.
-        // A stroke two pixels wide survives that, and tying the size to the
-        // image height keeps it proportionate on a 370-row KITTI frame and a
-        // 480-row EuRoC one alike.
-        const double dFontScale = std::max(0.9, im.rows / 480.0);
-        const int nThickness = 2;
-        int baseline = 0;
-        const cv::Size textSize = cv::getTextSize(msStatusText, cv::FONT_HERSHEY_SIMPLEX, dFontScale, nThickness,
-                                                  &baseline);
-        mnStatusBandRows = textSize.height + baseline + 10;
-
-        imText = cv::Mat(im.rows + mnStatusBandRows, im.cols, im.type());
-        im.copyTo(imText.rowRange(0, im.rows).colRange(0, im.cols));
-        imText.rowRange(im.rows, imText.rows) = cv::Mat::zeros(mnStatusBandRows, im.cols, im.type());
-        cv::putText(imText, msStatusText, cv::Point(6, imText.rows - baseline - 4), cv::FONT_HERSHEY_SIMPLEX,
-                    dFontScale, cv::Scalar(255, 255, 255), nThickness, cv::LINE_AA);
+        // The text is NOT drawn into the image. It used to be, in a black band
+        // added below it, and that band was the problem: it is part of the
+        // texture, so it shrank with the frame and the strokes came apart
+        // whenever the viewer scaled the frame under 1:1, and the rows it added
+        // changed the frame's aspect, which then fed back into the layout. The
+        // viewer draws StatusText() in a row of its own at window resolution
+        // instead, so this leaves the image exactly as it found it.
     }
 
     void FrameDrawer::Update(Tracking* pTracker)

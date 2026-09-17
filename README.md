@@ -265,10 +265,16 @@ the map; `ORBSLAM3R_FRAME_VIEW_FRACTION` pins it instead, without a rebuild:
 ORBSLAM3R_FRAME_VIEW_FRACTION=0.5 ./tools/run_gui.sh euroc stereo MH01
 ```
 
-The status line along the bottom of the frame and the view mode in the map's
-corner are drawn by the viewer at screen resolution, not burned into the image:
-`cv::putText` writes at a fixed ten pixels tall, and any frame shown below 1:1
-resampled those strokes into fragments.
+Between the frame and the map is a status row: what the system is doing on the
+left, how the map is being looked at on the right. Both are drawn by the viewer
+at window resolution rather than into the image. Written into the image, the
+status line is part of the texture and shrinks with the frame, and `cv::putText`
+at single-pixel strokes came apart the moment the frame was shown under 1:1 --
+and the black band it needed changed the frame's aspect, which fed back into the
+layout above.
+
+The view mode is there because *Camera View* and *Top View* are momentary
+buttons: they pop back up and leave nothing on screen saying which is in effect.
 
 ### Why it goes through a nested X server
 

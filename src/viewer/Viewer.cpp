@@ -357,6 +357,14 @@ namespace ORB_SLAM3
         // Enough for a handful of recent lines; the map gets everything else.
         const int kLogHeightPx = 96;
 
+        // The tracked frame's status line gets a row of its own rather than being
+        // drawn into the image. Burned in, it is part of the texture and shrinks
+        // with the frame -- which is what made it illegible once the frame was
+        // scaled to fit its row -- and the band it needed ate image rows, which
+        // then fed back into the layout. Drawn here it is at window resolution,
+        // always, and the image stays an image.
+        const int kStatusHeightPx = 26;
+
         // The tracked frame, which used to be a separate cv::imshow window.
         // Its aspect comes from the first frame, since it depends on the sensor
         // and on whether the right image is concatenated.
@@ -368,7 +376,9 @@ namespace ORB_SLAM3
         // The projection is what follows the view's shape instead; see
         // MapProjection below.
         pangolin::View &d_cam = pangolin::CreateDisplay()
-                                    .SetBounds(pangolin::Attach::Pix(kLogHeightPx), 1.0 - dFrameFraction,
+                                    .SetBounds(pangolin::Attach::Pix(kLogHeightPx),
+                                               1.0 - dFrameFraction -
+                                                   static_cast<double>(kStatusHeightPx) / kWindowHeight,
                                                pangolin::Attach::Pix(kMenuPanelWidth), 1.0)
                                     .SetHandler(new pangolin::Handler3D(s_cam));
 
@@ -387,6 +397,14 @@ namespace ORB_SLAM3
             const int h = d_cam.v.h > 0 ? d_cam.v.h : 768;
             return pangolin::ProjectionMatrix(w, h, focal, focal, w / 2.0, h / 2.0, 0.1, far);
         };
+
+        // Given real bounds here, not left at zero height like the log: the block
+        // below that resizes the rows only runs when the frame fraction is being
+        // derived, so a pinned ORBSLAM3R_FRAME_VIEW_FRACTION would otherwise
+        // leave this row invisible.
+        const double kInitStatusFrac = static_cast<double>(kStatusHeightPx) / kWindowHeight;
+        pangolin::View &d_status = pangolin::CreateDisplay().SetBounds(
+            1.0 - dFrameFraction - kInitStatusFrac, 1.0 - dFrameFraction, pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
 
         pangolin::View &d_log = pangolin::CreateDisplay().SetBounds(0.0, pangolin::Attach::Pix(kLogHeightPx),
                                                                     pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
@@ -573,8 +591,11 @@ namespace ORB_SLAM3
                         const double dNatural = static_cast<double>(toShow.rows) * nRowWidth / toShow.cols;
                         dFrameFraction = std::min(kMaxFrameFraction, dNatural / nWinHeight);
 
+                        const double dStatusFrac = static_cast<double>(kStatusHeightPx) / nWinHeight;
                         d_img.SetBounds(1.0 - dFrameFraction, 1.0, pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
-                        d_cam.SetBounds(pangolin::Attach::Pix(kLogHeightPx), 1.0 - dFrameFraction,
+                        d_status.SetBounds(1.0 - dFrameFraction - dStatusFrac, 1.0 - dFrameFraction,
+                                           pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
+                        d_cam.SetBounds(pangolin::Attach::Pix(kLogHeightPx), 1.0 - dFrameFraction - dStatusFrac,
                                         pangolin::Attach::Pix(kMenuPanelWidth), 1.0);
                     }
                     d_img.SetAspect(static_cast<double>(toShow.cols) / toShow.rows);
@@ -607,18 +628,25 @@ namespace ORB_SLAM3
                 imageTexture.RenderToViewportFlipY();
             }
 
-            // "Camera View" and "Top View" are momentary buttons: they fire once and
-            // pop back up, leaving nothing on screen to say which one is in effect.
-            // Follow Camera is a checkbox, but its own state and the view mode
-            // combine, so both are reported here.
-            if(d_cam.v.h > 0)
+            // The status row: what the system is doing on the left, how the map is
+            // being looked at on the right. The view mode belongs here rather than
+            // floating over the map, because "Camera View" and "Top View" are
+            // momentary buttons -- they pop back up and leave nothing on screen
+            // saying which one is in effect.
+            if(d_status.v.h > 0)
             {
-                d_cam.Activate();
+                d_status.Activate();
+                pangolin::GlFont &statusFont = pangolin::default_font();
+                const float fY = static_cast<float>(d_status.v.b) + (d_status.v.h - statusFont.Height()) * 0.5f + 1.0f;
+
+                glColor3f(0.10f, 0.10f, 0.10f);
+                statusFont.Text(mpFrameDrawer->StatusText()).DrawWindow(static_cast<float>(d_status.v.l) + 8.0f, fY);
+
                 const std::string sMode = std::string(bCameraView ? "Camera View" : "Top View") +
                                           (menuFollowCamera ? "  |  following" : "  |  free look");
-                glColor3f(0.25f, 0.25f, 0.25f);
-                pangolin::default_font().Text(sMode).DrawWindow(static_cast<float>(d_cam.v.l) + 8.0f,
-                                                                static_cast<float>(d_cam.v.b + d_cam.v.h) - 16.0f);
+                pangolin::GlText mode = statusFont.Text(sMode);
+                glColor3f(0.45f, 0.45f, 0.45f);
+                mode.DrawWindow(static_cast<float>(d_status.v.l + d_status.v.w) - mode.Width() - 10.0f, fY);
             }
 
             // The log, newest line at the bottom, in the space under the frame.
