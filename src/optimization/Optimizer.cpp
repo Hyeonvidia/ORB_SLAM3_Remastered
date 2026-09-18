@@ -17,6 +17,7 @@
 */
 
 #include "optimization/Optimizer.hpp"
+#include "tracking/Frame.hpp"
 
 #include <complex>
 
@@ -50,7 +51,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-#include "loop_closing/LoopClosing.hpp"
+#include "optimization/KeyFrameAndPose.hpp"
 #include "common/Verbose.hpp"
 
 namespace ORB_SLAM3
@@ -1516,8 +1517,8 @@ namespace ORB_SLAM3
     }
 
     void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
-                                           const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
-                                           const LoopClosing::KeyFrameAndPose &CorrectedSim3,
+                                           const KeyFrameAndPose &NonCorrectedSim3,
+                                           const KeyFrameAndPose &CorrectedSim3,
                                            const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections,
                                            const bool &bFixScale)
     {
@@ -1555,7 +1556,7 @@ namespace ORB_SLAM3
 
             const int nIDi = pKF->mnId;
 
-            LoopClosing::KeyFrameAndPose::const_iterator it = CorrectedSim3.find(pKF);
+            KeyFrameAndPose::const_iterator it = CorrectedSim3.find(pKF);
 
             if(it != CorrectedSim3.end())
             {
@@ -1631,7 +1632,7 @@ namespace ORB_SLAM3
 
             g2o::Sim3 Swi;
 
-            LoopClosing::KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
+            KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
 
             if(iti != NonCorrectedSim3.end())
                 Swi = (iti->second).inverse();
@@ -1647,7 +1648,7 @@ namespace ORB_SLAM3
 
                 g2o::Sim3 Sjw;
 
-                LoopClosing::KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
+                KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
 
                 if(itj != NonCorrectedSim3.end())
                     Sjw = itj->second;
@@ -1674,7 +1675,7 @@ namespace ORB_SLAM3
                 {
                     g2o::Sim3 Slw;
 
-                    LoopClosing::KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
+                    KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
 
                     if(itl != NonCorrectedSim3.end())
                         Slw = itl->second;
@@ -1706,7 +1707,7 @@ namespace ORB_SLAM3
 
                         g2o::Sim3 Snw;
 
-                        LoopClosing::KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
+                        KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
 
                         if(itn != NonCorrectedSim3.end())
                             Snw = itn->second;
@@ -1729,7 +1730,7 @@ namespace ORB_SLAM3
             if(pKF->bImu && pKF->mPrevKF)
             {
                 g2o::Sim3 Spw;
-                LoopClosing::KeyFrameAndPose::const_iterator itp = NonCorrectedSim3.find(pKF->mPrevKF);
+                KeyFrameAndPose::const_iterator itp = NonCorrectedSim3.find(pKF->mPrevKF);
                 if(itp != NonCorrectedSim3.end())
                     Spw = itp->second;
                 else
@@ -3969,7 +3970,7 @@ namespace ORB_SLAM3
     }
 
     void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbStopFlag, Map* pMap,
-                                    LoopClosing::KeyFrameAndPose &corrPoses)
+                                    KeyFrameAndPose &corrPoses)
     {
         const int Nd = 6;
         const unsigned long maxKFid = pCurrKF->mnId;
@@ -5312,8 +5313,8 @@ namespace ORB_SLAM3
     }
 
     void Optimizer::OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
-                                               const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
-                                               const LoopClosing::KeyFrameAndPose &CorrectedSim3,
+                                               const KeyFrameAndPose &NonCorrectedSim3,
+                                               const KeyFrameAndPose &CorrectedSim3,
                                                const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections)
     {
         typedef g2o::BlockSolver<g2o::BlockSolverTraits<4, 4>> BlockSolver_4_4;
@@ -5348,7 +5349,7 @@ namespace ORB_SLAM3
 
             const int nIDi = pKF->mnId;
 
-            LoopClosing::KeyFrameAndPose::const_iterator it = CorrectedSim3.find(pKF);
+            KeyFrameAndPose::const_iterator it = CorrectedSim3.find(pKF);
 
             if(it != CorrectedSim3.end())
             {
@@ -5431,7 +5432,7 @@ namespace ORB_SLAM3
             g2o::Sim3 Siw;
 
             // Use noncorrected poses for posegraph edges
-            LoopClosing::KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
+            KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
 
             if(iti != NonCorrectedSim3.end())
                 Siw = iti->second;
@@ -5446,7 +5447,7 @@ namespace ORB_SLAM3
 
                 g2o::Sim3 Swj;
 
-                LoopClosing::KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
+                KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
 
                 if(itj != NonCorrectedSim3.end())
                     Swj = (itj->second).inverse();
@@ -5474,7 +5475,7 @@ namespace ORB_SLAM3
 
                 g2o::Sim3 Swj;
 
-                LoopClosing::KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(prevKF);
+                KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(prevKF);
 
                 if(itj != NonCorrectedSim3.end())
                     Swj = (itj->second).inverse();
@@ -5504,7 +5505,7 @@ namespace ORB_SLAM3
                 {
                     g2o::Sim3 Swl;
 
-                    LoopClosing::KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
+                    KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
 
                     if(itl != NonCorrectedSim3.end())
                         Swl = itl->second.inverse();
@@ -5541,7 +5542,7 @@ namespace ORB_SLAM3
 
                         g2o::Sim3 Swn;
 
-                        LoopClosing::KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
+                        KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
 
                         if(itn != NonCorrectedSim3.end())
                             Swn = itn->second.inverse();

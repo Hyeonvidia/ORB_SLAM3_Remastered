@@ -22,6 +22,7 @@
 #include "atlas/KeyFrame.hpp"
 #include "atlas/Atlas.hpp"
 #include "atlas/ORBVocabulary.hpp"
+#include "optimization/KeyFrameAndPose.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <thread>
@@ -47,9 +48,7 @@ namespace ORB_SLAM3
     {
     public:
         typedef std::pair<std::set<KeyFrame*>, int> ConsistentGroup;
-        typedef std::map<KeyFrame*, g2o::Sim3, std::less<KeyFrame*>,
-                         Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3>>>
-            KeyFrameAndPose;
+        typedef ORB_SLAM3::KeyFrameAndPose KeyFrameAndPose;
 
     public:
         LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc, const bool bFixScale,
