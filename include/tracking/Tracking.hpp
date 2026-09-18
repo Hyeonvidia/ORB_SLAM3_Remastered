@@ -83,7 +83,6 @@ namespace ORB_SLAM3
 
         // Load new settings
         // The focal lenght should be similar or scale prediction will fail when projecting points
-        void ChangeCalibration(const std::string &strSettingPath);
 
         // Use this function if you have deactivated local mapping and you only want to localize the camera.
         void InformOnlyTracking(const bool &flag);
