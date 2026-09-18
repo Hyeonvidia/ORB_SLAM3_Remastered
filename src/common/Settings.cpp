@@ -21,7 +21,7 @@
 #include "camera/Pinhole.hpp"
 #include "camera/KannalaBrandt8.hpp"
 
-#include "System.hpp"
+#include "common/Sensor.hpp"
 
 #include <opencv2/core/persistence.hpp>
 #include <opencv2/core/eigen.hpp>
@@ -179,7 +179,7 @@ namespace ORB_SLAM3
         std::cout << "\t-Loaded camera 1" << std::endl;
 
         //Read second camera if stereo (not rectified)
-        if(sensor_ == System::STEREO || sensor_ == System::IMU_STEREO)
+        if(sensor_ == Sensor::STEREO || sensor_ == Sensor::IMU_STEREO)
         {
             readCamera2(fSettings);
             std::cout << "\t-Loaded camera 2" << std::endl;
@@ -189,13 +189,13 @@ namespace ORB_SLAM3
         readImageInfo(fSettings);
         std::cout << "\t-Loaded image info" << std::endl;
 
-        if(sensor_ == System::IMU_MONOCULAR || sensor_ == System::IMU_STEREO || sensor_ == System::IMU_RGBD)
+        if(sensor_ == Sensor::IMU_MONOCULAR || sensor_ == Sensor::IMU_STEREO || sensor_ == Sensor::IMU_RGBD)
         {
             readIMU(fSettings);
             std::cout << "\t-Loaded IMU calibration" << std::endl;
         }
 
-        if(sensor_ == System::RGBD || sensor_ == System::IMU_RGBD)
+        if(sensor_ == Sensor::RGBD || sensor_ == Sensor::IMU_RGBD)
         {
             readRGBD(fSettings);
             std::cout << "\t-Loaded RGB-D calibration" << std::endl;
@@ -263,7 +263,7 @@ namespace ORB_SLAM3
             }
 
             //Check if we need to correct distortion from the images
-            if((sensor_ == System::MONOCULAR || sensor_ == System::IMU_MONOCULAR) && vPinHoleDistorsion1_.size() != 0)
+            if((sensor_ == Sensor::MONOCULAR || sensor_ == Sensor::IMU_MONOCULAR) && vPinHoleDistorsion1_.size() != 0)
             {
                 bNeedToUndistort_ = true;
             }
@@ -305,7 +305,7 @@ namespace ORB_SLAM3
             calibration1_ = new KannalaBrandt8(vCalibration);
             originalCalib1_ = new KannalaBrandt8(vCalibration);
 
-            if(sensor_ == System::STEREO || sensor_ == System::IMU_STEREO)
+            if(sensor_ == Sensor::STEREO || sensor_ == Sensor::IMU_STEREO)
             {
                 int colBegin = readParameter<int>(fSettings, "Camera1.overlappingBegin", found);
                 int colEnd = readParameter<int>(fSettings, "Camera1.overlappingEnd", found);
@@ -428,7 +428,7 @@ namespace ORB_SLAM3
                 calibration1_->setParameter(calibration1_->getParameter(1) * scaleRowFactor, 1);
                 calibration1_->setParameter(calibration1_->getParameter(3) * scaleRowFactor, 3);
 
-                if((sensor_ == System::STEREO || sensor_ == System::IMU_STEREO) && cameraType_ != Rectified)
+                if((sensor_ == Sensor::STEREO || sensor_ == Sensor::IMU_STEREO) && cameraType_ != Rectified)
                 {
                     calibration2_->setParameter(calibration2_->getParameter(1) * scaleRowFactor, 1);
                     calibration2_->setParameter(calibration2_->getParameter(3) * scaleRowFactor, 3);
@@ -449,7 +449,7 @@ namespace ORB_SLAM3
                 calibration1_->setParameter(calibration1_->getParameter(0) * scaleColFactor, 0);
                 calibration1_->setParameter(calibration1_->getParameter(2) * scaleColFactor, 2);
 
-                if((sensor_ == System::STEREO || sensor_ == System::IMU_STEREO) && cameraType_ != Rectified)
+                if((sensor_ == Sensor::STEREO || sensor_ == Sensor::IMU_STEREO) && cameraType_ != Rectified)
                 {
                     calibration2_->setParameter(calibration2_->getParameter(0) * scaleColFactor, 0);
                     calibration2_->setParameter(calibration2_->getParameter(2) * scaleColFactor, 2);
@@ -584,7 +584,7 @@ namespace ORB_SLAM3
         bf_ = b_ * P1.at<double>(0, 0);
 
         //Update relative pose between camera 1 and IMU if necessary
-        if(sensor_ == System::IMU_STEREO)
+        if(sensor_ == Sensor::IMU_STEREO)
         {
             Eigen::Matrix3f eigenR_r1_u1;
             cv::cv2eigen(R_r1_u1, eigenR_r1_u1);
@@ -623,7 +623,7 @@ namespace ORB_SLAM3
             output << " ]" << std::endl;
         }
 
-        if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO)
+        if(settings.sensor_ == Sensor::STEREO || settings.sensor_ == Sensor::IMU_STEREO)
         {
             // A rectified rig has no second calibration -- readCamera2
             // reads only Stereo.b for it -- so there is nothing to print
@@ -685,7 +685,7 @@ namespace ORB_SLAM3
             }
             output << " ]" << std::endl;
 
-            if((settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO) &&
+            if((settings.sensor_ == Sensor::STEREO || settings.sensor_ == Sensor::IMU_STEREO) &&
                settings.cameraType_ == Settings::KannalaBrandt)
             {
                 output << "\t-Camera 2 parameters after resize: [ ";
@@ -700,7 +700,7 @@ namespace ORB_SLAM3
         output << "\t-Sequence FPS: " << settings.fps_ << std::endl;
 
         //Stereo stuff
-        if(settings.sensor_ == System::STEREO || settings.sensor_ == System::IMU_STEREO)
+        if(settings.sensor_ == Sensor::STEREO || settings.sensor_ == Sensor::IMU_STEREO)
         {
             output << "\t-Stereo baseline: " << settings.b_ << std::endl;
             output << "\t-Stereo depth threshold : " << settings.thDepth_ << std::endl;
@@ -716,8 +716,8 @@ namespace ORB_SLAM3
             }
         }
 
-        if(settings.sensor_ == System::IMU_MONOCULAR || settings.sensor_ == System::IMU_STEREO ||
-           settings.sensor_ == System::IMU_RGBD)
+        if(settings.sensor_ == Sensor::IMU_MONOCULAR || settings.sensor_ == Sensor::IMU_STEREO ||
+           settings.sensor_ == Sensor::IMU_RGBD)
         {
             output << "\t-Gyro noise: " << settings.noiseGyro_ << std::endl;
             output << "\t-Accelerometer noise: " << settings.noiseAcc_ << std::endl;
@@ -726,7 +726,7 @@ namespace ORB_SLAM3
             output << "\t-IMU frequency: " << settings.imuFrequency_ << std::endl;
         }
 
-        if(settings.sensor_ == System::RGBD || settings.sensor_ == System::IMU_RGBD)
+        if(settings.sensor_ == Sensor::RGBD || settings.sensor_ == Sensor::IMU_RGBD)
         {
             output << "\t-RGB-D depth map factor: " << settings.depthMapFactor_ << std::endl;
         }

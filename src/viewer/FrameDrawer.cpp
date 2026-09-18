@@ -18,7 +18,7 @@
 
 #include "viewer/FrameDrawer.hpp"
 #include "tracking/Tracking.hpp"
-#include "System.hpp"
+#include "common/Sensor.hpp"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -337,17 +337,17 @@ namespace ORB_SLAM3
     {
         switch(nSensor)
         {
-            case System::MONOCULAR:
+            case Sensor::MONOCULAR:
                 return "MONOCULAR";
-            case System::STEREO:
+            case Sensor::STEREO:
                 return "STEREO";
-            case System::RGBD:
+            case Sensor::RGBD:
                 return "RGB-D";
-            case System::IMU_MONOCULAR:
+            case Sensor::IMU_MONOCULAR:
                 return "MONOCULAR-INERTIAL";
-            case System::IMU_STEREO:
+            case Sensor::IMU_STEREO:
                 return "STEREO-INERTIAL";
-            case System::IMU_RGBD:
+            case Sensor::IMU_RGBD:
                 return "RGB-D-INERTIAL";
             default:
                 return "";

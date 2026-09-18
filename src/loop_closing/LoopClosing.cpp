@@ -39,7 +39,7 @@
 #include <vector>
 #include "atlas/KeyFrameDatabase.hpp"
 #include "local_mapping/LocalMapping.hpp"
-#include "System.hpp"
+#include "common/Sensor.hpp"
 #include "tracking/Tracking.hpp"
 #include "common/Verbose.hpp"
 
@@ -136,8 +136,8 @@ namespace ORB_SLAM3
                 {
                     if(mbMergeDetected)
                     {
-                        if((mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
-                            mpTracker->mSensor == System::IMU_RGBD) &&
+                        if((mpTracker->mSensor == Sensor::IMU_MONOCULAR || mpTracker->mSensor == Sensor::IMU_STEREO ||
+                            mpTracker->mSensor == Sensor::IMU_RGBD) &&
                            (!mpCurrentKF->GetMap()->isImuInitialized()))
                         {
                             std::cout << "IMU is not initilized, merge is aborted" << std::endl;
@@ -169,9 +169,9 @@ namespace ORB_SLAM3
                                     continue;
                                 }
                                 // If inertial, force only yaw
-                                if((mpTracker->mSensor == System::IMU_MONOCULAR ||
-                                    mpTracker->mSensor == System::IMU_STEREO ||
-                                    mpTracker->mSensor == System::IMU_RGBD) &&
+                                if((mpTracker->mSensor == Sensor::IMU_MONOCULAR ||
+                                    mpTracker->mSensor == Sensor::IMU_STEREO ||
+                                    mpTracker->mSensor == Sensor::IMU_RGBD) &&
                                    mpCurrentKF->GetMap()->GetIniertialBA1())
                                 {
                                     Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
@@ -195,8 +195,8 @@ namespace ORB_SLAM3
                             nMerges += 1;
 #endif
                             // TODO UNCOMMENT
-                            if(mpTracker->mSensor == System::IMU_MONOCULAR ||
-                               mpTracker->mSensor == System::IMU_STEREO || mpTracker->mSensor == System::IMU_RGBD)
+                            if(mpTracker->mSensor == Sensor::IMU_MONOCULAR ||
+                               mpTracker->mSensor == Sensor::IMU_STEREO || mpTracker->mSensor == Sensor::IMU_RGBD)
                                 MergeLocal2();
                             else
                                 MergeLocal();
@@ -263,9 +263,9 @@ namespace ORB_SLAM3
                                 if(mpCurrentKF->GetMap()->IsInertial())
                                 {
                                     // If inertial, force only yaw
-                                    if((mpTracker->mSensor == System::IMU_MONOCULAR ||
-                                        mpTracker->mSensor == System::IMU_STEREO ||
-                                        mpTracker->mSensor == System::IMU_RGBD) &&
+                                    if((mpTracker->mSensor == Sensor::IMU_MONOCULAR ||
+                                        mpTracker->mSensor == Sensor::IMU_STEREO ||
+                                        mpTracker->mSensor == Sensor::IMU_RGBD) &&
                                        mpCurrentKF->GetMap()->GetIniertialBA2())
                                     {
                                         phi(0) = 0;
@@ -374,7 +374,7 @@ namespace ORB_SLAM3
             return false;
         }
 
-        if(mpTracker->mSensor == System::STEREO && mpLastMap->GetAllKeyFrames().size() < 5) //12
+        if(mpTracker->mSensor == Sensor::STEREO && mpLastMap->GetAllKeyFrames().size() < 5) //12
         {
             // cout << "LoopClousure: Stereo KF inserted without check: " << mpCurrentKF->mnId << endl;
             mpKeyFrameDB->add(mpCurrentKF);
@@ -589,7 +589,7 @@ namespace ORB_SLAM3
             Eigen::Matrix<double, 7, 7> mHessian7x7;
 
             bool bFixedScale = mbFixScale; // TODO CHECK; Solo para el monocular inertial
-            if(mpTracker->mSensor == System::IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
+            if(mpTracker->mSensor == Sensor::IMU_MONOCULAR && !pCurrentKF->GetMap()->GetIniertialBA2())
                 bFixedScale = false;
             int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pMatchedKF, vpMatchedMPs, gScm, 10, bFixedScale,
                                                         mHessian7x7, true);
@@ -733,7 +733,7 @@ namespace ORB_SLAM3
             {
                 // Geometric validation
                 bool bFixedScale = mbFixScale;
-                if(mpTracker->mSensor == System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+                if(mpTracker->mSensor == Sensor::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
                     bFixedScale = false;
 
                 Sim3Solver solver = Sim3Solver(mpCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, bFixedScale,
@@ -806,7 +806,7 @@ namespace ORB_SLAM3
                         Eigen::Matrix<double, 7, 7> mHessian7x7;
 
                         bool bFixedScale = mbFixScale;
-                        if(mpTracker->mSensor == System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+                        if(mpTracker->mSensor == Sensor::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
                             bFixedScale = false;
 
                         int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10,
@@ -1224,7 +1224,7 @@ namespace ORB_SLAM3
         // Optimize graph
         bool bFixedScale = mbFixScale;
         // TODO CHECK; Solo para el monocular inertial
-        if(mpTracker->mSensor == System::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
+        if(mpTracker->mSensor == Sensor::IMU_MONOCULAR && !mpCurrentKF->GetMap()->GetIniertialBA2())
             bFixedScale = false;
 
 #ifdef REGISTER_TIMES
@@ -1681,8 +1681,8 @@ namespace ORB_SLAM3
         vpMergeConnectedKFs.clear();
         std::copy(spLocalWindowKFs.begin(), spLocalWindowKFs.end(), std::back_inserter(vpLocalCurrentWindowKFs));
         std::copy(spMergeConnectedKFs.begin(), spMergeConnectedKFs.end(), std::back_inserter(vpMergeConnectedKFs));
-        if(mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
-           mpTracker->mSensor == System::IMU_RGBD)
+        if(mpTracker->mSensor == Sensor::IMU_MONOCULAR || mpTracker->mSensor == Sensor::IMU_STEREO ||
+           mpTracker->mSensor == Sensor::IMU_RGBD)
         {
             Optimizer::MergeInertialBA(mpCurrentKF, mpMergeMatchedKF, &bStop, pCurrentMap, vCorrectedSim3);
         }
@@ -1713,7 +1713,7 @@ namespace ORB_SLAM3
         }
         else
         {
-            if(mpTracker->mSensor == System::MONOCULAR)
+            if(mpTracker->mSensor == Sensor::MONOCULAR)
             {
                 std::lock_guard<std::mutex> currentLock(
                     pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
@@ -1782,7 +1782,7 @@ namespace ORB_SLAM3
             }
 
             // Optimize graph (and update the loop position for each element form the begining to the end)
-            if(mpTracker->mSensor != System::MONOCULAR)
+            if(mpTracker->mSensor != Sensor::MONOCULAR)
             {
                 Optimizer::OptimizeEssentialGraph(mpCurrentKF, vpMergeConnectedKFs, vpLocalCurrentWindowKFs,
                                                   vpCurrentMapKFs, vpCurrentMapMPs);
@@ -1918,8 +1918,8 @@ namespace ORB_SLAM3
 
         const int numKFnew = pCurrentMap->KeyFramesInMap();
 
-        if((mpTracker->mSensor == System::IMU_MONOCULAR || mpTracker->mSensor == System::IMU_STEREO ||
-            mpTracker->mSensor == System::IMU_RGBD) &&
+        if((mpTracker->mSensor == Sensor::IMU_MONOCULAR || mpTracker->mSensor == Sensor::IMU_STEREO ||
+            mpTracker->mSensor == Sensor::IMU_RGBD) &&
            !pCurrentMap->GetIniertialBA2())
         {
             // Map is not completly initialized

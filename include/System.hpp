@@ -34,6 +34,7 @@
 #include "atlas/ORBVocabulary.hpp"
 #include "common/ImuTypes.hpp"
 #include "common/Settings.hpp"
+#include "common/Sensor.hpp"
 
 #include <iostream>
 #include <mutex>
@@ -55,16 +56,16 @@ namespace ORB_SLAM3
     class System
     {
     public:
-        // Input sensor
-        enum eSensor
-        {
-            MONOCULAR = 0,
-            STEREO = 1,
-            RGBD = 2,
-            IMU_MONOCULAR = 3,
-            IMU_STEREO = 4,
-            IMU_RGBD = 5,
-        };
+        // Input sensor. Defined in common/Sensor.hpp so the layers below System
+        // can name it without including all of System; these keep the
+        // System::MONOCULAR spelling everything already uses.
+        typedef Sensor::eSensor eSensor;
+        static constexpr eSensor MONOCULAR = Sensor::MONOCULAR;
+        static constexpr eSensor STEREO = Sensor::STEREO;
+        static constexpr eSensor RGBD = Sensor::RGBD;
+        static constexpr eSensor IMU_MONOCULAR = Sensor::IMU_MONOCULAR;
+        static constexpr eSensor IMU_STEREO = Sensor::IMU_STEREO;
+        static constexpr eSensor IMU_RGBD = Sensor::IMU_RGBD;
 
         // File type
         enum FileType
