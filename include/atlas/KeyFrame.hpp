@@ -297,9 +297,6 @@ namespace ORB_SLAM3
 
         IMU::Bias GetImuBias();
 
-        bool ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
-        bool ProjectPointUnDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
-
         void PreSave(std::set<KeyFrame*> &spKF, std::set<MapPoint*> &spMP, std::set<GeometricCamera*> &spCam);
         void PostLoad(std::map<long unsigned int, KeyFrame*> &mpKFid, std::map<long unsigned int, MapPoint*> &mpMPid,
                       std::map<unsigned int, GeometricCamera*> &mpCamId);

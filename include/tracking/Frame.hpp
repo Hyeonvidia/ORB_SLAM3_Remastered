@@ -114,10 +114,6 @@ namespace ORB_SLAM3
         // and fill variables of the MapPoint to be used by the tracking
         bool isInFrustum(MapPoint* pMP, float viewingCosLimit);
 
-        bool ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
-
-        Eigen::Vector3f inRefCoordinates(Eigen::Vector3f pCw);
-
         // Compute the cell of a keypoint (return false if outside the grid)
         bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
 
