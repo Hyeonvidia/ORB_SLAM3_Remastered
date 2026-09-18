@@ -17,6 +17,7 @@
 */
 
 #include "viewer/Viewer.hpp"
+#include "viewer/FrameDrawer.hpp"
 #include <pangolin/pangolin.h>
 #include <pangolin/display/process.h>
 #include <pangolin/display/default_font.h>

@@ -20,6 +20,7 @@
 
 #include "features/ORBmatcher.hpp"
 #include "viewer/FrameDrawer.hpp"
+#include "viewer/MapDrawer.hpp"
 #include "common/Converter.hpp"
 #include "optimization/G2oTypes.hpp"
 #include "optimization/Optimizer.hpp"

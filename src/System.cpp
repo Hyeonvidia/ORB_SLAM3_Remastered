@@ -17,6 +17,9 @@
 */
 
 #include "System.hpp"
+#include "viewer/FrameDrawer.hpp"
+#include "viewer/MapDrawer.hpp"
+#include "viewer/Viewer.hpp"
 #include "camera/KannalaBrandt8.hpp"
 #include "camera/Pinhole.hpp"
 #include "tracking/Frame.hpp"

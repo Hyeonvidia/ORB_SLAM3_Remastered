@@ -26,7 +26,6 @@
 #include "atlas/ORBVocabulary.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
 #include "features/ORBextractor.hpp"
-#include "viewer/MapDrawer.hpp"
 #include "common/ImuTypes.hpp"
 
 #include "camera/GeometricCamera.hpp"
@@ -44,6 +43,9 @@ namespace ORB_SLAM3
 {
 
     class FrameDrawer;
+    // Held by pointer only. Including viewer/MapDrawer.hpp for it put Pangolin
+    // in front of every file that includes the tracker.
+    class MapDrawer;
     class Atlas;
     class LocalMapping;
     class LoopClosing;
