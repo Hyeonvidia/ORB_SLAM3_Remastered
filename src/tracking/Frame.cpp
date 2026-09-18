@@ -148,6 +148,17 @@ namespace ORB_SLAM3
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_StartStereoMatches = std::chrono::steady_clock::now();
 #endif
+        // mb before the matcher, not after it. ComputeStereoMatches bounds its
+        // disparity search by maxD = mbf / mb, and mb used to be assigned forty
+        // lines further down -- so the matcher read a member nothing had written.
+        // Every frame after the first got away with it: the Frame is a temporary
+        // in Tracking::GrabImageStereo, and each one lands in the stack slot of
+        // the one before, which still holds mbf/fx. Frame 0, the one stereo
+        // initialisation is built from, read 0 there, so its search ran with
+        // maxD = inf. From K rather than the static fx, because on the first
+        // frame fx has not been computed yet either. Upstream has the same order
+        // (Frame.cc:141 against :174).
+        mb = mbf / K.at<float>(0, 0);
         ComputeStereoMatches();
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndStereoMatches = std::chrono::steady_clock::now();
