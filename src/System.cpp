@@ -703,11 +703,16 @@ namespace ORB_SLAM3
             Sophus::SE3f Trw;
 
             // If the reference keyframe was culled, traverse the spanning tree to get a suitable keyframe.
-            while(pKF->isBad())
+            // pKF first: the root keyframe has no parent, so a chain of culled
+            // keyframes can walk off the top of the tree into NULL.
+            while(pKF && pKF->isBad())
             {
                 Trw = Trw * pKF->mTcp;
                 pKF = pKF->GetParent();
             }
+
+            if(!pKF)
+                continue;
 
             Trw = Trw * pKF->GetPose() * Two;
 
@@ -829,7 +834,9 @@ namespace ORB_SLAM3
 
             //cout << "2.5" << endl;
 
-            while(pKF->isBad())
+            // pKF first: the root keyframe has no parent, so a chain of culled
+            // keyframes can walk off the top of the tree into NULL.
+            while(pKF && pKF->isBad())
             {
                 //cout << " 2.bad" << endl;
                 Trw = Trw * pKF->mTcp;
@@ -934,7 +941,9 @@ namespace ORB_SLAM3
 
             //cout << "2.5" << endl;
 
-            while(pKF->isBad())
+            // pKF first: the root keyframe has no parent, so a chain of culled
+            // keyframes can walk off the top of the tree into NULL.
+            while(pKF && pKF->isBad())
             {
                 //cout << " 2.bad" << endl;
                 Trw = Trw * pKF->mTcp;
@@ -1342,12 +1351,16 @@ namespace ORB_SLAM3
 
             if(!pKF)
                 continue;
-
-            while(pKF->isBad())
+            // pKF first: the root keyframe has no parent, so a chain of culled
+            // keyframes can walk off the top of the tree into NULL.
+            while(pKF && pKF->isBad())
             {
                 Trw = Trw * pKF->mTcp;
                 pKF = pKF->GetParent();
             }
+
+            if(!pKF)
+                continue;
 
             Trw = Trw * pKF->GetPose() * Tow;
 
