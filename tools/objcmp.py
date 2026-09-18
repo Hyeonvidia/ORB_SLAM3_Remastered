@@ -22,8 +22,26 @@ Four classes, from strongest to weakest evidence that nothing changed:
                   optimiser does when a different set of inline definitions is
                   visible. Not observable either, but this is the class to look
                   at if a behavioural difference ever does turn up.
-  CHANGED         a function calls or references something different. This is a
-                  real code change and needs explaining.
+  pruned          some symbols exist on one side only, but every one of them is
+                  an inline or template copy (weak, GNU-unique) or local to the
+                  object, and nothing left on the other side refers to it. This
+                  is what removing an unused #include does: the header's inline
+                  functions and its namespace-scope statics stop being emitted
+                  into a file that never called them. The functions both sides
+                  have are compared as usual and must be no worse than
+                  scheduling.
+  inlining        a function's relocations differ, but only by library code --
+                  std::, __gnu_cxx::, Eigen::, g2o::, cv::, Sophus::, memcpy and
+                  friends, or section-relative constants -- being inlined on one
+                  side and called on the other. Which of this project's own
+                  functions run is unchanged. It is not bit-for-bit safe: GCC may
+                  contract a*b+c into one FMA differently once a body is inlined,
+                  so a numeric function in this class can differ in the last bit.
+                  Listed by name so the numeric ones can be looked at.
+  CHANGED         a function calls or references something different, a
+                  function with external linkage appeared or vanished, or a
+                  vanished symbol is still referenced. This is a real code change
+                  and needs explaining.
 
 Byte comparison alone is too strict for this project: moving one #include out of
 common/Settings.hpp changed 13 of 42 object files while changing no function's
@@ -66,21 +84,104 @@ def disassembly(path):
     return digest, rel
 
 
+def symbols(path):
+    out = subprocess.run(["nm", "-C", "--defined-only", str(path)], capture_output=True, text=True).stdout
+    table = {}
+    for line in out.splitlines():
+        m = re.match(r"^[0-9a-f]+\s+(\S)\s+(.*)$", line)
+        if m:
+            table[m.group(2)] = m.group(1)
+    return table
+
+
+def referenced(path):
+    out = subprocess.run(["objdump", "-r", "-C", str(path)], capture_output=True, text=True).stdout
+    return {re.sub(r"\+0x[0-9a-f]+$", "", m.group(1).strip()) for m in re.finditer(r"R_\w+\s+(.*)", out)}
+
+
+# Weak, weak-object and GNU-unique: comdat copies the linker deduplicates.
+# Lower case: local to this object. Neither can be something another object
+# was relying on this one to define.
+def private_or_comdat(letter):
+    return letter in "WVwvu" or letter.islower()
+
+
+LIBRARY = ("std::", "__gnu_cxx::", "Eigen::", "g2o::", "cv::", "Sophus::", "boost::",
+           "operator new", "operator delete")
+RUNTIME = {"memcpy", "memmove", "memset", "memcmp", "strlen", "__cxa_atexit", "__dso_handle"}
+
+
+def library(target):
+    # A relocation target that belongs to library or runtime code, or is a
+    # section-relative reference (.text, .rodata.cst16, ...) -- i.e. not one of
+    # this project's own functions or objects.
+    t = re.sub(r"^(void|bool|int|unsigned|float|double|char|auto)\b\s*", "", target)
+    return (t.startswith(".") or t in RUNTIME or t.startswith(LIBRARY)
+            or re.match(r"^[\w:<>,\s*&]+ (std|Eigen|__gnu_cxx|g2o|cv|Sophus|boost)::", t) is not None)
+
+
 def classify(a, b):
     if a.read_bytes() == b.read_bytes():
         return "bit-identical", []
     ca, ra = disassembly(a)
     cb, rb = disassembly(b)
-    if set(ca) != set(cb):
-        diff = sorted(set(ca) ^ set(cb))
-        return "CHANGED", ["only on one side: " + n for n in diff[:8]]
-    differing = [n for n in ca if ca[n] != cb[n]]
-    if not differing:
-        return "reordered", []
+    why = []
+
+    # The functions both sides have.
+    common = set(ca) & set(cb)
+    differing = [n for n in common if ca[n] != cb[n]]
     moved = [n for n in differing if ra.get(n) != rb.get(n)]
-    if moved:
-        return "CHANGED", ["relocations differ: " + n for n in moved[:8]]
-    return "scheduling", ["%d functions, e.g. %s" % (len(differing), differing[0])]
+    # A static-initialisation function whose relocations only shrank (or only
+    # grew) constructs fewer (more) namespace-scope objects and changes nothing
+    # else -- which is exactly what dropping (adding) an #include whose header
+    # defines statics does. Whether those objects were used anywhere is checked
+    # below, with the one-sided symbols: any that is external, or still
+    # referenced, is a real change.
+    initialisers = [n for n in moved if n.startswith("_GLOBAL__sub_I_")
+                    and ((ra.get(n, collections.Counter()) - rb.get(n, collections.Counter())) == collections.Counter()
+                         or (rb.get(n, collections.Counter()) - ra.get(n, collections.Counter())) == collections.Counter())]
+    moved = [n for n in moved if n not in initialisers]
+    inlined, real = [], []
+    for n in moved:
+        delta = (ra.get(n, collections.Counter()) - rb.get(n, collections.Counter())) \
+              + (rb.get(n, collections.Counter()) - ra.get(n, collections.Counter()))
+        (inlined if all(library(t) for t in delta) else real).append(n)
+    if real:
+        return "CHANGED", ["relocations differ: " + n for n in real[:8]]
+    differing = [n for n in differing if n not in initialisers and n not in inlined]
+    cls = "scheduling" if differing else "reordered"
+    if differing:
+        why.append("%d functions scheduled differently, e.g. %s" % (len(differing), differing[0]))
+    if inlined:
+        cls = "inlining"
+        why += ["library inlined on one side only: " + n for n in inlined[:6]]
+
+    # Symbols only one side has.
+    sa, sb = symbols(a), symbols(b)
+    one_sided = [(n, sa.get(n) or sb.get(n), n in sa) for n in (set(sa) ^ set(sb))]
+    if one_sided:
+        refs_a, refs_b = referenced(a), referenced(b)
+        bad = []
+        for name, letter, in_a in one_sided:
+            other_refs = refs_b if in_a else refs_a
+            if not private_or_comdat(letter):
+                bad.append("external %s only on one side: %s" % (letter, name))
+            elif name in other_refs:
+                bad.append("one-sided but still referenced: " + name)
+        if bad:
+            return "CHANGED", bad[:8]
+        if cls == "reordered":
+            cls = "pruned"
+        why.append("%d inline/local symbols on one side only, none referenced" % len(one_sided))
+    if initialisers:
+        if not one_sided:
+            return "CHANGED", ["static initialiser changed with no symbol removed: " + initialisers[0]]
+        if cls == "reordered":
+            cls = "pruned"
+        why.append("static initialiser constructs %s objects: %s"
+                   % ("fewer" if sum(rb.get(initialisers[0], {}).values()) < sum(ra.get(initialisers[0], {}).values())
+                      else "more", initialisers[0]))
+    return cls, why
 
 
 def main():
@@ -103,7 +204,7 @@ def main():
             for w in why:
                 print("            " + w[:150])
     print()
-    for cls in ("bit-identical", "reordered", "scheduling", "CHANGED"):
+    for cls in ("bit-identical", "reordered", "pruned", "scheduling", "inlining", "CHANGED"):
         print("%-14s %d" % (cls, counts.get(cls, 0)))
     return 1 if counts.get("CHANGED") else 0
 
