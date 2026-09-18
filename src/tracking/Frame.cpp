@@ -42,10 +42,6 @@ namespace ORB_SLAM3
 {
 
     long unsigned int Frame::nNextId = 0;
-    bool Frame::mbInitialComputations = true;
-    float Frame::cx, Frame::cy, Frame::fx, Frame::fy, Frame::invfx, Frame::invfy;
-    float Frame::mnMinX, Frame::mnMinY, Frame::mnMaxX, Frame::mnMaxY;
-    float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
 
     //For stereo fisheye matching
     cv::BFMatcher Frame::BFmatcher = cv::BFMatcher(cv::NORM_HAMMING);
@@ -83,6 +79,22 @@ namespace ORB_SLAM3
           mvStereo3Dpoints(frame.mvStereo3Dpoints), mTlr(frame.mTlr), mRlr(frame.mRlr), mtlr(frame.mtlr),
           mTrl(frame.mTrl), mState(frame.mState)
     {
+        // The twelve calibration values. They were static until they became
+        // per instance, so the initialiser list above has never named them, and
+        // a copy that left them out would carry zeros.
+        fx = frame.fx;
+        fy = frame.fy;
+        cx = frame.cx;
+        cy = frame.cy;
+        invfx = frame.invfx;
+        invfy = frame.invfy;
+        mfGridElementWidthInv = frame.mfGridElementWidthInv;
+        mfGridElementHeightInv = frame.mfGridElementHeightInv;
+        mnMinX = frame.mnMinX;
+        mnMaxX = frame.mnMaxX;
+        mnMinY = frame.mnMinY;
+        mnMaxY = frame.mnMaxY;
+
         for(int i = 0; i < FRAME_GRID_COLS; i++)
             for(int j = 0; j < FRAME_GRID_ROWS; j++)
             {
@@ -111,6 +123,8 @@ namespace ORB_SLAM3
           mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbImuPreintegrated(false),
           mpCamera(pCamera), mpCamera2(nullptr)
     {
+        ComputeCalibration(imLeft, K);
+
         // Frame ID
         mnId = nNextId++;
 
@@ -155,10 +169,8 @@ namespace ORB_SLAM3
         // in Tracking::GrabImageStereo, and each one lands in the stack slot of
         // the one before, which still holds mbf/fx. Frame 0, the one stereo
         // initialisation is built from, read 0 there, so its search ran with
-        // maxD = inf. From K rather than the static fx, because on the first
-        // frame fx has not been computed yet either. Upstream has the same order
-        // (Frame.cc:141 against :174).
-        mb = mbf / K.at<float>(0, 0);
+        // maxD = inf. Upstream has the same order (Frame.cc:141 against :174).
+        mb = mbf / fx;
         ComputeStereoMatches();
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndStereoMatches = std::chrono::steady_clock::now();
@@ -172,24 +184,6 @@ namespace ORB_SLAM3
         mvbOutlier = std::vector<bool>(N, false);
         mmProjectPoints.clear();
         mmMatchedInImage.clear();
-
-        // This is done only for the first Frame (or after a change in the calibration)
-        if(mbInitialComputations)
-        {
-            ComputeImageBounds(imLeft);
-
-            mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (mnMaxX - mnMinX);
-            mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mnMaxY - mnMinY);
-
-            fx = K.at<float>(0, 0);
-            fy = K.at<float>(1, 1);
-            cx = K.at<float>(0, 2);
-            cy = K.at<float>(1, 2);
-            invfx = 1.0f / fx;
-            invfy = 1.0f / fy;
-
-            mbInitialComputations = false;
-        }
 
         mb = mbf / fx;
 
@@ -222,6 +216,8 @@ namespace ORB_SLAM3
           mpImuPreintegrated(NULL), mpPrevFrame(pPrevF), mpImuPreintegratedFrame(NULL),
           mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbImuPreintegrated(false), mpCamera(pCamera), mpCamera2(nullptr)
     {
+        ComputeCalibration(imGray, K);
+
         // Frame ID
         mnId = nNextId++;
 
@@ -263,24 +259,6 @@ namespace ORB_SLAM3
 
         mvbOutlier = std::vector<bool>(N, false);
 
-        // This is done only for the first Frame (or after a change in the calibration)
-        if(mbInitialComputations)
-        {
-            ComputeImageBounds(imGray);
-
-            mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / static_cast<float>(mnMaxX - mnMinX);
-            mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / static_cast<float>(mnMaxY - mnMinY);
-
-            fx = K.at<float>(0, 0);
-            fy = K.at<float>(1, 1);
-            cx = K.at<float>(0, 2);
-            cy = K.at<float>(1, 2);
-            invfx = 1.0f / fx;
-            invfy = 1.0f / fy;
-
-            mbInitialComputations = false;
-        }
-
         mb = mbf / fx;
 
         if(pPrevF)
@@ -313,6 +291,8 @@ namespace ORB_SLAM3
           mpPrevFrame(pPrevF), mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)),
           mbImuPreintegrated(false), mpCamera(pCamera), mpCamera2(nullptr)
     {
+        ComputeCalibration(imGray, static_cast<Pinhole*>(mpCamera)->toK());
+
         // Frame ID
         mnId = nNextId++;
 
@@ -355,24 +335,6 @@ namespace ORB_SLAM3
         mmMatchedInImage.clear();
 
         mvbOutlier = std::vector<bool>(N, false);
-
-        // This is done only for the first Frame (or after a change in the calibration)
-        if(mbInitialComputations)
-        {
-            ComputeImageBounds(imGray);
-
-            mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / static_cast<float>(mnMaxX - mnMinX);
-            mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / static_cast<float>(mnMaxY - mnMinY);
-
-            fx = static_cast<Pinhole*>(mpCamera)->toK().at<float>(0, 0);
-            fy = static_cast<Pinhole*>(mpCamera)->toK().at<float>(1, 1);
-            cx = static_cast<Pinhole*>(mpCamera)->toK().at<float>(0, 2);
-            cy = static_cast<Pinhole*>(mpCamera)->toK().at<float>(1, 2);
-            invfx = 1.0f / fx;
-            invfy = 1.0f / fy;
-
-            mbInitialComputations = false;
-        }
 
         mb = mbf / fx;
 
@@ -710,6 +672,21 @@ namespace ORB_SLAM3
         }
     }
 
+    void Frame::ComputeCalibration(const cv::Mat &im, const cv::Mat &K)
+    {
+        ComputeImageBounds(im);
+
+        mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (mnMaxX - mnMinX);
+        mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mnMaxY - mnMinY);
+
+        fx = K.at<float>(0, 0);
+        fy = K.at<float>(1, 1);
+        cx = K.at<float>(0, 2);
+        cy = K.at<float>(1, 2);
+        invfx = 1.0f / fx;
+        invfy = 1.0f / fy;
+    }
+
     void Frame::ComputeImageBounds(const cv::Mat &imLeft)
     {
         if(mDistCoef.at<float>(0) != 0.0)
@@ -982,6 +959,8 @@ namespace ORB_SLAM3
           mpCamera(pCamera), mpCamera2(pCamera2)
 
     {
+        ComputeCalibration(imLeft, K);
+
         imgLeft = imLeft.clone();
         imgRight = imRight.clone();
 
@@ -1023,24 +1002,6 @@ namespace ORB_SLAM3
 
         if(N == 0)
             return;
-
-        // This is done only for the first Frame (or after a change in the calibration)
-        if(mbInitialComputations)
-        {
-            ComputeImageBounds(imLeft);
-
-            mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (mnMaxX - mnMinX);
-            mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mnMaxY - mnMinY);
-
-            fx = K.at<float>(0, 0);
-            fy = K.at<float>(1, 1);
-            cx = K.at<float>(0, 2);
-            cy = K.at<float>(1, 2);
-            invfx = 1.0f / fx;
-            invfy = 1.0f / fy;
-
-            mbInitialComputations = false;
-        }
 
         mb = mbf / fx;
 

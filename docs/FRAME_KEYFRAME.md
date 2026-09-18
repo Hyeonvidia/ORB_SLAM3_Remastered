@@ -104,14 +104,33 @@ larger change than the pose half:
   `Sim3Solver`, `MLPnPsolver`, `FrameDrawer`). Every one becomes
   `pKF->mFeatures.mvKeysUn[i]` -- longer, and no safer, since the members stay
   public either way.
-- **The two are not the same type.** `Frame`'s calibration (`fx, fy, cx, cy,
-  invfx, invfy`, the grid element sizes, the image bounds) is `static` -- global
-  mutable state shared by every Frame -- while `KeyFrame`'s is `const` and
-  per-instance. The grids differ too: `Frame` uses a C array
-  `std::vector<size_t> mGrid[64][48]`, `KeyFrame` a
+- **The two were not the same type.** `Frame`'s calibration (`fx, fy, cx, cy,
+  invfx, invfy`, the grid element sizes, the image bounds) used to be `static`
+  -- written by whichever Frame was constructed first and shared by every Frame
+  in the process after it -- while `KeyFrame`'s is `const` and per-instance.
+  That half is now closed: each Frame computes its own in `ComputeCalibration`,
+  first thing in each image constructor. The grids still differ: `Frame` uses a
+  C array `std::vector<size_t> mGrid[64][48]`, `KeyFrame` a
   `vector<vector<vector<size_t>>>` because Boost has to serialise it.
 
 The prize is real -- a `shared_ptr<const ImageFeatures>` would collapse the
 38-field copy and stop every keyframe duplicating its parent frame's keypoints
-and descriptors -- but it needs `Frame`'s static calibration retired first, and
-that is its own change.
+and descriptors. Its prerequisite, retiring `Frame`'s static calibration, has
+been done on its own and proved first:
+
+- **Equal at every read.** A throwaway build kept the statics and gave every
+  Frame a per-instance shadow beside them, then aborted on the first read site
+  where the two disagreed -- the five in-class readers, `KeyFrame(Frame&)`, the
+  two `ORBmatcher` bounds checks and `Optimizer::PoseOptimization`. Over the
+  whole 68-run matrix that is 1.13 billion checks, no mismatch, and no read
+  that happened before the statics were set -- so there is no read site that
+  sees zeros today and would see real values afterwards.
+- **The new code itself.** With the members real, a second throwaway build
+  froze the first frame's values the way the statics used to and compared
+  against them at the same sites and at the end of the copy constructor,
+  which is the place a per-instance member is easiest to forget: 149 million
+  checks over nine cells covering every image constructor that can run here,
+  no mismatch.
+
+The fisheye stereo constructor is the one that cannot run here -- there is no
+TUM-VI data -- so it is verified by compilation only.

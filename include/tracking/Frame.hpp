@@ -182,12 +182,17 @@ namespace ORB_SLAM3
         // Calibration matrix and OpenCV distortion parameters.
         cv::Mat mK;
         Eigen::Matrix3f mK_;
-        static float fx;
-        static float fy;
-        static float cx;
-        static float cy;
-        static float invfx;
-        static float invfy;
+        // Per instance, computed by ComputeCalibration from this frame's own K
+        // and image. These -- and the grid and bound values below -- used to be
+        // static: written by whichever Frame was constructed first and shared
+        // by every Frame in the process afterwards, so a second camera or a
+        // second System saw the first one's calibration.
+        float fx = 0.0f;
+        float fy = 0.0f;
+        float cx = 0.0f;
+        float cy = 0.0f;
+        float invfx = 0.0f;
+        float invfy = 0.0f;
         cv::Mat mDistCoef;
 
         // Stereo baseline multiplied by fx.
@@ -228,8 +233,8 @@ namespace ORB_SLAM3
         int mnCloseMPs;
 
         // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
-        static float mfGridElementWidthInv;
-        static float mfGridElementHeightInv;
+        float mfGridElementWidthInv = 0.0f;
+        float mfGridElementHeightInv = 0.0f;
         std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
         IMU::Bias mPredBias;
@@ -264,13 +269,11 @@ namespace ORB_SLAM3
         std::vector<float> mvLevelSigma2;
         std::vector<float> mvInvLevelSigma2;
 
-        // Undistorted Image Bounds (computed once).
-        static float mnMinX;
-        static float mnMaxX;
-        static float mnMinY;
-        static float mnMaxY;
-
-        static bool mbInitialComputations;
+        // Undistorted image bounds.
+        float mnMinX = 0.0f;
+        float mnMaxX = 0.0f;
+        float mnMinY = 0.0f;
+        float mnMaxY = 0.0f;
 
         std::map<long unsigned int, cv::Point2f> mmProjectPoints;
         std::map<long unsigned int, cv::Point2f> mmMatchedInImage;
@@ -292,6 +295,11 @@ namespace ORB_SLAM3
 
         // Computes image bounds for the undistorted image (called in the constructor).
         void ComputeImageBounds(const cv::Mat &imLeft);
+
+        // The twelve calibration values above, from this frame's image and K.
+        // First thing in every image constructor, ahead of the early return for
+        // frames with no keypoints, so every Frame carries its own.
+        void ComputeCalibration(const cv::Mat &im, const cv::Mat &K);
 
         // Assign keypoints to the grid for speed up feature matching (called in the constructor).
         void AssignFeaturesToGrid();
