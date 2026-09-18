@@ -47,6 +47,7 @@
 ******************************************************************************/
 
 #include "tracking/MLPnPsolver.hpp"
+#include "camera/GeometricCamera.hpp"
 
 #include <Eigen/Sparse>
 

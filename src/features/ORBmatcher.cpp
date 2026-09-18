@@ -17,6 +17,7 @@
 */
 
 #include "features/ORBmatcher.hpp"
+#include "camera/GeometricCamera.hpp"
 
 #include <limits.h>
 

@@ -22,7 +22,12 @@
 // Flag to activate the measurement of time in each process (track,localmap, place recognition).
 //#define REGISTER_TIMES
 
-#include "camera/GeometricCamera.hpp"
+// What this header actually uses. It used to reach all of it through
+// camera/GeometricCamera.hpp, which made common/ -- the bottom of the stack --
+// depend on camera/ for four pointers.
+#include <opencv2/core/core.hpp>
+#include <opencv2/core/persistence.hpp>
+#include <sophus/se3.hpp>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -35,6 +40,10 @@
 
 namespace ORB_SLAM3
 {
+
+    // Held and returned only by pointer; never deleted here, so the complete
+    // type is not needed.
+    class GeometricCamera;
 
     //TODO: change to double instead of float
 

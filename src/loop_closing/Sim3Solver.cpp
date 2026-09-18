@@ -17,6 +17,7 @@
 */
 
 #include "loop_closing/Sim3Solver.hpp"
+#include "camera/GeometricCamera.hpp"
 
 #include <vector>
 #include <cmath>
