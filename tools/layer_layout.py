@@ -10,7 +10,8 @@ which draws the system as an Atlas plus four threads:
                   each with its MapPoints, KeyFrames, covisibility graph and
                   spanning tree -- and the DBoW2 keyframe database that holds
                   the visual vocabulary and the recognition database
-  tracking/       per-frame pose estimation, relocalisation, map initialisation
+  tracking/       per-frame pose estimation, relocalisation, map initialisation,
+                  and the feature matcher every thread uses
   local_mapping/  keyframe insertion, point culling and creation, local BA,
                   IMU initialisation and scale refinement
   loop_closing/   place recognition, loop correction and map merging
@@ -20,7 +21,7 @@ and three supporting layers the paper treats separately or not at all:
 
   camera/         Section IV: the camera model is deliberately abstracted out
                   of the pipeline, with pin-hole and Kannala-Brandt behind it
-  features/       ORB extraction and matching
+  features/       ORB extraction and descriptor comparison
   common/         conversions, geometry, settings, IMU types, logging
   viewer/         not part of the algorithm
 
@@ -41,14 +42,19 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 LAYERS = {
     "atlas": ["Atlas", "Map", "MapPoint", "KeyFrame", "KeyFrameDatabase", "ORBVocabulary"],
-    "tracking": ["Tracking", "Frame", "MLPnPsolver"],
+    # ORBmatcher matches Frames against KeyFrames and MapPoints, so it sits in
+    # the lowest layer that has all three; Local Mapping and Loop Closing,
+    # which use it too, are above. What MapPoint and Frame need from it --
+    # comparing two descriptors -- is ORBdescriptor, in features.
+    "tracking": ["Tracking", "Frame", "MLPnPsolver", "ORBmatcher"],
     "local_mapping": ["LocalMapping"],
     "loop_closing": ["LoopClosing", "Sim3Solver"],
-    "optimization": ["Optimizer", "G2oTypes", "OptimizableTypes"],
+    "optimization": ["Optimizer", "G2oTypes", "OptimizableTypes", "KeyFrameAndPose"],
     "camera": ["GeometricCamera", "Pinhole", "KannalaBrandt8"],
-    "features": ["ORBextractor", "ORBmatcher"],
+    "features": ["ORBextractor", "ORBdescriptor"],
     "common": ["Converter", "GeometricTools", "Settings", "Verbose",
-               "SerializationUtils", "ImuTypes", "TwoViewReconstruction"],
+               "SerializationUtils", "ImuTypes", "TwoViewReconstruction",
+               "NavState", "Sensor"],
     "viewer": ["Viewer", "FrameDrawer", "MapDrawer"],
 }
 # System sits above the layers and stays at the root of each tree.

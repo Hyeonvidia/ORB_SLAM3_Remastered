@@ -21,7 +21,7 @@
 #include "loop_closing/Sim3Solver.hpp"
 #include "common/Converter.hpp"
 #include "optimization/Optimizer.hpp"
-#include "features/ORBmatcher.hpp"
+#include "tracking/ORBmatcher.hpp"
 #include "optimization/G2oTypes.hpp"
 
 #include <mutex>

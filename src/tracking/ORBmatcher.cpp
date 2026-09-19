@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "features/ORBmatcher.hpp"
+#include "tracking/ORBmatcher.hpp"
 #include "features/ORBdescriptor.hpp"
 #include "camera/GeometricCamera.hpp"
 
