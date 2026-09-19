@@ -672,11 +672,13 @@ def classify_unpaired(obj, other, side):
     if INITIALISER in fns:
         bad.append("has a static initialiser")
     # A local function is compared as part of whatever reaches it. One that
-    # nothing compared reaches, but something refers to, is not compared at all.
+    # nothing compared reaches, but something refers to, is not compared at
+    # all. (Weak template and inline copies are not local: another object
+    # has the same one.)
     reached = obj.reached(roots)
     refs = obj.referenced()
-    loose = [n for n in fns if n not in reached and n != INITIALISER and "local " + n not in
-             {t for f in fns.values() for t in f.targets} and n in refs]
+    loose = [n for n in fns if syms.get(n, ("?",))[0] == "t" and n not in reached and n != INITIALISER
+             and "local " + n not in {t for f in fns.values() for t in f.targets} and n in refs]
     bad += ["local function not compared: " + n for n in loose]
     if bad:
         return "CHANGED", ["only in " + here] + bad[:8]
