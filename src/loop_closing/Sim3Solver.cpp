@@ -24,7 +24,7 @@
 #include <opencv2/core/core.hpp>
 
 #include "atlas/KeyFrame.hpp"
-#include "features/ORBmatcher.hpp"
+#include "atlas/MapPoint.hpp"
 
 #include <DUtils/Random.h>
 
