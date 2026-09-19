@@ -1,0 +1,10 @@
+# Not formatted.
+#
+# These files are inputs to tools/objcmp_tests/run.sh. Each case is a before/
+# after pair whose exact text is the point -- which definition comes first,
+# what sits on one line -- and a formatter that rewrote one side would change
+# the case. clang-format searches parent directories, so without this the
+# repo-root .clang-format would reach in here from an editor that formats on
+# save.
+DisableFormat: true
+SortIncludes: Never
