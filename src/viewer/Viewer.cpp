@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <mutex>
 #include <vector>
 #include <streambuf>
@@ -287,6 +288,7 @@ namespace ORB_SLAM3
         const int kMenuPanelWidth = 240;
         pangolin::CreatePanel("menu").SetBounds(0.0, 1.0, 0.0, pangolin::Attach::Pix(kMenuPanelWidth));
         pangolin::Var<bool> menuFollowCamera("menu.Follow Camera", true, true);
+        pangolin::Var<bool> menuForwardView("menu.Forward View", false, false);
         pangolin::Var<bool> menuCamView("menu.Camera View", false, false);
         pangolin::Var<bool> menuTopView("menu.Top View", false, false);
         // pangolin::Var<bool> menuSideView("menu.Side View",false,false);
@@ -388,15 +390,30 @@ namespace ORB_SLAM3
         // view, which stretched the map horizontally the moment the view stopped
         // being 4:3. Remembering the focal length and far plane in use lets the
         // projection be rebuilt whenever the view is resized.
+        //
+        // The focal lengths passed in -- Viewer.ViewpointF from the settings,
+        // and the constants below -- are in the units ORB-SLAM3 always meant
+        // them in: pixels for a 1024x768 view. The view here is whatever the
+        // window and the layout make it, so they are scaled by how much larger
+        // or smaller it is, by the geometric mean of its two sides. A fixed
+        // focal length in pixels would mean a larger window shows more empty
+        // space around a map of the same size; this way the map grows with it.
         double dProjFocal = mViewpointF, dProjFar = 1000.0;
         int nLastCamW = 0, nLastCamH = 0;
-        auto MapProjection = [&d_cam, &dProjFocal, &dProjFar](double focal, double far)
+        auto ViewScale = [&d_cam]()
+        {
+            const double w = d_cam.v.w > 0 ? d_cam.v.w : 1024;
+            const double h = d_cam.v.h > 0 ? d_cam.v.h : 768;
+            return std::sqrt(w * h / (1024.0 * 768.0));
+        };
+        auto MapProjection = [&d_cam, &dProjFocal, &dProjFar, &ViewScale](double focal, double far)
         {
             dProjFocal = focal;
             dProjFar = far;
             const int w = d_cam.v.w > 0 ? d_cam.v.w : 1024;
             const int h = d_cam.v.h > 0 ? d_cam.v.h : 768;
-            return pangolin::ProjectionMatrix(w, h, focal, focal, w / 2.0, h / 2.0, 0.1, far);
+            const double f = focal * ViewScale();
+            return pangolin::ProjectionMatrix(w, h, f, f, w / 2.0, h / 2.0, 0.1, far);
         };
 
         // Given real bounds here, not left at zero height like the log: the block
@@ -425,7 +442,41 @@ namespace ORB_SLAM3
         bool bFollow = true;
         bool bLocalizationMode = false;
         bool bStepByStep = false;
-        bool bCameraView = true;
+
+        // Which view the map is following the camera with.
+        //   Forward  from behind and above the camera, looking where it looks
+        //            -- a chase camera. The default.
+        //   Camera   ORB-SLAM3's own: from Viewer.Viewpoint{X,Y,Z}, which for
+        //            KITTI is straight down from above.
+        //   Top      straight down along gravity; inertial maps only.
+        enum class MapView
+        {
+            Forward,
+            Camera,
+            Top
+        };
+        MapView eView = MapView::Forward;
+
+        // The forward view is placed in multiples of the scene depth rather
+        // than in map units, because a monocular map has no metric scale: ten
+        // units behind the camera is a street length in one run and the whole
+        // sequence in another. It waits for the first depth -- there is no map
+        // to measure before initialisation -- and is placed again when the
+        // depth jumps by more than kForwardRescale, as it does when a new map
+        // starts at a new scale; between those it leaves the mouse alone.
+        const float kForwardBack = 1.5f, kForwardUp = 0.8f, kForwardAhead = 1.0f;
+        const float kForwardRescale = 4.0f;
+        const double kForwardFocal = 900.0;
+        float fForwardDepth = 0.0f; // the depth the forward view was placed with; 0 = not yet
+        auto SetForwardView = [&](float fDepth)
+        {
+            const float d = fDepth > 0.0f ? fDepth : 1.0f;
+            s_cam.SetProjectionMatrix(MapProjection(kForwardFocal, 1000));
+            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -kForwardUp * d, -kForwardBack * d, 0, 0,
+                                                               kForwardAhead * d, 0.0, -1.0, 0.0));
+            s_cam.Follow(Twc);
+            fForwardDepth = fDepth;
+        };
 
         if(mpTracker->mSensor == mpSystem->MONOCULAR || mpTracker->mSensor == mpSystem->STEREO ||
            mpTracker->mSensor == mpSystem->RGBD)
@@ -448,16 +499,28 @@ namespace ORB_SLAM3
                 mbStopTrack = false;
             }
 
+            if(eView == MapView::Forward && menuFollowCamera)
+            {
+                const float fDepth = mpMapDrawer->GetSceneDepth();
+                if(fDepth > 0.0f && (fForwardDepth <= 0.0f || fDepth > kForwardRescale * fForwardDepth ||
+                                     fDepth * kForwardRescale < fForwardDepth))
+                    SetForwardView(fDepth);
+            }
+
             if(menuFollowCamera && bFollow)
             {
-                if(bCameraView)
-                    s_cam.Follow(Twc);
-                else
+                if(eView == MapView::Top)
                     s_cam.Follow(Ow);
+                else
+                    s_cam.Follow(Twc);
             }
             else if(menuFollowCamera && !bFollow)
             {
-                if(bCameraView)
+                if(eView == MapView::Forward)
+                {
+                    SetForwardView(mpMapDrawer->GetSceneDepth());
+                }
+                else if(eView == MapView::Camera)
                 {
                     s_cam.SetProjectionMatrix(MapProjection(mViewpointF, 1000));
                     s_cam.SetModelViewMatrix(
@@ -477,10 +540,17 @@ namespace ORB_SLAM3
                 bFollow = false;
             }
 
+            if(menuForwardView)
+            {
+                menuForwardView = false;
+                eView = MapView::Forward;
+                SetForwardView(mpMapDrawer->GetSceneDepth());
+            }
+
             if(menuCamView)
             {
                 menuCamView = false;
-                bCameraView = true;
+                eView = MapView::Camera;
                 s_cam.SetProjectionMatrix(MapProjection(mViewpointF, 10000));
                 s_cam.SetModelViewMatrix(
                     pangolin::ModelViewLookAt(mViewpointX, mViewpointY, mViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
@@ -490,7 +560,7 @@ namespace ORB_SLAM3
             if(menuTopView && mpMapDrawer->mpAtlas->isImuInitialized())
             {
                 menuTopView = false;
-                bCameraView = false;
+                eView = MapView::Top;
                 s_cam.SetProjectionMatrix(MapProjection(3000, 10000));
                 s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, 0.01, 50, 0, 0, 0, 0.0, 0.0, 1.0));
                 s_cam.Follow(Ow);
@@ -532,6 +602,7 @@ namespace ORB_SLAM3
                 nLastCamW = d_cam.v.w;
                 nLastCamH = d_cam.v.h;
                 s_cam.SetProjectionMatrix(MapProjection(dProjFocal, dProjFar));
+                mpMapDrawer->SetDrawScale(static_cast<float>(ViewScale()));
             }
 
             d_cam.Activate(s_cam);
@@ -677,6 +748,8 @@ namespace ORB_SLAM3
                 bLocalizationMode = false;
                 bFollow = true;
                 menuFollowCamera = true;
+                eView = MapView::Forward;
+                fForwardDepth = 0.0f; // placed again once the new map has depth
                 mpSystem->ResetActiveMap();
                 menuReset = false;
             }

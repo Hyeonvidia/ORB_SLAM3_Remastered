@@ -22,6 +22,7 @@
 #include <pangolin/pangolin.h>
 #include <mutex>
 
+#include <algorithm>
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -155,7 +156,7 @@ namespace ORB_SLAM3
         if(vpMPs.empty())
             return;
 
-        glPointSize(mPointSize);
+        glPointSize(mPointSize * mfDrawScale);
         glBegin(GL_POINTS);
         glColor3f(0.0, 0.0, 0.0);
 
@@ -168,7 +169,7 @@ namespace ORB_SLAM3
         }
         glEnd();
 
-        glPointSize(mPointSize);
+        glPointSize(mPointSize * mfDrawScale);
         glBegin(GL_POINTS);
         glColor3f(1.0, 0.0, 0.0);
 
@@ -214,14 +215,14 @@ namespace ORB_SLAM3
 
                 if(!pKF->GetParent()) // It is the first KF in the map
                 {
-                    glLineWidth(mKeyFrameLineWidth * 5);
+                    glLineWidth(mKeyFrameLineWidth * 5 * mfDrawScale);
                     glColor3f(1.0f, 0.0f, 0.0f);
                     glBegin(GL_LINES);
                 }
                 else
                 {
                     //cout << "Child KF: " << vpKFs[i]->mnId << endl;
-                    glLineWidth(mKeyFrameLineWidth);
+                    glLineWidth(mKeyFrameLineWidth * mfDrawScale);
                     if(bDrawOptLba)
                     {
                         if(sOptKFs.find(pKF->mnId) != sOptKFs.end())
@@ -272,7 +273,7 @@ namespace ORB_SLAM3
 
         if(bDrawGraph)
         {
-            glLineWidth(mGraphLineWidth);
+            glLineWidth(mGraphLineWidth * mfDrawScale);
             glColor4f(0.0f, 1.0f, 0.0f, 0.6f);
             glBegin(GL_LINES);
 
@@ -321,7 +322,7 @@ namespace ORB_SLAM3
 
         if(bDrawInertialGraph && pActiveMap->isImuInitialized())
         {
-            glLineWidth(mGraphLineWidth);
+            glLineWidth(mGraphLineWidth * mfDrawScale);
             glColor4f(1.0f, 0.0f, 0.0f, 0.6f);
             glBegin(GL_LINES);
 
@@ -365,13 +366,13 @@ namespace ORB_SLAM3
 
                     if(!vpKFs[i]->GetParent()) // It is the first KF in the map
                     {
-                        glLineWidth(mKeyFrameLineWidth * 5);
+                        glLineWidth(mKeyFrameLineWidth * 5 * mfDrawScale);
                         glColor3f(1.0f, 0.0f, 0.0f);
                         glBegin(GL_LINES);
                     }
                     else
                     {
-                        glLineWidth(mKeyFrameLineWidth);
+                        glLineWidth(mKeyFrameLineWidth * mfDrawScale);
                         glColor3f(mfFrameColors[index_color][0], mfFrameColors[index_color][1],
                                   mfFrameColors[index_color][2]);
                         glBegin(GL_LINES);
@@ -419,7 +420,7 @@ namespace ORB_SLAM3
         glMultMatrixd(Twc.m);
 #endif
 
-        glLineWidth(mCameraLineWidth);
+        glLineWidth(mCameraLineWidth * mfDrawScale);
         glColor3f(0.0f, 1.0f, 0.0f);
         glBegin(GL_LINES);
         glVertex3f(0, 0, 0);
@@ -451,6 +452,37 @@ namespace ORB_SLAM3
     {
         std::lock_guard<std::mutex> lock(mMutexCamera);
         mCameraPose = Tcw.inverse();
+    }
+
+    float MapDrawer::GetSceneDepth()
+    {
+        Map* pActiveMap = mpAtlas->GetCurrentMap();
+        if(!pActiveMap)
+            return 0.0f;
+
+        Sophus::SE3f Tcw;
+        {
+            std::lock_guard<std::mutex> lock(mMutexCamera);
+            Tcw = mCameraPose.inverse(); // mCameraPose holds Twc
+        }
+
+        const std::vector<MapPoint*> vpRefMPs = pActiveMap->GetReferenceMapPoints();
+        std::vector<float> vDepths;
+        vDepths.reserve(vpRefMPs.size());
+        for(MapPoint* pMP : vpRefMPs)
+        {
+            if(!pMP || pMP->isBad())
+                continue;
+            const float z = (Tcw * pMP->GetWorldPos())(2);
+            if(z > 0.0f)
+                vDepths.push_back(z);
+        }
+        if(vDepths.empty())
+            return 0.0f;
+
+        std::vector<float>::iterator itMedian = vDepths.begin() + vDepths.size() / 2;
+        std::nth_element(vDepths.begin(), itMedian, vDepths.end());
+        return *itMedian;
     }
 
     void MapDrawer::GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw)

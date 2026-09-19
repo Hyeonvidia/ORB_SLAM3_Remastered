@@ -51,6 +51,17 @@ namespace ORB_SLAM3
         void SetReferenceKeyFrame(KeyFrame* pKF);
         void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
 
+        // How far away the scene is: the median depth, along the current
+        // camera's optical axis, of the map points Tracking is matching
+        // against. In the map's own units, which for a monocular map are
+        // whatever initialisation made them -- so it is what a view placed
+        // relative to the camera has to be scaled by. 0 when nothing is tracked.
+        float GetSceneDepth();
+
+        // Point sizes and line widths are in pixels; this multiplies them, so
+        // that what is drawn grows with the view instead of thinning out.
+        void SetDrawScale(float fScale) { mfDrawScale = fScale; }
+
     private:
         bool ParseViewerParamFile(cv::FileStorage &fSettings);
 
@@ -60,6 +71,7 @@ namespace ORB_SLAM3
         float mPointSize;
         float mCameraSize;
         float mCameraLineWidth;
+        float mfDrawScale = 1.0f;
 
         Sophus::SE3f mCameraPose;
 
