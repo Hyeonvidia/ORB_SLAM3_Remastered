@@ -17,6 +17,7 @@
 */
 
 #include "features/ORBmatcher.hpp"
+#include "features/ORBdescriptor.hpp"
 #include "camera/GeometricCamera.hpp"
 
 #include <limits.h>
@@ -24,8 +25,6 @@
 #include <opencv2/core/core.hpp>
 
 #include <DBoW2/FeatureVector.h>
-
-#include <stdint-gcc.h>
 
 #include <cmath>
 #include <set>
@@ -36,8 +35,6 @@
 namespace ORB_SLAM3
 {
 
-    const int ORBmatcher::TH_HIGH = 100;
-    const int ORBmatcher::TH_LOW = 50;
     const int ORBmatcher::HISTO_LENGTH = 30;
 
     ORBmatcher::ORBmatcher(float nnratio, bool checkOri) : mfNNratio(nnratio), mbCheckOrientation(checkOri) {}
@@ -104,7 +101,7 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d = F.mDescriptors.row(idx);
 
-                        const int dist = DescriptorDistance(MPdescriptor, d);
+                        const int dist = ORBdescriptor::Distance(MPdescriptor, d);
 
                         if(dist < bestDist)
                         {
@@ -126,7 +123,7 @@ namespace ORB_SLAM3
                     }
 
                     // Apply ratio to second match (only if best and second are in the same scale level)
-                    if(bestDist <= TH_HIGH)
+                    if(bestDist <= ORBdescriptor::TH_HIGH)
                     {
                         if(bestLevel == bestLevel2 && bestDist > mfNNratio * bestDist2)
                             continue;
@@ -183,7 +180,7 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d = F.mDescriptors.row(idx + F.Nleft);
 
-                        const int dist = DescriptorDistance(MPdescriptor, d);
+                        const int dist = ORBdescriptor::Distance(MPdescriptor, d);
 
                         if(dist < bestDist)
                         {
@@ -201,7 +198,7 @@ namespace ORB_SLAM3
                     }
 
                     // Apply ratio to second match (only if best and second are in the same scale level)
-                    if(bestDist <= TH_HIGH)
+                    if(bestDist <= ORBdescriptor::TH_HIGH)
                     {
                         if(bestLevel == bestLevel2 && bestDist > mfNNratio * bestDist2)
                             continue;
@@ -292,7 +289,7 @@ namespace ORB_SLAM3
 
                             const cv::Mat &dF = F.mDescriptors.row(realIdxF);
 
-                            const int dist = DescriptorDistance(dKF, dF);
+                            const int dist = ORBdescriptor::Distance(dKF, dF);
 
                             if(dist < bestDist1)
                             {
@@ -314,7 +311,7 @@ namespace ORB_SLAM3
 
                             const cv::Mat &dF = F.mDescriptors.row(realIdxF);
 
-                            const int dist = DescriptorDistance(dKF, dF);
+                            const int dist = ORBdescriptor::Distance(dKF, dF);
 
                             if(realIdxF < F.Nleft && dist < bestDist1)
                             {
@@ -340,7 +337,7 @@ namespace ORB_SLAM3
                         }
                     }
 
-                    if(bestDist1 <= TH_LOW)
+                    if(bestDist1 <= ORBdescriptor::TH_LOW)
                     {
                         if(static_cast<float>(bestDist1) < mfNNratio * static_cast<float>(bestDist2))
                         {
@@ -369,7 +366,7 @@ namespace ORB_SLAM3
                             nmatches++;
                         }
 
-                        if(bestDist1R <= TH_LOW)
+                        if(bestDist1R <= ORBdescriptor::TH_LOW)
                         {
                             if(static_cast<float>(bestDist1R) < mfNNratio * static_cast<float>(bestDist2R) || true)
                             {
@@ -524,7 +521,7 @@ namespace ORB_SLAM3
 
                 const cv::Mat &dKF = pKF->mDescriptors.row(idx);
 
-                const int dist = DescriptorDistance(dMP, dKF);
+                const int dist = ORBdescriptor::Distance(dMP, dKF);
 
                 if(dist < bestDist)
                 {
@@ -533,7 +530,7 @@ namespace ORB_SLAM3
                 }
             }
 
-            if(bestDist <= TH_LOW * ratioHamming)
+            if(bestDist <= ORBdescriptor::TH_LOW * ratioHamming)
             {
                 vpMatched[bestIdx] = pMP;
                 nmatches++;
@@ -637,7 +634,7 @@ namespace ORB_SLAM3
 
                 const cv::Mat &dKF = pKF->mDescriptors.row(idx);
 
-                const int dist = DescriptorDistance(dMP, dKF);
+                const int dist = ORBdescriptor::Distance(dMP, dKF);
 
                 if(dist < bestDist)
                 {
@@ -646,7 +643,7 @@ namespace ORB_SLAM3
                 }
             }
 
-            if(bestDist <= TH_LOW * ratioHamming)
+            if(bestDist <= ORBdescriptor::TH_LOW * ratioHamming)
             {
                 vpMatched[bestIdx] = pMP;
                 vpMatchedKF[bestIdx] = pKFi;
@@ -696,7 +693,7 @@ namespace ORB_SLAM3
 
                 cv::Mat d2 = F2.mDescriptors.row(i2);
 
-                int dist = DescriptorDistance(d1, d2);
+                int dist = ORBdescriptor::Distance(d1, d2);
 
                 if(vMatchedDistance[i2] <= dist)
                     continue;
@@ -713,7 +710,7 @@ namespace ORB_SLAM3
                 }
             }
 
-            if(bestDist <= TH_LOW)
+            if(bestDist <= ORBdescriptor::TH_LOW)
             {
                 if(bestDist < (float)bestDist2 * mfNNratio)
                 {
@@ -845,7 +842,7 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d2 = Descriptors2.row(idx2);
 
-                        int dist = DescriptorDistance(d1, d2);
+                        int dist = ORBdescriptor::Distance(d1, d2);
 
                         if(dist < bestDist1)
                         {
@@ -859,7 +856,7 @@ namespace ORB_SLAM3
                         }
                     }
 
-                    if(bestDist1 < TH_LOW)
+                    if(bestDist1 < ORBdescriptor::TH_LOW)
                     {
                         if(static_cast<float>(bestDist1) < mfNNratio * static_cast<float>(bestDist2))
                         {
@@ -1009,7 +1006,7 @@ namespace ORB_SLAM3
 
                     const cv::Mat &d1 = pKF1->mDescriptors.row(idx1);
 
-                    int bestDist = TH_LOW;
+                    int bestDist = ORBdescriptor::TH_LOW;
                     int bestIdx2 = -1;
 
                     for(size_t i2 = 0, iend2 = f2it->second.size(); i2 < iend2; i2++)
@@ -1030,9 +1027,9 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d2 = pKF2->mDescriptors.row(idx2);
 
-                        const int dist = DescriptorDistance(d1, d2);
+                        const int dist = ORBdescriptor::Distance(d1, d2);
 
-                        if(dist > TH_LOW || dist > bestDist)
+                        if(dist > ORBdescriptor::TH_LOW || dist > bestDist)
                             continue;
 
                         const cv::KeyPoint &kp2 = (pKF2->NLeft == -1)    ? pKF2->mvKeysUn[idx2]
@@ -1327,7 +1324,7 @@ namespace ORB_SLAM3
 
                 const cv::Mat &dKF = pKF->mDescriptors.row(idx);
 
-                const int dist = DescriptorDistance(dMP, dKF);
+                const int dist = ORBdescriptor::Distance(dMP, dKF);
 
                 if(dist < bestDist)
                 {
@@ -1337,7 +1334,7 @@ namespace ORB_SLAM3
             }
 
             // If there is already a MapPoint replace otherwise add new measurement
-            if(bestDist <= TH_LOW)
+            if(bestDist <= ORBdescriptor::TH_LOW)
             {
                 MapPoint* pMPinKF = pKF->GetMapPoint(bestIdx);
                 if(pMPinKF)
@@ -1452,7 +1449,7 @@ namespace ORB_SLAM3
 
                 const cv::Mat &dKF = pKF->mDescriptors.row(idx);
 
-                int dist = DescriptorDistance(dMP, dKF);
+                int dist = ORBdescriptor::Distance(dMP, dKF);
 
                 if(dist < bestDist)
                 {
@@ -1462,7 +1459,7 @@ namespace ORB_SLAM3
             }
 
             // If there is already a MapPoint replace otherwise add new measurement
-            if(bestDist <= TH_LOW)
+            if(bestDist <= ORBdescriptor::TH_LOW)
             {
                 MapPoint* pMPinKF = pKF->GetMapPoint(bestIdx);
                 if(pMPinKF)
@@ -1586,7 +1583,7 @@ namespace ORB_SLAM3
 
                 const cv::Mat &dKF = pKF2->mDescriptors.row(idx);
 
-                const int dist = DescriptorDistance(dMP, dKF);
+                const int dist = ORBdescriptor::Distance(dMP, dKF);
 
                 if(dist < bestDist)
                 {
@@ -1595,7 +1592,7 @@ namespace ORB_SLAM3
                 }
             }
 
-            if(bestDist <= TH_HIGH)
+            if(bestDist <= ORBdescriptor::TH_HIGH)
             {
                 vnMatch1[i1] = bestIdx;
             }
@@ -1666,7 +1663,7 @@ namespace ORB_SLAM3
 
                 const cv::Mat &dKF = pKF1->mDescriptors.row(idx);
 
-                const int dist = DescriptorDistance(dMP, dKF);
+                const int dist = ORBdescriptor::Distance(dMP, dKF);
 
                 if(dist < bestDist)
                 {
@@ -1675,7 +1672,7 @@ namespace ORB_SLAM3
                 }
             }
 
-            if(bestDist <= TH_HIGH)
+            if(bestDist <= ORBdescriptor::TH_HIGH)
             {
                 vnMatch2[i2] = bestIdx;
             }
@@ -1790,7 +1787,7 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
 
-                        const int dist = DescriptorDistance(dMP, d);
+                        const int dist = ORBdescriptor::Distance(dMP, d);
 
                         if(dist < bestDist)
                         {
@@ -1799,7 +1796,7 @@ namespace ORB_SLAM3
                         }
                     }
 
-                    if(bestDist <= TH_HIGH)
+                    if(bestDist <= ORBdescriptor::TH_HIGH)
                     {
                         CurrentFrame.mvpMapPoints[bestIdx2] = pMP;
                         nmatches++;
@@ -1861,7 +1858,7 @@ namespace ORB_SLAM3
 
                             const cv::Mat &d = CurrentFrame.mDescriptors.row(i2 + CurrentFrame.Nleft);
 
-                            const int dist = DescriptorDistance(dMP, d);
+                            const int dist = ORBdescriptor::Distance(dMP, d);
 
                             if(dist < bestDist)
                             {
@@ -1870,7 +1867,7 @@ namespace ORB_SLAM3
                             }
                         }
 
-                        if(bestDist <= TH_HIGH)
+                        if(bestDist <= ORBdescriptor::TH_HIGH)
                         {
                             CurrentFrame.mvpMapPoints[bestIdx2 + CurrentFrame.Nleft] = pMP;
                             nmatches++;
@@ -1993,7 +1990,7 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
 
-                        const int dist = DescriptorDistance(dMP, d);
+                        const int dist = ORBdescriptor::Distance(dMP, d);
 
                         if(dist < bestDist)
                         {
@@ -2088,26 +2085,6 @@ namespace ORB_SLAM3
         {
             ind3 = -1;
         }
-    }
-
-    // Bit set count operation from
-    // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-    int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
-    {
-        const int* pa = a.ptr<int32_t>();
-        const int* pb = b.ptr<int32_t>();
-
-        int dist = 0;
-
-        for(int i = 0; i < 8; i++, pa++, pb++)
-        {
-            unsigned int v = *pa ^ *pb;
-            v = v - ((v >> 1) & 0x55555555);
-            v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
-            dist += (((v + (v >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
-        }
-
-        return dist;
     }
 
 } // namespace ORB_SLAM3

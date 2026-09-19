@@ -81,7 +81,7 @@ submodule to pin. Upstream ORB-SLAM3 lists them in its `Dependencies.md`.
 |---|---|---|---|
 | `src/features/ORBextractor.cpp` | OpenCV **2.4.x** `modules/features2d/src/orb.cpp` | BSD | Fork. See below. |
 | `src/tracking/MLPnPsolver.cpp` | Steffen Urban's MLPnP, via OpenGV | BSD | Fork. |
-| `ORBmatcher::DescriptorDistance` | Stanford "Bit Twiddling Hacks" parallel popcount | public domain | Snippet. `__builtin_popcount` is the modern equivalent. |
+| `ORBdescriptor::Distance` (was `ORBmatcher::DescriptorDistance`) | Stanford "Bit Twiddling Hacks" parallel popcount | public domain | Snippet. `__builtin_popcount` is the modern equivalent. |
 | ~~`PnPsolver.h/.cc`~~ | Lepetit's EPnP | FreeBSD | **Does not exist in v1.0.** Removed when MLPnP replaced it; upstream's `Dependencies.md` still lists it. |
 
 ### ORBextractor: which OpenCV it came from, and why it is not split
@@ -115,6 +115,6 @@ ORB-SLAM3 itself is GPLv3. Everything borrowed is permissive:
 - OpenCV, DBoW2, DLib, g2o, EPnP, MLPnP — BSD family
 - Sophus, Pangolin — MIT
 - Eigen ≥ 3.1.1 — MPL2
-- `DescriptorDistance` bit-twiddling — public domain
+- `ORBdescriptor::Distance` bit-twiddling — public domain
 
 Commercial licensing of ORB-SLAM3 goes through the authors: orbslam (at) unizar (dot) es.

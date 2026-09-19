@@ -17,7 +17,9 @@
 */
 
 #include "atlas/MapPoint.hpp"
-#include "features/ORBmatcher.hpp"
+#include "atlas/KeyFrame.hpp"
+#include "features/ORBdescriptor.hpp"
+#include "tracking/Frame.hpp"
 
 #include <mutex>
 
@@ -395,7 +397,7 @@ namespace ORB_SLAM3
             Distances[i][i] = 0;
             for(size_t j = i + 1; j < N; j++)
             {
-                int distij = ORBmatcher::DescriptorDistance(vDescriptors[i], vDescriptors[j]);
+                int distij = ORBdescriptor::Distance(vDescriptors[i], vDescriptors[j]);
                 Distances[i][j] = distij;
                 Distances[j][i] = distij;
             }

@@ -23,7 +23,7 @@
 #include "atlas/KeyFrame.hpp"
 #include "features/ORBextractor.hpp"
 #include "common/Converter.hpp"
-#include "features/ORBmatcher.hpp"
+#include "features/ORBdescriptor.hpp"
 #include "camera/GeometricCamera.hpp"
 
 #include <thread>
@@ -725,7 +725,7 @@ namespace ORB_SLAM3
         mvuRight = std::vector<float>(N, -1.0f);
         mvDepth = std::vector<float>(N, -1.0f);
 
-        const int thOrbDist = (ORBmatcher::TH_HIGH + ORBmatcher::TH_LOW) / 2;
+        const int thOrbDist = (ORBdescriptor::TH_HIGH + ORBdescriptor::TH_LOW) / 2;
 
         const int nRows = mpORBextractorLeft->mvImagePyramid[0].rows;
 
@@ -776,7 +776,7 @@ namespace ORB_SLAM3
             if(maxU < 0)
                 continue;
 
-            int bestDist = ORBmatcher::TH_HIGH;
+            int bestDist = ORBdescriptor::TH_HIGH;
             size_t bestIdxR = 0;
 
             const cv::Mat &dL = mDescriptors.row(iL);
@@ -795,7 +795,7 @@ namespace ORB_SLAM3
                 if(uR >= minU && uR <= maxU)
                 {
                     const cv::Mat &dR = mDescriptorsRight.row(iR);
-                    const int dist = ORBmatcher::DescriptorDistance(dL, dR);
+                    const int dist = ORBdescriptor::Distance(dL, dR);
 
                     if(dist < bestDist)
                     {
