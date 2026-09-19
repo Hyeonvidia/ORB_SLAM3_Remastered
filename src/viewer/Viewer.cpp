@@ -700,6 +700,15 @@ namespace ORB_SLAM3
                 imageTexture.RenderToViewportFlipY();
             }
 
+            // Once the system has shut down, the map being drawn is final. The
+            // window stays up only if a hold was asked for (System leaves this
+            // thread running); Esc -- Pangolin's own quit binding -- or the Stop
+            // button ends it. Esc pressed earlier, during the run, counts too:
+            // there is no taking a quit back.
+            const bool bFinished = mpSystem->isShutDown();
+            if(bFinished && pangolin::ShouldQuit())
+                break;
+
             // The status row, drawn by the viewer at window resolution rather
             // than into the image: written into the image it is part of the
             // texture and comes apart whenever the frame is scaled under 1:1.
@@ -709,7 +718,10 @@ namespace ORB_SLAM3
                 pangolin::GlFont &statusFont = pangolin::default_font();
                 const float fY = static_cast<float>(d_status.v.b) + (d_status.v.h - statusFont.Height()) * 0.5f + 1.0f;
                 glColor3f(0.10f, 0.10f, 0.10f);
-                statusFont.Text(mpFrameDrawer->StatusText()).DrawWindow(static_cast<float>(d_status.v.l) + 8.0f, fY);
+                std::string sStatus = mpFrameDrawer->StatusText();
+                if(bFinished)
+                    sStatus += "   |   FINISHED -- Esc or Stop closes the window";
+                statusFont.Text(sStatus).DrawWindow(static_cast<float>(d_status.v.l) + 8.0f, fY);
             }
 
             // The log, newest line at the bottom, in the space under the frame.
@@ -752,6 +764,15 @@ namespace ORB_SLAM3
                 fForwardDepth = 0.0f; // placed again once the new map has depth
                 mpSystem->ResetActiveMap();
                 menuReset = false;
+            }
+
+            if(menuStop && bFinished)
+            {
+                // The system is already down and main() has saved the
+                // trajectories; Stop now just ends the hold. Saving again here
+                // would overwrite them in EuRoC format.
+                menuStop = false;
+                break;
             }
 
             if(menuStop)

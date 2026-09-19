@@ -261,6 +261,12 @@ the series rather than flickering in and out between runs. Trajectories land in
 `results/gui/<tag>/`, one directory per run, which is what lets
 `tools/evaluate_ate.py` score them afterwards.
 
+When the last run ends the window stays up with the final map — the status row
+says FINISHED — until Esc or the Stop button in the window ends it. `--hold-each`
+pauses that way after every run; `--no-hold` closes the window with the last
+frame, as upstream does, which on KITTI 04 (27 seconds of driving) looks like a
+crash. On the binary itself it is `ORBSLAM3R_VIEWER_HOLD=1`.
+
 These are slow: rendering is software llvmpipe inside the container, so a full
 EuRoC sweep is 44 runs and takes hours. `--list` first.
 

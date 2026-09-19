@@ -212,6 +212,11 @@ namespace ORB_SLAM3
 
         // The viewer draws the map and the current camera pose. It uses Pangolin.
         Viewer* mpViewer;
+        // ORBSLAM3R_VIEWER_HOLD=1: after Shutdown() the viewer keeps the final
+        // map on screen until Esc or Stop is pressed in the window; the
+        // System's destructor waits for that. Without it the window closes
+        // with the last frame.
+        bool mbViewerHold = false;
 
         FrameDrawer* mpFrameDrawer;
         MapDrawer* mpMapDrawer;
@@ -230,7 +235,7 @@ namespace ORB_SLAM3
         std::thread mtViewer;
 
         // Asks the three to finish and waits for them. Idempotent.
-        void StopAndJoinThreads();
+        void StopAndJoinThreads(bool bViewer = true);
 
         // Resets tracking with the viewer held still for the duration.
         void ResetTracking(bool bActiveMapOnly);

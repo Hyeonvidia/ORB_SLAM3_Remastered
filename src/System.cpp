@@ -263,6 +263,8 @@ namespace ORB_SLAM3
             mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile, settings_);
             mtViewer = std::thread(&Viewer::Run, mpViewer);
             mpViewer->both = mpFrameDrawer->both;
+            const char* holdEnv = std::getenv("ORBSLAM3R_VIEWER_HOLD");
+            mbViewerHold = holdEnv && std::string(holdEnv) == "1";
         }
 
         // Fix verbosity
@@ -577,6 +579,15 @@ namespace ORB_SLAM3
 
     System::~System()
     {
+        // A held viewer is still showing the final map: Shutdown() left it
+        // running and main() has saved its trajectories since. Wait for the
+        // user to end it -- Esc or Stop in the window -- rather than ending it
+        // here. Only after a Shutdown(): on an error path the viewer goes with
+        // everything else.
+        if(mpViewer && mbViewerHold && isShutDown() && mtViewer.joinable() &&
+           mtViewer.get_id() != std::this_thread::get_id())
+            mtViewer.join();
+
         // Shutdown() is where a session ends, but every one of the twelve example
         // mains has error paths that never reach it: 14 "return 1"s inside their
         // tracking loops, all on a failed image load, each of them leaving this
@@ -598,11 +609,15 @@ namespace ORB_SLAM3
     //
     // Idempotent: RequestFinish only raises a flag, and a thread that has been
     // joined is no longer joinable.
-    void System::StopAndJoinThreads()
+    //
+    // bViewer=false leaves the viewer out of it: the thread keeps running and
+    // is neither asked to finish nor joined. Shutdown() uses that to hold the
+    // final map on screen.
+    void System::StopAndJoinThreads(bool bViewer)
     {
         mpLocalMapper->RequestFinish();
         mpLoopCloser->RequestFinish();
-        if(mpViewer)
+        if(mpViewer && bViewer)
             mpViewer->RequestFinish();
 
         // Local Mapping first: a global bundle adjustment that is past its stop
@@ -610,6 +625,8 @@ namespace ORB_SLAM3
         // waits for that BA.
         for(std::thread* t : {&mtLocalMapping, &mtLoopClosing, &mtViewer})
         {
+            if(t == &mtViewer && !bViewer)
+                continue;
             // Never the calling thread. The viewer's Stop button runs Shutdown()
             // on the viewer thread itself (Viewer.cpp, menuStop), and a thread
             // joining itself is the deadlock the standard reports as
@@ -640,7 +657,17 @@ namespace ORB_SLAM3
         // threads that were still using what they were tearing down. That is
         // the intermittent segfault at exit, which lands *after* the trajectory
         // is safely on disk and so looks like it does not matter.
-        StopAndJoinThreads();
+        //
+        // With a hold requested, the viewer is the exception: it goes on
+        // drawing the finished map, which nothing is changing any more, until
+        // the user ends it, and ~System waits for that. Not when Shutdown() is
+        // what the viewer's own Stop button called -- then it is the viewer
+        // asking to end, and it does.
+        const bool bHoldViewer = mpViewer && mbViewerHold && mtViewer.get_id() != std::this_thread::get_id() &&
+                                 !mpViewer->isFinished();
+        StopAndJoinThreads(!bHoldViewer);
+        if(bHoldViewer)
+            std::cout << "Viewer: holding the final map on screen. Esc or Stop in the window ends it." << std::endl;
 
         if(!mStrSaveAtlasToFile.empty())
         {

@@ -10,6 +10,8 @@
 #   ./tools/run_gui.sh all                       every dataset
 #
 #   --list       print the plan and exit, without running anything
+#   --hold-each  hold every run's final map on screen, not just the last one's
+#   --no-hold    close the window with the last frame, as upstream does
 #   --vnc        export the screen over VNC instead of opening a desktop window
 #   --no-open    (vnc) do not launch Screen Sharing, just print the URL
 #   --port N     (vnc) local port, default 5900
@@ -24,6 +26,10 @@
 # Trajectories land in results/gui/<tag>/, one directory per run, which is what
 # lets tools/evaluate_ate.py score them afterwards.
 #
+# When the last run ends the window stays up showing the final map; Esc or the
+# Stop button in the window ends it. Upstream closed the window with the last
+# frame, which on KITTI 04 -- 27 seconds of driving -- looks like a crash.
+#
 # These are slow. Rendering is software llvmpipe inside the container, so a full
 # EuRoC sweep is 44 runs and takes hours; --list first, and name the sequences
 # you actually want to watch.
@@ -36,6 +42,7 @@ MODE=x11
 PORT=5900
 OPEN=1
 LIST=0
+HOLD=last
 VNC_PASSWORD="${ORBSLAM3R_VNC_PASSWORD:-orbslam3r}"
 ARGS=()
 while [ $# -gt 0 ]; do
@@ -44,6 +51,8 @@ while [ $# -gt 0 ]; do
     --x11)     MODE=x11; shift ;;
     --vnc)     MODE=vnc; shift ;;
     --no-open) OPEN=0; shift ;;
+    --hold-each) HOLD=each; shift ;;
+    --no-hold) HOLD=0; shift ;;
     --port)    PORT="$2"; shift 2 ;;
     -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)         ARGS+=("$1"); shift ;;
@@ -87,6 +96,7 @@ COMMON=(
   --platform linux/arm64
   --shm-size=2g
   -e ORBSLAM3R_VIEWER=1
+  -e "ORBSLAM3R_VIEWER_HOLD=${HOLD}"
   -v "${ROOT}:/workspace"
   -v "$(cd "$ROOT/.." && pwd)/Datasets:/datasets:ro"
   -w /workspace
@@ -107,6 +117,10 @@ if [ "$MODE" = x11 ]; then
   /opt/X11/bin/xhost +localhost >/dev/null 2>&1 || true
 
   echo "== a window titled 'ORB-SLAM3 Viewer' will open and stay up for the series"
+  case "$HOLD" in
+    last) echo "== when the last run ends its final map stays on screen: Esc or Stop in the window ends it" ;;
+    each) echo "== each run holds its final map on screen: Esc or Stop in the window goes on to the next" ;;
+  esac
   echo "== Ctrl-C stops everything"
   echo
   # DISPLAY is the OUTER server, the one Xephyr paints onto; the launcher moves

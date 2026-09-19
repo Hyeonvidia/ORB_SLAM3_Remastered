@@ -11,6 +11,14 @@
 #
 # Sequential on purpose. The point of these runs is watching them, and the
 # viewer only has one window.
+#
+# ORBSLAM3R_VIEWER_HOLD says what happens to the window when a run ends:
+#   last   the last run of the plan holds its final map on screen until Esc
+#          or Stop is pressed in the window (the default under run_gui.sh)
+#   each   every run does, so a series pauses after each sequence
+#   0      nothing: the window closes with the last frame
+# The binary itself only understands 1, so this is where last/each are turned
+# into a per-run 1.
 set -uo pipefail
 
 PLAN="${1:?usage: $0 <plan_file> <results_root>}"
@@ -26,9 +34,14 @@ while IFS='|' read -r tag binary args; do
   n=$((n + 1))
   out="$OUT_ROOT/$tag"
   mkdir -p "$out"
+  hold=0
+  case "${ORBSLAM3R_VIEWER_HOLD:-0}" in
+    each|1) hold=1 ;;
+    last)   [ "$n" = "$total" ] && hold=1 ;;
+  esac
   printf '[%2d/%2d] %-32s ' "$n" "$total" "$tag"
   t0=$(date +%s)
-  if (cd "$out" && "/workspace/build/bin/$binary" $args > run.log 2>&1); then
+  if (cd "$out" && ORBSLAM3R_VIEWER_HOLD=$hold "/workspace/build/bin/$binary" $args > run.log 2>&1); then
     printf 'ok    %4ds\n' "$(( $(date +%s) - t0 ))"
   else
     printf 'FAIL  %4ds   see %s/run.log\n' "$(( $(date +%s) - t0 ))" "${out#/workspace/}"
