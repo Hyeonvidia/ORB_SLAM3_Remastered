@@ -159,7 +159,8 @@ src/ include/     the SLAM library, in layers that follow the paper's Figure 1:
                   (.cpp / .hpp throughout; upstream ships .cc / .h)
 Examples/         dataset example binaries — also generated
 reference/        pristine ORB-SLAM3 v1.0 — diff reference, never built
-tools/            submodule pinning, the port pipeline, ATE evaluation, format.sh
+tools/            submodule pinning, the port pipeline, ATE evaluation, format.sh,
+                  the v1.0 baseline build and the A/B against it
 docs/             DEPENDENCIES.md, WRAPPERS.md, PORTING.md, FRAME_KEYFRAME.md,
                   modifications/
 ```
@@ -242,6 +243,51 @@ same sequence and are a different measurement.
 
 [docs/PORTING.md](docs/PORTING.md) explains the two ways this evaluation goes
 quietly wrong if the frame or the alignment group is chosen carelessly.
+
+## Against the original
+
+Whether any of this changed how well the system tracks is a question the
+matrix alone cannot answer, so v1.0 itself was built in the same container and
+run on the same KITTI images -- headless, in one queue with the remaster, four
+at a time, so both saw the same load. Mono three times and stereo twice per
+sequence: 110 runs. `tools/baseline/build.sh` builds it and `tools/ab_kitti.sh`
+runs the comparison.
+
+v1.0 does not build or run here as it is. `tools/baseline/v1.0-build.patch` is
+the least that makes it: C++17 for the pinned Pangolin; `mnFullBAIdx++` on a
+`bool`, which C++17 rejects (the remaster fixed the same three lines); and the
+`Settings` printer dereferencing a second-camera calibration that rectified
+stereo never sets -- v1.0 crashes on KITTI stereo before the first image.
+
+Median ATE over the repeats, in metres:
+
+| Seq | mono v1.0 | mono remaster | stereo v1.0 | stereo remaster |
+|---|---:|---:|---:|---:|
+| 00 | 8.31 | 8.25 | 1.30 \* | 1.21 |
+| 01 | 305 | 331 | 15.3 | 14.6 |
+| 02 | 25.3 | 25.2 | 5.32 | 6.04 |
+| 03 | 0.96 | 0.96 | 1.31 | 1.31 |
+| 04 | 1.10 | 0.71 | 0.25 | 0.24 |
+| 05 | 7.36 | 5.55 | 0.92 | 0.90 |
+| 06 | 16.3 | 15.1 | 1.00 | 0.99 |
+| 07 | 2.55 | 2.63 | 0.46 | 0.45 |
+| 08 | 55.8 | 55.6 | 3.43 | 3.82 |
+| 09 | 41.1 | 8.97 | 1.95 | 2.03 |
+| 10 | 7.64 | 7.87 | 1.31 | 1.11 |
+
+\* one run: the other was the stereo crash above, before the patch's third fix.
+
+Nothing here is outside the run-to-run spread the table above puts on a single
+build. 09 mono is the widest gap and it is that spread: v1.0's three runs scored
+9.0, 41.1 and 54.8 m with keyframe counts within 6 % of the remaster's, so not
+a lost track. 01 mono fails in both -- no metric scale over 2.5 km of highway
+-- as it does for everyone.
+
+Per-frame tracking time is 2-6 % higher in the remaster: on 05 and 07, two
+interleaved runs of each, 14.7 and 13.7 ms against v1.0's 14.4 and 12.9 mono,
+19.8 and 19.1 against 19.3 and 18.3 stereo. v1.0's CMake adds `-march=native`;
+the remaster built with it is no faster (14.4, 14.2, 20.3, 19.3 ms), so that is
+not the difference, and the cause is not known.
 
 ## Watching the viewer live from macOS
 

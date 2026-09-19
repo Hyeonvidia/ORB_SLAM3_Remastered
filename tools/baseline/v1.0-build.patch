@@ -1,0 +1,97 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -14,16 +14,16 @@
+ 
+ # Check C++11 or C++0x support
+ include(CheckCXXCompilerFlag)
+-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
++CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX11)
++CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX0X)
+ if(COMPILER_SUPPORTS_CXX11)
+-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
++   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+    add_definitions(-DCOMPILEDWITHC11)
+-   message(STATUS "Using flag -std=c++11.")
++   message(STATUS "Using flag -std=c++17.")
+ elseif(COMPILER_SUPPORTS_CXX0X)
+-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
++   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+    add_definitions(-DCOMPILEDWITHC0X)
+-   message(STATUS "Using flag -std=c++0x.")
++   message(STATUS "Using flag -std=c++17.")
+ else()
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+ endif()
+--- a/src/LoopClosing.cc
++++ b/src/LoopClosing.cc
+@@ -982,7 +982,7 @@
+         unique_lock<mutex> lock(mMutexGBA);
+         mbStopGBA = true;
+ 
+-        mnFullBAIdx++;
++        mnFullBAIdx = true;
+ 
+         if(mpThreadGBA)
+         {
+@@ -1233,7 +1233,7 @@
+         unique_lock<mutex> lock(mMutexGBA);
+         mbStopGBA = true;
+ 
+-        mnFullBAIdx++;
++        mnFullBAIdx = true;
+ 
+         if(mpThreadGBA)
+         {
+@@ -1806,7 +1806,7 @@
+         unique_lock<mutex> lock(mMutexGBA);
+         mbStopGBA = true;
+ 
+-        mnFullBAIdx++;
++        mnFullBAIdx = true;
+ 
+         if(mpThreadGBA)
+         {
+--- a/src/Settings.cc
++++ b/src/Settings.cc
+@@ -125,6 +125,7 @@
+     }
+ 
+     Settings::Settings(const std::string &configFile, const int& sensor) :
++    calibration1_(nullptr), calibration2_(nullptr), originalCalib1_(nullptr), originalCalib2_(nullptr), // baseline build only: uninitialised in v1.0
+     bNeedToUndistort_(false), bNeedToRectify_(false), bNeedToResize1_(false), bNeedToResize2_(false) {
+         sensor_ = sensor;
+ 
+@@ -559,7 +560,9 @@
+                 output << "Kannala-Brandt";
+             }
+             output << "" << ": [";
+-            for(size_t i = 0; i < settings.originalCalib2_->size(); i++){
++            // Baseline build only: v1.0 dereferences a null originalCalib2_ here
++            // for rectified stereo (KITTI) and crashes before processing anything.
++            for(size_t i = 0; settings.originalCalib2_ && i < settings.originalCalib2_->size(); i++){
+                 output << " " << settings.originalCalib2_->getParameter(i);
+             }
+             output << " ]" << endl;
+--- a/Examples/Monocular/mono_kitti.cc
++++ b/Examples/Monocular/mono_kitti.cc
+@@ -47,7 +47,7 @@
+     int nImages = vstrImageFilenames.size();
+ 
+     // Create SLAM system. It initializes all system threads and gets ready to process frames.
+-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR,true);
++    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR,false);
+     float imageScale = SLAM.GetImageScale();
+ 
+     // Vector for tracking time statistics
+--- a/Examples/Stereo/stereo_kitti.cc
++++ b/Examples/Stereo/stereo_kitti.cc
+@@ -48,7 +48,7 @@
+     const int nImages = vstrImageLeft.size();
+ 
+     // Create SLAM system. It initializes all system threads and gets ready to process frames.
+-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::STEREO,true);
++    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::STEREO,false);
+     float imageScale = SLAM.GetImageScale();
+ 
+     // Vector for tracking time statistics
