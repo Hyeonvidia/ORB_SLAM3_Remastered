@@ -113,7 +113,7 @@ larger change than the pose half:
   C array `std::vector<size_t> mGrid[64][48]`, `KeyFrame` a
   `vector<vector<vector<size_t>>>` because Boost has to serialise it.
 
-The prize is real -- a `shared_ptr<const ImageFeatures>` would collapse the
+The prize looked real -- a `shared_ptr<const ImageFeatures>` would collapse the
 38-field copy and stop every keyframe duplicating its parent frame's keypoints
 and descriptors. Its prerequisite, retiring `Frame`'s static calibration, has
 been done on its own and proved first:
@@ -134,3 +134,38 @@ been done on its own and proved first:
 
 The fisheye stereo constructor is the one that cannot run here -- there is no
 TUM-VI data -- so it is verified by compilation only.
+
+### Why it stops at the calibration
+
+With the prerequisite done, the prize was measured before anything was spent on
+it, and it is small:
+
+- **Memory: nothing in steady state.** A `Frame` is transient -- Tracking keeps
+  the current one, the last one and the initialisation frame, and overwrites
+  them as it goes. What accumulates is keyframes, and a keyframe needs its own
+  copy of the features whether it shares them with the frame it came from or
+  not. Sharing saves the copy made when a keyframe is created, not the memory
+  held afterwards.
+- **Time: about 2 %, most of it removable without sharing anything.** Every
+  frame copies a whole `Frame` three times. `mCurrentFrame = Frame(...)`
+  copy-assigns the new frame out of a temporary, because `Frame`'s
+  user-declared copy constructor suppresses the implicit move.
+  `mLastFrame = Frame(mCurrentFrame)` copy-constructs and then copy-assigns.
+  `FrameDrawer::Update` copy-assigns the current frame to read one map out of
+  it, whether or not a viewer is running. `sizeof(Frame)` is 149,424 bytes,
+  147,456 of them the two 64 x 48 grids of `std::vector<std::size_t>` headers,
+  and copying a non-empty cell can mean a heap allocation. Timed around each
+  statement on KITTI 05 stereo: 0.110 + 0.154 + 0.120 = 0.384 ms per frame,
+  against a mean tracking time of 19.6 ms -- 2.0 %. EuRoC MH01 spends 0.56 ms
+  (mono) and 0.34 ms (stereo) on the same three; its examples print no mean
+  tracking time to set that against. Two of the three need no redesign: a
+  move assignment would take out the first and the assigning half of the
+  second, and the drawer does not need the frame at all. Neither is done yet.
+- **Layering: nothing.** It removes no include edge between layers.
+
+Against a dozen commits that change who owns data that Tracking, Local Mapping
+and Loop Closing read concurrently, that is not worth having, so the change
+stops here. What is left after the two cheap fixes -- one copy per frame -- has
+a cheaper lever than sharing too: the grid stored as one flat index array with
+per-cell offsets instead of 3,072 vectors, which copies in a few `memcpy`s.
+That is unmeasured.
