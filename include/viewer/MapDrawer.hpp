@@ -62,6 +62,15 @@ namespace ORB_SLAM3
         // that what is drawn grows with the view instead of thinning out.
         void SetDrawScale(float fScale) { mfDrawScale = fScale; }
 
+        // The camera and keyframe markers are sized by the settings
+        // (Viewer.CameraSize, Viewer.KeyFrameSize) in map units. A monocular
+        // map's unit is whatever initialisation made it, so beside a view that
+        // is placed relative to the scene depth those sizes mean nothing: on
+        // KITTI 04 the camera marker came out 540 pixels wide. A width > 0
+        // here replaces them -- the camera is drawn that wide, and keyframes
+        // keep the settings' ratio to it. 0 goes back to the settings.
+        void SetMarkerWidth(float fCameraWidth) { mfMarkerWidth = fCameraWidth; }
+
     private:
         bool ParseViewerParamFile(cv::FileStorage &fSettings);
 
@@ -72,6 +81,7 @@ namespace ORB_SLAM3
         float mCameraSize;
         float mCameraLineWidth;
         float mfDrawScale = 1.0f;
+        float mfMarkerWidth = 0.0f;
 
         Sophus::SE3f mCameraPose;
 

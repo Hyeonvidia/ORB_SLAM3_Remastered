@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <mutex>
 #include <vector>
 #include <streambuf>
@@ -61,6 +62,17 @@ namespace ORB_SLAM3
 
             ViewerLogTap(const ViewerLogTap &) = delete;
             ViewerLogTap &operator=(const ViewerLogTap &) = delete;
+
+            // A line from the viewer itself -- progress, state changes. It goes
+            // into the ring only: stdout, and so run.log, stays what the system
+            // wrote.
+            void Append(const std::string &line)
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                mvLines.push_back(line);
+                if(mvLines.size() > mnMaxLines)
+                    mvLines.erase(mvLines.begin());
+            }
 
             std::vector<std::string> Tail(std::size_t n) const
             {
@@ -357,8 +369,9 @@ namespace ORB_SLAM3
             }
         }
 
-        // Enough for a handful of recent lines; the map gets everything else.
-        const int kLogHeightPx = 96;
+        // Five lines: the system's own messages are rare, and the progress the
+        // viewer reports below them is what shows a run is alive.
+        const int kLogHeightPx = 124;
 
         // The tracked frame's status line gets a row of its own rather than being
         // drawn into the image. Burned in, it is part of the texture and shrinks
@@ -460,14 +473,26 @@ namespace ORB_SLAM3
         // The forward view is placed in multiples of the scene depth rather
         // than in map units, because a monocular map has no metric scale: ten
         // units behind the camera is a street length in one run and the whole
-        // sequence in another. It waits for the first depth -- there is no map
-        // to measure before initialisation -- and is placed again when the
-        // depth jumps by more than kForwardRescale, as it does when a new map
-        // starts at a new scale; between those it leaves the mouse alone.
+        // sequence in another. The depth is smoothed first (time constant
+        // kDepthSmoothingS). It has to be: measured over KITTI 04 the raw value
+        // runs from 0.20 to 0.90 within 27 seconds, and a rule that re-placed
+        // the view on a 4x jump of the raw value fired exactly once, at the
+        // minimum, and left the view latched a third of a unit from the camera.
+        // The view waits for the first depth -- there is no map to measure
+        // before initialisation -- and is placed again only when the smoothed
+        // depth has moved by kForwardRescale, as it does when a new map starts
+        // at a new scale; between those it leaves the mouse alone.
+        //
+        // The camera and keyframe markers are sized from the same depth, for
+        // the same reason: Viewer.CameraSize is in map units, and 0.15 of them
+        // was 540 pixels across on KITTI 04.
         const float kForwardBack = 1.5f, kForwardUp = 0.8f, kForwardAhead = 1.0f;
-        const float kForwardRescale = 4.0f;
+        const float kForwardRescale = 3.0f;
         const double kForwardFocal = 900.0;
-        float fForwardDepth = 0.0f; // the depth the forward view was placed with; 0 = not yet
+        const double kDepthSmoothingS = 3.0;
+        const float kMarkerFraction = 0.08f; // camera marker width, as a fraction of the placed depth
+        float fSmoothDepth = 0.0f;           // 0 = no depth seen yet
+        float fForwardDepth = 0.0f;          // the depth the forward view was placed with; 0 = not yet
         auto SetForwardView = [&](float fDepth)
         {
             const float d = fDepth > 0.0f ? fDepth : 1.0f;
@@ -476,6 +501,43 @@ namespace ORB_SLAM3
                                                                kForwardAhead * d, 0.0, -1.0, 0.0));
             s_cam.Follow(Twc);
             fForwardDepth = fDepth;
+            mpMapDrawer->SetMarkerWidth(fDepth > 0.0f ? kMarkerFraction * fDepth : 0.0f);
+        };
+
+        // What the log reports while a run is going: the system prints nothing
+        // between "New Map created" and "Shutdown", and a log that never moves
+        // reads as a viewer that has hung. Kept on this thread -- Tracking only
+        // bumps a counter.
+        const double kReportPeriodS = 5.0;
+        auto tLoop = std::chrono::steady_clock::now();
+        auto tFirstFrame = tLoop, tLastReport = tLoop;
+        bool bRunStarted = false, bFinishReported = false;
+        int nLastReportFrames = 0;
+        int nShownState = Tracking::SYSTEM_NOT_READY;
+        auto Seconds = [](std::chrono::steady_clock::duration d) { return std::chrono::duration<double>(d).count(); };
+        auto Stamp = [](double t)
+        {
+            char buf[24];
+            std::snprintf(buf, sizeof(buf), "[%4d s] ", static_cast<int>(t));
+            return std::string(buf);
+        };
+        auto StateName = [](int nState) -> const char*
+        {
+            switch(nState)
+            {
+                case Tracking::NO_IMAGES_YET:
+                    return "waiting for images";
+                case Tracking::NOT_INITIALIZED:
+                    return "initialising";
+                case Tracking::OK:
+                    return "OK";
+                case Tracking::RECENTLY_LOST:
+                    return "recently lost";
+                case Tracking::LOST:
+                    return "LOST";
+                default:
+                    return "not ready";
+            }
         };
 
         if(mpTracker->mSensor == mpSystem->MONOCULAR || mpTracker->mSensor == mpSystem->STEREO ||
@@ -499,12 +561,24 @@ namespace ORB_SLAM3
                 mbStopTrack = false;
             }
 
+            const auto tNow = std::chrono::steady_clock::now();
+            const double dLoopS = Seconds(tNow - tLoop);
+            tLoop = tNow;
+
             if(eView == MapView::Forward && menuFollowCamera)
             {
                 const float fDepth = mpMapDrawer->GetSceneDepth();
-                if(fDepth > 0.0f && (fForwardDepth <= 0.0f || fDepth > kForwardRescale * fForwardDepth ||
-                                     fDepth * kForwardRescale < fForwardDepth))
-                    SetForwardView(fDepth);
+                if(fDepth > 0.0f)
+                {
+                    // Smoothed in the log domain: depth is a scale.
+                    const double a = 1.0 - std::exp(-dLoopS / kDepthSmoothingS);
+                    fSmoothDepth = fSmoothDepth > 0.0f ? static_cast<float>(std::exp(
+                                                             (1.0 - a) * std::log(fSmoothDepth) + a * std::log(fDepth)))
+                                                       : fDepth;
+                    if(fForwardDepth <= 0.0f || fSmoothDepth > kForwardRescale * fForwardDepth ||
+                       fSmoothDepth * kForwardRescale < fForwardDepth)
+                        SetForwardView(fSmoothDepth);
+                }
             }
 
             if(menuFollowCamera && bFollow)
@@ -551,6 +625,7 @@ namespace ORB_SLAM3
             {
                 menuCamView = false;
                 eView = MapView::Camera;
+                mpMapDrawer->SetMarkerWidth(0.0f); // the settings' viewpoint goes with the settings' sizes
                 s_cam.SetProjectionMatrix(MapProjection(mViewpointF, 10000));
                 s_cam.SetModelViewMatrix(
                     pangolin::ModelViewLookAt(mViewpointX, mViewpointY, mViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
@@ -561,6 +636,7 @@ namespace ORB_SLAM3
             {
                 menuTopView = false;
                 eView = MapView::Top;
+                mpMapDrawer->SetMarkerWidth(0.0f);
                 s_cam.SetProjectionMatrix(MapProjection(3000, 10000));
                 s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, 0.01, 50, 0, 0, 0, 0.0, 0.0, 1.0));
                 s_cam.Follow(Ow);
@@ -709,12 +785,62 @@ namespace ORB_SLAM3
             if(bFinished && pangolin::ShouldQuit())
                 break;
 
+            // Progress into the log: every state change, a line every
+            // kReportPeriodS, and one when the run ends.
+            {
+                const int nFrames = mpFrameDrawer->FrameCount();
+                if(!bRunStarted && nFrames > 0)
+                {
+                    bRunStarted = true;
+                    tFirstFrame = tLastReport = tNow;
+                }
+                if(bRunStarted)
+                {
+                    const double dRunS = Seconds(tNow - tFirstFrame);
+                    const int nState = mpFrameDrawer->TrackingState();
+                    if(nState != nShownState && !bFinished)
+                    {
+                        logTap.Append(Stamp(dRunS) + "tracking: " + StateName(nState));
+                        nShownState = nState;
+                    }
+                    if(!bFinished && Seconds(tNow - tLastReport) >= kReportPeriodS)
+                    {
+                        char buf[160];
+                        std::snprintf(buf, sizeof(buf), "frame %d, %.1f fps, %ld keyframes, %ld map points", nFrames,
+                                      (nFrames - nLastReportFrames) / Seconds(tNow - tLastReport),
+                                      static_cast<long>(mpMapDrawer->mpAtlas->KeyFramesInMap()),
+                                      static_cast<long>(mpMapDrawer->mpAtlas->MapPointsInMap()));
+                        logTap.Append(Stamp(dRunS) + buf);
+                        tLastReport = tNow;
+                        nLastReportFrames = nFrames;
+                    }
+                    if(bFinished && !bFinishReported)
+                    {
+                        char buf[160];
+                        std::snprintf(buf, sizeof(buf),
+                                      "FINISHED: %d frames in %.0f s. Esc or Stop closes this window.", nFrames, dRunS);
+                        logTap.Append(Stamp(dRunS) + buf);
+                        bFinishReported = true;
+                    }
+                }
+            }
+
             // The status row, drawn by the viewer at window resolution rather
             // than into the image: written into the image it is part of the
             // texture and comes apart whenever the frame is scaled under 1:1.
             if(d_status.v.h > 0)
             {
                 d_status.Activate();
+                if(bFinished)
+                {
+                    // An amber row: a held window must not look like a hung one.
+                    glEnable(GL_SCISSOR_TEST);
+                    glScissor(d_status.v.l, d_status.v.b, d_status.v.w, d_status.v.h);
+                    glClearColor(1.0f, 0.78f, 0.20f, 1.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                    glDisable(GL_SCISSOR_TEST);
+                    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+                }
                 pangolin::GlFont &statusFont = pangolin::default_font();
                 const float fY = static_cast<float>(d_status.v.b) + (d_status.v.h - statusFont.Height()) * 0.5f + 1.0f;
                 glColor3f(0.10f, 0.10f, 0.10f);
@@ -762,6 +888,7 @@ namespace ORB_SLAM3
                 menuFollowCamera = true;
                 eView = MapView::Forward;
                 fForwardDepth = 0.0f; // placed again once the new map has depth
+                fSmoothDepth = 0.0f;
                 mpSystem->ResetActiveMap();
                 menuReset = false;
             }

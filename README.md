@@ -285,9 +285,12 @@ a lost track. 01 mono fails in both -- no metric scale over 2.5 km of highway
 
 Per-frame tracking time is 2-6 % higher in the remaster: on 05 and 07, two
 interleaved runs of each, 14.7 and 13.7 ms against v1.0's 14.4 and 12.9 mono,
-19.8 and 19.1 against 19.3 and 18.3 stereo. v1.0's CMake adds `-march=native`;
-the remaster built with it is no faster (14.4, 14.2, 20.3, 19.3 ms), so that is
-not the difference, and the cause is not known.
+19.8 and 19.1 against 19.3 and 18.3 stereo. The cause is not known. v1.0's CMake
+adds `-march=native`, to its own sources and to the g2o and DBoW2 it bundles.
+The remaster's own sources built with it are no faster (14.4, 14.2, 20.3,
+19.3 ms), which rules that half out -- but its g2o and DBoW2 come from the
+dependency image, built without it and from newer upstream revisions, and pose
+optimisation runs g2o on every frame. That half is untested.
 
 ## Watching the viewer live from macOS
 
@@ -307,8 +310,12 @@ the series rather than flickering in and out between runs. Trajectories land in
 `results/gui/<tag>/`, one directory per run, which is what lets
 `tools/evaluate_ate.py` score them afterwards.
 
-When the last run ends the window stays up with the final map — the status row
-says FINISHED — until Esc or the Stop button in the window ends it. `--hold-each`
+While a run is going, the log under the map reports progress every five
+seconds — frame, frame rate, keyframes, map points — and every change of
+tracking state; the system itself prints nothing between "New Map created" and
+"Shutdown", and a log that never moves reads as a hang. When the last run ends
+the window stays up with the final map — the status row turns amber and says
+FINISHED — until Esc or the Stop button in the window ends it. `--hold-each`
 pauses that way after every run; `--no-hold` closes the window with the last
 frame, as upstream does, which on KITTI 04 (27 seconds of driving) looks like a
 crash. On the binary itself it is `ORBSLAM3R_VIEWER_HOLD=1`.

@@ -187,7 +187,8 @@ namespace ORB_SLAM3
     void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph,
                                   const bool bDrawOptLba)
     {
-        const float &w = mKeyFrameSize;
+        const float w = (mfMarkerWidth > 0.0f && mCameraSize > 0.0f) ? mfMarkerWidth * mKeyFrameSize / mCameraSize
+                                                                     : mKeyFrameSize;
         const float h = w * 0.75;
         const float z = w * 0.6;
 
@@ -408,7 +409,7 @@ namespace ORB_SLAM3
 
     void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
     {
-        const float &w = mCameraSize;
+        const float w = mfMarkerWidth > 0.0f ? mfMarkerWidth : mCameraSize;
         const float h = w * 0.75;
         const float z = w * 0.6;
 

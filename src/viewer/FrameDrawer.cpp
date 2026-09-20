@@ -400,6 +400,8 @@ namespace ORB_SLAM3
     void FrameDrawer::Update(Tracking* pTracker)
     {
         std::lock_guard<std::mutex> lock(mMutex);
+        mnFrames.fetch_add(1, std::memory_order_relaxed);
+        mnLastState.store(static_cast<int>(pTracker->mLastProcessedState), std::memory_order_relaxed);
         mnSensor = pTracker->mSensor;
         pTracker->mImGray.copyTo(mIm);
         mvCurrentKeys = pTracker->mCurrentFrame.mvKeys;

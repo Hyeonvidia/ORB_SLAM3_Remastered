@@ -25,6 +25,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <unordered_set>
@@ -59,10 +60,19 @@ namespace ORB_SLAM3
         // texture and came apart whenever the frame was scaled under 1:1.
         std::string StatusText() const { return msStatusText; }
 
+        // How many frames Tracking has handed over, and the state of the last
+        // one -- what the viewer's log reports progress from. Atomics, so that
+        // asking costs the tracking thread nothing.
+        int FrameCount() const { return mnFrames.load(std::memory_order_relaxed); }
+        int TrackingState() const { return mnLastState.load(std::memory_order_relaxed); }
+
     protected:
         void UpdateStatusText(int nState);
 
         std::string msStatusText;
+
+        std::atomic<int> mnFrames{0};
+        std::atomic<int> mnLastState{-1}; // Tracking::SYSTEM_NOT_READY
 
         // System::eSensor, taken from Tracking. -1 until the first update.
         int mnSensor = -1;
