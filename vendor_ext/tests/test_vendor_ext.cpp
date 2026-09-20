@@ -4,9 +4,11 @@
 //   ./test_vendor_ext                 run the self-contained checks
 //   ./test_vendor_ext path/to/ORBvoc.txt
 //                                     also load the real 971k-word vocabulary
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <random>
 #include <sstream>
 #include <string>
@@ -21,6 +23,9 @@
 #include "orbslam3r/dbow2_ext/serialization.hpp"
 #include "orbslam3r/g2o_ext/compat.hpp"
 #include "orbslam3r/g2o_ext/solver_factory.hpp"
+
+#include <g2o/core/robust_kernel_impl.h>
+#include <g2o/types/sba/types_six_dof_expmap.h>
 
 namespace
 {
@@ -241,6 +246,63 @@ namespace
         check(std::abs(voc.score(bow, bow) - 1.0) < 1e-9, "self-score is 1.0");
     }
 
+    // The pose-only problem Tracking solves on every frame: one SE3 vertex,
+    // unary stereo edges with a Huber kernel. Returns the iterations optimize(10)
+    // ran and leaves the estimate in `pose`.
+    int SolvePose(g2o::OptimizationAlgorithmLevenberg* algorithm, g2o::SE3Quat &pose)
+    {
+        g2o::SparseOptimizer optimizer;
+        optimizer.setAlgorithm(algorithm);
+
+        g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
+        v->setEstimate(g2o::SE3Quat(Eigen::Quaterniond(Eigen::AngleAxisd(0.01, Eigen::Vector3d::UnitY())),
+                                    Eigen::Vector3d(0.05, -0.02, 0.10)));
+        v->setId(0);
+        optimizer.addVertex(v);
+
+        const double fx = 718.856, fy = 718.856, cx = 607.19, cy = 185.22, bf = 386.14;
+        std::mt19937 rng(7);
+        std::uniform_real_distribution<double> ux(-15, 15), uy(-3, 3), uz(5, 40), noise(-1, 1);
+        for(int i = 0; i < 200; i++)
+        {
+            const Eigen::Vector3d Xw(ux(rng), uy(rng), uz(rng));
+            const double u = fx * Xw[0] / Xw[2] + cx + noise(rng), w = fy * Xw[1] / Xw[2] + cy + noise(rng);
+            g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
+            e->setVertex(0, v);
+            e->setMeasurement(Eigen::Vector3d(u, w, u - bf / Xw[2] + noise(rng)));
+            e->setInformation(Eigen::Matrix3d::Identity());
+            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            rk->setDelta(std::sqrt(7.815));
+            e->setRobustKernel(rk);
+            e->fx = fx, e->fy = fy, e->cx = cx, e->cy = cy, e->bf = bf, e->Xw = Xw;
+            optimizer.addEdge(e);
+        }
+
+        optimizer.initializeOptimization(0);
+        const int nIterations = optimizer.optimize(10);
+        pose = v->estimate();
+        return nIterations;
+    }
+
+    void TestLevenbergStopOnStall()
+    {
+        std::puts("\n-- g2o_ext: Levenberg-Marquardt stops once it has stalled --");
+        using BlockSolver = g2o::BlockSolver_6_3;
+        using Dense = g2o::LinearSolverDense<BlockSolver::PoseMatrixType>;
+
+        g2o::SE3Quat plain, stalled;
+        const int nPlain = SolvePose(
+            new g2o::OptimizationAlgorithmLevenberg(std::make_unique<BlockSolver>(std::make_unique<Dense>())), plain);
+        const int nStalled = SolvePose(
+            orbslam3r::g2o_ext::MakeLevenberg<BlockSolver, orbslam3r::g2o_ext::LinearSolver::kDense>(), stalled);
+
+        check(nPlain == 10, "upstream runs every iteration asked for", std::to_string(nPlain) + " of 10");
+        check(nStalled >= 4 && nStalled < nPlain, "MakeLevenberg stops after three stalled",
+              std::to_string(nStalled) + " of 10");
+        const double dDiff = (plain.toVector() - stalled.toVector()).norm();
+        check(dDiff < 1e-6, "and reaches the same pose", "difference " + std::to_string(dDiff));
+    }
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -249,6 +311,7 @@ int main(int argc, char** argv)
     TestTextVocabulary();
     TestSerialization();
     TestG2oCompat();
+    TestLevenbergStopOnStall();
     if(argc > 1)
         TestRealVocabulary(argv[1]);
     else

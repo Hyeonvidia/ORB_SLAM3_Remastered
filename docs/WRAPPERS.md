@@ -71,7 +71,7 @@ precedes its children.
 
 Both are covered by `vendor_ext/tests/test_vendor_ext.cpp`.
 
-### `g2o_ext/` — two aliases and one factory
+### `g2o_ext/` — two aliases, one factory and one stop rule
 
 `compat.hpp` is two `using` declarations. That really is the whole semantic
 distance between ORB-SLAM3's g2o and upstream `20241228_git`:
@@ -101,6 +101,24 @@ optimizer.setAlgorithm(orbslam3r::g2o_ext::MakeGaussNewton<
 ```
 
 When g2o changes its ownership convention again, one header moves.
+
+`levenberg_stop_on_stall.hpp` is the one change ORB-SLAM3 made to g2o's
+*behaviour*, and the port missed it at first. The fork's Levenberg-Marquardt
+counts an iteration that improves the robust chi2 by less than a thousandth as
+bad, and returns `Terminate` after three in a row (`//Stop criterium (Raul)` in
+`docs/modifications/g2o/core__optimization_algorithm_levenberg.cpp.diff`).
+Upstream runs every iteration it is asked for. Nothing failed without the rule
+-- the answers agree to nine digits -- but `PoseOptimization` asks for ten
+iterations four times over, twice a frame, and converges in five: tracking was
+2-10 % slower than v1.0, all of it inside `optimize()`. `LevenbergStopOnStall`
+subclasses upstream's algorithm and returns `Terminate` on the same condition;
+`MakeLevenberg` hands it out, so every optimisation in the system has it, as in
+v1.0. On a synthetic pose problem the iteration counts match the fork's exactly
+(63,000 against 63,000, where plain upstream runs 120,000).
+
+g2o's own `SparseOptimizerTerminateAction` was not used: it stops on the first
+small gain rather than the third, and it works by taking over the optimizer's
+force-stop flag, which Local Mapping already uses to abort a bundle adjustment.
 
 ### `dbow2_build/` — a build definition, not a code change
 

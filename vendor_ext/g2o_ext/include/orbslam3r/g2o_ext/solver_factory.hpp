@@ -41,6 +41,8 @@
 #include <g2o/solvers/dense/linear_solver_dense.h>
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 
+#include "orbslam3r/g2o_ext/levenberg_stop_on_stall.hpp"
+
 namespace orbslam3r::g2o_ext
 {
 
@@ -71,10 +73,14 @@ namespace orbslam3r::g2o_ext
 
     // Both return a raw pointer because that is what SparseOptimizer::setAlgorithm
     // takes: the optimizer assumes ownership of the algorithm it is given.
+    //
+    // The Levenberg-Marquardt every optimisation in the system gets is the one
+    // that stops once it has stalled, because that is what ORB-SLAM3's g2o ran;
+    // see levenberg_stop_on_stall.hpp.
     template<typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
     g2o::OptimizationAlgorithmLevenberg* MakeLevenberg()
     {
-        return new g2o::OptimizationAlgorithmLevenberg(detail::MakeBlockSolver<BlockSolverT, kind>());
+        return new LevenbergStopOnStall(detail::MakeBlockSolver<BlockSolverT, kind>());
     }
 
     template<typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
