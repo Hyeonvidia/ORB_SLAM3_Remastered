@@ -172,9 +172,10 @@ namespace ORB_SLAM3
         bool mbWriteStats;
 
 #ifdef REGISTER_TIMES
-        void LocalMapStats2File();
+        // The per-frame series, to files; then this thread's part of the report,
+        // to the console and to f. System::PrintTimeStats() puts the parts in order.
         void TrackStats2File();
-        void PrintTimeStats();
+        void PrintTimeStats(std::ostream &f);
 
         std::vector<double> vdRectStereo_ms;
         std::vector<double> vdResizeImage_ms;

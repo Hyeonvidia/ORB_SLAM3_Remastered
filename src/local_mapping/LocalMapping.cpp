@@ -22,12 +22,15 @@
 #include "optimization/Optimizer.hpp"
 #include "common/Converter.hpp"
 #include "common/GeometricTools.hpp"
+#include "common/TimeStats.hpp"
 
 #include <mutex>
 #include <chrono>
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <list>
 #include <map>
@@ -64,6 +67,104 @@ namespace ORB_SLAM3
         nLBA_abort = 0;
 #endif
     }
+
+#ifdef REGISTER_TIMES
+    void LocalMapping::LocalMapStats2File()
+    {
+        std::ofstream f;
+        f.open("LocalMapTimeStats.txt");
+        f << std::fixed << std::setprecision(6);
+        f << "#Stereo rect[ms], MP culling[ms], MP creation[ms], LBA[ms], KF culling[ms], Total[ms]" << std::endl;
+        for(int i = 0; i < vdLMTotal_ms.size(); ++i)
+        {
+            f << vdKFInsert_ms[i] << "," << vdMPCulling_ms[i] << "," << vdMPCreation_ms[i] << "," << vdLBASync_ms[i]
+              << "," << vdKFCullingSync_ms[i] << "," << vdLMTotal_ms[i] << std::endl;
+        }
+
+        f.close();
+
+        f.open("LBA_Stats.txt");
+        f << std::fixed << std::setprecision(6);
+        f << "#LBA time[ms], KF opt[#], KF fixed[#], MP[#], Edges[#]" << std::endl;
+        for(int i = 0; i < vdLBASync_ms.size(); ++i)
+        {
+            f << vdLBASync_ms[i] << "," << vnLBA_KFopt[i] << "," << vnLBA_KFfixed[i] << "," << vnLBA_MPs[i] << ","
+              << vnLBA_edges[i] << std::endl;
+        }
+
+        f.close();
+    }
+
+    void LocalMapping::PrintTimeStats(std::ostream &f)
+    {
+        double average, deviation;
+        // Local Mapping time stats
+        std::cout << std::endl << std::endl << std::endl;
+        std::cout << "Local Mapping" << std::endl << std::endl;
+        f << std::endl << "Local Mapping" << std::endl << std::endl;
+
+        average = TimeStats::Average(vdKFInsert_ms);
+        deviation = TimeStats::Deviation(vdKFInsert_ms, average);
+        std::cout << "KF Insertion: " << average << "$\\pm$" << deviation << std::endl;
+        f << "KF Insertion: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vdMPCulling_ms);
+        deviation = TimeStats::Deviation(vdMPCulling_ms, average);
+        std::cout << "MP Culling: " << average << "$\\pm$" << deviation << std::endl;
+        f << "MP Culling: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vdMPCreation_ms);
+        deviation = TimeStats::Deviation(vdMPCreation_ms, average);
+        std::cout << "MP Creation: " << average << "$\\pm$" << deviation << std::endl;
+        f << "MP Creation: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vdLBA_ms);
+        deviation = TimeStats::Deviation(vdLBA_ms, average);
+        std::cout << "LBA: " << average << "$\\pm$" << deviation << std::endl;
+        f << "LBA: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vdKFCulling_ms);
+        deviation = TimeStats::Deviation(vdKFCulling_ms, average);
+        std::cout << "KF Culling: " << average << "$\\pm$" << deviation << std::endl;
+        f << "KF Culling: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vdLMTotal_ms);
+        deviation = TimeStats::Deviation(vdLMTotal_ms, average);
+        std::cout << "Total Local Mapping: " << average << "$\\pm$" << deviation << std::endl;
+        f << "Total Local Mapping: " << average << "$\\pm$" << deviation << std::endl;
+
+        // Local Mapping LBA complexity
+        std::cout << "---------------------------" << std::endl;
+        std::cout << std::endl << "LBA complexity (mean$\\pm$std)" << std::endl;
+        f << "---------------------------" << std::endl;
+        f << std::endl << "LBA complexity (mean$\\pm$std)" << std::endl;
+
+        average = TimeStats::Average(vnLBA_edges);
+        deviation = TimeStats::Deviation(vnLBA_edges, average);
+        std::cout << "LBA Edges: " << average << "$\\pm$" << deviation << std::endl;
+        f << "LBA Edges: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vnLBA_KFopt);
+        deviation = TimeStats::Deviation(vnLBA_KFopt, average);
+        std::cout << "LBA KF optimized: " << average << "$\\pm$" << deviation << std::endl;
+        f << "LBA KF optimized: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vnLBA_KFfixed);
+        deviation = TimeStats::Deviation(vnLBA_KFfixed, average);
+        std::cout << "LBA KF fixed: " << average << "$\\pm$" << deviation << std::endl;
+        f << "LBA KF fixed: " << average << "$\\pm$" << deviation << std::endl;
+
+        average = TimeStats::Average(vnLBA_MPs);
+        deviation = TimeStats::Deviation(vnLBA_MPs, average);
+        std::cout << "LBA MP: " << average << "$\\pm$" << deviation << std::endl << std::endl;
+        f << "LBA MP: " << average << "$\\pm$" << deviation << std::endl << std::endl;
+
+        std::cout << "LBA executions: " << nLBA_exec << std::endl;
+        std::cout << "LBA aborts: " << nLBA_abort << std::endl;
+        f << "LBA executions: " << nLBA_exec << std::endl;
+        f << "LBA aborts: " << nLBA_abort << std::endl;
+    }
+#endif
 
     void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
     {

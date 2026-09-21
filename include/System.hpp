@@ -177,6 +177,7 @@ namespace ORB_SLAM3
         void InsertRectTime(double &time);
         void InsertResizeTime(double &time);
         void InsertTrackTime(double &time);
+        void PrintTimeStats();
 #endif
 
     private:

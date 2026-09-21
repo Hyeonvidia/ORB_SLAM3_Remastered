@@ -683,7 +683,7 @@ namespace ORB_SLAM3
             MemoryAudit::Report(std::cout, mpVocabulary->MemoryFootprint());
 
 #ifdef REGISTER_TIMES
-        mpTracker->PrintTimeStats();
+        PrintTimeStats();
 #endif
     }
 
@@ -1532,6 +1532,52 @@ namespace ORB_SLAM3
     }
 
 #ifdef REGISTER_TIMES
+    // Each thread prints what it measured; this only puts the parts in order.
+    void System::PrintTimeStats()
+    {
+        // Save data in files
+        mpTracker->TrackStats2File();
+        mpLocalMapper->LocalMapStats2File();
+
+        std::ofstream f;
+        f.open("ExecMean.txt");
+        f << std::fixed;
+        //Report the mean and std of each one
+        std::cout << std::endl << " TIME STATS in ms (mean$\\pm$std)" << std::endl;
+        f << " TIME STATS in ms (mean$\\pm$std)" << std::endl;
+        std::cout << "OpenCV version: " << CV_VERSION << std::endl;
+        f << "OpenCV version: " << CV_VERSION << std::endl;
+        std::cout << "---------------------------" << std::endl;
+        f << "---------------------------" << std::endl;
+
+        mpTracker->PrintTimeStats(f);
+        mpLocalMapper->PrintTimeStats(f);
+
+        // Map complexity
+        std::cout << "---------------------------" << std::endl;
+        std::cout << std::endl << "Map complexity" << std::endl;
+        std::cout << "KFs in map: " << mpAtlas->GetAllKeyFrames().size() << std::endl;
+        std::cout << "MPs in map: " << mpAtlas->GetAllMapPoints().size() << std::endl;
+        f << "---------------------------" << std::endl;
+        f << std::endl << "Map complexity" << std::endl;
+        std::vector<Map*> vpMaps = mpAtlas->GetAllMaps();
+        Map* pBestMap = vpMaps[0];
+        for(int i = 1; i < vpMaps.size(); ++i)
+        {
+            if(pBestMap->GetAllKeyFrames().size() < vpMaps[i]->GetAllKeyFrames().size())
+            {
+                pBestMap = vpMaps[i];
+            }
+        }
+
+        f << "KFs in map: " << pBestMap->GetAllKeyFrames().size() << std::endl;
+        f << "MPs in map: " << pBestMap->GetAllMapPoints().size() << std::endl;
+
+        mpLoopCloser->PrintTimeStats(f);
+
+        f.close();
+    }
+
     void System::InsertRectTime(double &time)
     {
         mpTracker->vdRectStereo_ms.push_back(time);

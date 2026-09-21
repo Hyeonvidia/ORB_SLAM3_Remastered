@@ -29,6 +29,7 @@
 #include <mutex>
 #include <orbslam3r/g2o_ext/compat.hpp>
 
+#include <iosfwd>
 #include <list>
 #include <map>
 #include <set>
@@ -85,6 +86,7 @@ namespace ORB_SLAM3
         bool isFinished();
 
 #ifdef REGISTER_TIMES
+        void PrintTimeStats(std::ostream &f);
 
         std::vector<double> vdDataQuery_ms;
         std::vector<double> vdEstSim3_ms;

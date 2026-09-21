@@ -114,6 +114,9 @@ namespace ORB_SLAM3
         float mThFarPoints;
 
 #ifdef REGISTER_TIMES
+        void LocalMapStats2File();
+        void PrintTimeStats(std::ostream &f);
+
         std::vector<double> vdKFInsert_ms;
         std::vector<double> vdMPCulling_ms;
         std::vector<double> vdMPCreation_ms;
