@@ -38,6 +38,11 @@ enable_testing()
 add_subdirectory(vendor_ext)
 add_subdirectory(src)
 
+# ORBSLAM3R_BUILD_TESTS is declared in vendor_ext/ and covers these too.
+if(ORBSLAM3R_BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
+
 option(ORBSLAM3R_BUILD_EXAMPLES "Build the dataset example binaries" ON)
 if(ORBSLAM3R_BUILD_EXAMPLES)
   add_subdirectory(Examples)
