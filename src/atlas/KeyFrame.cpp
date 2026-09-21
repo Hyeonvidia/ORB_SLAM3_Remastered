@@ -49,9 +49,9 @@ namespace ORB_SLAM3
           mnBALocalForKF(0), mnBAFixedForKF(0), mnBALocalForMerge(0), mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0),
           mnRelocWords(0), mnMergeQuery(0), mnMergeWords(0), mnBAGlobalForKF(0), fx(0), fy(0), cx(0), cy(0), invfx(0),
           invfy(0), mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0), mPlaceRecognitionScore(0), mbf(0), mb(0),
-          mThDepth(0), N(0), mvKeys(), mvKeysUn(), mvuRight(), mvDepth(), mnScaleLevels(0), mfScaleFactor(0),
-          mfLogScaleFactor(0), mvScaleFactors(0), mvLevelSigma2(0), mvInvLevelSigma2(0), mnMinX(0), mnMinY(0),
-          mnMaxX(0), mnMaxY(0), mPrevKF(static_cast<KeyFrame*>(NULL)), mNextKF(static_cast<KeyFrame*>(NULL)),
+          mThDepth(0), N(0), mvKeys(), mvKeysUn(mvKeysUnStorage), mvuRight(), mvDepth(), mnScaleLevels(0),
+          mfScaleFactor(0), mfLogScaleFactor(0), mvScaleFactors(0), mvLevelSigma2(0), mvInvLevelSigma2(0), mnMinX(0),
+          mnMinY(0), mnMaxX(0), mnMaxY(0), mPrevKF(static_cast<KeyFrame*>(NULL)), mNextKF(static_cast<KeyFrame*>(NULL)),
           mbFirstConnection(true), mpParent(NULL), mbNotErase(false), mbToBeErased(false), mbBad(false),
           mHalfBaseline(0), mbCurrentPlaceRecognition(false), mnMergeCorrectedForKF(0), NLeft(0), NRight(0),
           mnNumberOfOpt(0)
@@ -59,6 +59,23 @@ namespace ORB_SLAM3
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
     }
+
+    namespace
+    {
+        // Frame::UndistortKeyPoints copies mvKeys into mvKeysUn when there is no
+        // distortion to remove; then, and only then, the two are equal throughout.
+        bool SameKeyPoints(const std::vector<cv::KeyPoint> &a, const std::vector<cv::KeyPoint> &b)
+        {
+            if(a.size() != b.size())
+                return false;
+            for(std::size_t i = 0; i < a.size(); i++)
+                if(a[i].pt.x != b[i].pt.x || a[i].pt.y != b[i].pt.y || a[i].size != b[i].size ||
+                   a[i].angle != b[i].angle || a[i].response != b[i].response || a[i].octave != b[i].octave ||
+                   a[i].class_id != b[i].class_id)
+                    return false;
+            return true;
+        }
+    } // namespace
 
     KeyFrame::~KeyFrame()
     {
@@ -68,22 +85,13 @@ namespace ORB_SLAM3
 
     std::map<std::string, std::size_t> KeyFrame::MemoryFootprint() const
     {
-        auto Grid = [](const std::vector<std::vector<std::vector<std::size_t>>> &grid)
-        {
-            std::size_t n = MemoryAudit::Vector(grid);
-            for(const std::vector<std::vector<std::size_t>> &column : grid)
-            {
-                n += MemoryAudit::Vector(column);
-                for(const std::vector<std::size_t> &cell : column)
-                    n += MemoryAudit::Vector(cell);
-            }
-            return n;
-        };
+        auto Grid = [](const FeatureGrid &grid)
+        { return MemoryAudit::Vector(grid.offsets) + MemoryAudit::Vector(grid.indices); };
 
         std::map<std::string, std::size_t> f;
         f["object itself"] = sizeof(KeyFrame);
         f["keypoints mvKeys"] = MemoryAudit::Vector(mvKeys);
-        f["keypoints mvKeysUn"] = MemoryAudit::Vector(mvKeysUn);
+        f["keypoints mvKeysUn"] = MemoryAudit::Vector(mvKeysUnStorage); // 0 when it refers to mvKeys
         f["keypoints mvKeysRight"] = MemoryAudit::Vector(mvKeysRight);
         f["descriptors"] = MemoryAudit::Mat(mDescriptors);
         f["stereo mvuRight + mvDepth"] = MemoryAudit::Vector(mvuRight) + MemoryAudit::Vector(mvDepth);
@@ -118,7 +126,9 @@ namespace ORB_SLAM3
           mnBALocalForKF(0), mnBAFixedForKF(0), mnBALocalForMerge(0), mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0),
           mnRelocWords(0), mnBAGlobalForKF(0), mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0),
           mPlaceRecognitionScore(0), fx(F.fx), fy(F.fy), cx(F.cx), cy(F.cy), invfx(F.invfx), invfy(F.invfy), mbf(F.mbf),
-          mb(F.mb), mThDepth(F.mThDepth), N(F.N), mvKeys(F.mvKeys), mvKeysUn(F.mvKeysUn), mvuRight(F.mvuRight),
+          mb(F.mb), mThDepth(F.mThDepth), N(F.N), mvKeys(F.mvKeys),
+          mvKeysUnStorage(SameKeyPoints(F.mvKeys, F.mvKeysUn) ? std::vector<cv::KeyPoint>() : F.mvKeysUn),
+          mvKeysUn(SameKeyPoints(F.mvKeys, F.mvKeysUn) ? mvKeys : mvKeysUnStorage), mvuRight(F.mvuRight),
           mvDepth(F.mvDepth), mDescriptors(F.mDescriptors.clone()), mBowVec(F.mBowVec), mFeatVec(F.mFeatVec),
           mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor), mfLogScaleFactor(F.mfLogScaleFactor),
           mvScaleFactors(F.mvScaleFactors), mvLevelSigma2(F.mvLevelSigma2), mvInvLevelSigma2(F.mvInvLevelSigma2),
@@ -129,30 +139,17 @@ namespace ORB_SLAM3
           mHalfBaseline(F.mb / 2), mpMap(pMap), mbCurrentPlaceRecognition(false), mNameFile(F.mNameFile),
           mnMergeCorrectedForKF(0), mpCamera(F.mpCamera), mpCamera2(F.mpCamera2),
           mvLeftToRightMatch(F.mvLeftToRightMatch), mvRightToLeftMatch(F.mvRightToLeftMatch),
-          mTlr(F.GetRelativePoseTlr()), mvKeysRight(F.mvKeysRight), NLeft(F.Nleft), NRight(F.Nright),
-          mTrl(F.GetRelativePoseTrl()), mnNumberOfOpt(0)
+          mTlr(F.GetRelativePoseTlr()),
+          mvKeysRight((F.Nleft == -1 && !F.mpCamera2) ? std::vector<cv::KeyPoint>() : F.mvKeysRight), NLeft(F.Nleft),
+          NRight(F.Nright), mTrl(F.GetRelativePoseTrl()), mnNumberOfOpt(0)
     {
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         mnId = nNextId++;
 
-        mGrid.resize(mnGridCols);
+        FillGrid(mGrid, F.mGrid);
         if(F.Nleft != -1)
-            mGridRight.resize(mnGridCols);
-        for(int i = 0; i < mnGridCols; i++)
-        {
-            mGrid[i].resize(mnGridRows);
-            if(F.Nleft != -1)
-                mGridRight[i].resize(mnGridRows);
-            for(int j = 0; j < mnGridRows; j++)
-            {
-                mGrid[i][j] = F.mGrid[i][j];
-                if(F.Nleft != -1)
-                {
-                    mGridRight[i][j] = F.mGridRight[i][j];
-                }
-            }
-        }
+            FillGrid(mGridRight, F.mGridRight);
 
         if(F.HasVelocity())
             SetVelocity(F.GetVelocity());
@@ -800,17 +797,19 @@ namespace ORB_SLAM3
         {
             for(int iy = nMinCellY; iy <= nMaxCellY; iy++)
             {
-                const std::vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
-                for(size_t j = 0, jend = vCell.size(); j < jend; j++)
+                const FeatureGrid &grid = (!bRight) ? mGrid : mGridRight;
+                const std::size_t c = static_cast<std::size_t>(ix) * mnGridRows + iy;
+                for(std::uint32_t k = grid.offsets[c], kend = grid.offsets[c + 1]; k < kend; k++)
                 {
-                    const cv::KeyPoint &kpUn = (NLeft == -1) ? mvKeysUn[vCell[j]]
-                                               : (!bRight)   ? mvKeys[vCell[j]]
-                                                             : mvKeysRight[vCell[j]];
+                    const std::size_t idx = grid.indices[k];
+                    const cv::KeyPoint &kpUn = (NLeft == -1) ? mvKeysUn[idx]
+                                               : (!bRight)   ? mvKeys[idx]
+                                                             : mvKeysRight[idx];
                     const float distx = kpUn.pt.x - x;
                     const float disty = kpUn.pt.y - y;
 
                     if(std::fabs(distx) < r && std::fabs(disty) < r)
-                        vIndices.push_back(vCell[j]);
+                        vIndices.push_back(idx);
                 }
             }
         }

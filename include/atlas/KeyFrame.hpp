@@ -27,6 +27,7 @@
 
 #include "common/SerializationUtils.hpp"
 
+#include <cstdint>
 #include <mutex>
 
 #include <boost/serialization/base_object.hpp>
@@ -155,7 +156,7 @@ namespace ORB_SLAM3
             // MapPointsId associated to keypoints
             ar & mvBackupMapPointsId;
             // Grid
-            ar & mGrid;
+            serializeGrid(ar, mGrid);
             // Connected KeyFrameWeight
             ar & mBackupConnectedKeyFrameIdWeights;
             // Spanning Tree and Loop Edges
@@ -184,7 +185,7 @@ namespace ORB_SLAM3
             ar & const_cast<int&>(NRight);
             serializeSophusSE3<Archive>(ar, mTlr, version);
             serializeVectorKeyPoints<Archive>(ar, mvKeysRight, version);
-            ar & mGridRight;
+            serializeGrid(ar, mGridRight);
 
             // Inertial variables
             ar & mImuBias;
@@ -382,7 +383,16 @@ namespace ORB_SLAM3
 
         // KeyPoints, stereo coordinate and descriptors (all associated by an index)
         const std::vector<cv::KeyPoint> mvKeys;
-        const std::vector<cv::KeyPoint> mvKeysUn;
+
+    private:
+        // Holds the undistorted keypoints only when undistorting changed them.
+        std::vector<cv::KeyPoint> mvKeysUnStorage;
+
+    public:
+        // The undistorted keypoints. On input that has no distortion to remove
+        // -- rectified stereo, KITTI -- Frame's are a copy of mvKeys, 28 bytes a
+        // feature, and a keyframe used to keep both; this then refers to mvKeys.
+        const std::vector<cv::KeyPoint> &mvKeysUn;
         const std::vector<float> mvuRight; // negative value for monocular points
         const std::vector<float> mvDepth;  // negative value for monocular points
         const cv::Mat mDescriptors;
@@ -451,7 +461,65 @@ namespace ORB_SLAM3
         ORBVocabulary* mpORBvocabulary;
 
         // Grid over the image to speed up feature matching
-        std::vector<std::vector<std::vector<size_t>>> mGrid;
+        // Which features fall in each cell of the image grid, flat: cell
+        // c = column * mnGridRows + row holds indices[offsets[c] .. offsets[c + 1]),
+        // in the order Frame assigned them. As a vector of vectors of vectors this
+        // was 103 KB a keyframe, most of it vector headers and one small heap block
+        // per occupied cell; it is 20.
+        struct FeatureGrid
+        {
+            std::vector<std::uint32_t> offsets;
+            std::vector<std::uint32_t> indices;
+
+            bool empty() const { return offsets.empty(); }
+        };
+        FeatureGrid mGrid;
+
+        template<class Cells>
+        void FillGrid(FeatureGrid &grid, const Cells &cells) const
+        {
+            grid.offsets.assign(static_cast<std::size_t>(mnGridCols) * mnGridRows + 1, 0);
+            std::size_t n = 0;
+            for(int i = 0; i < mnGridCols; i++)
+                for(int j = 0; j < mnGridRows; j++)
+                    n += cells[i][j].size();
+            grid.indices.clear();
+            grid.indices.reserve(n);
+            for(int i = 0; i < mnGridCols; i++)
+                for(int j = 0; j < mnGridRows; j++)
+                {
+                    for(const std::size_t idx : cells[i][j])
+                        grid.indices.push_back(static_cast<std::uint32_t>(idx));
+                    grid.offsets[static_cast<std::size_t>(i) * mnGridRows + j + 1] = static_cast<std::uint32_t>(
+                        grid.indices.size());
+                }
+        }
+
+        // On disk the grid stays what v1.0 wrote, a vector of vectors of vectors,
+        // so that a saved atlas loads in either.
+        template<class Archive>
+        void serializeGrid(Archive &ar, FeatureGrid &grid)
+        {
+            std::vector<std::vector<std::vector<std::size_t>>> cells;
+            if(Archive::is_saving::value && !grid.empty())
+            {
+                cells.resize(mnGridCols, std::vector<std::vector<std::size_t>>(mnGridRows));
+                for(int i = 0; i < mnGridCols; i++)
+                    for(int j = 0; j < mnGridRows; j++)
+                    {
+                        const std::size_t c = static_cast<std::size_t>(i) * mnGridRows + j;
+                        cells[i][j].assign(grid.indices.begin() + grid.offsets[c],
+                                           grid.indices.begin() + grid.offsets[c + 1]);
+                    }
+            }
+            ar & cells;
+            if(Archive::is_loading::value)
+            {
+                grid = FeatureGrid();
+                if(!cells.empty())
+                    FillGrid(grid, cells);
+            }
+        }
 
         std::map<KeyFrame*, int> mConnectedKeyFrameWeights;
         std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
@@ -511,7 +579,7 @@ namespace ORB_SLAM3
 
         const int NLeft, NRight;
 
-        std::vector<std::vector<std::vector<size_t>>> mGridRight;
+        FeatureGrid mGridRight;
 
         Sophus::SE3<float> GetRightPose();
         Sophus::SE3<float> GetRightPoseInverse();
