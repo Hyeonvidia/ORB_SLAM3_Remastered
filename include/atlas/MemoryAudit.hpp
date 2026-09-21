@@ -30,7 +30,6 @@
 namespace ORB_SLAM3
 {
 
-    class Atlas;
     class KeyFrame;
     class MapPoint;
 
