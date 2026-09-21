@@ -106,6 +106,10 @@ namespace ORB_SLAM3
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         MapPoint();
+        ~MapPoint();
+
+        // What this point holds, by member group; see MemoryAudit.
+        std::map<std::string, std::size_t> MemoryFootprint() const;
 
         MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap);
         MapPoint(const double invDepth, cv::Point2f uv_init, KeyFrame* pRefKF, KeyFrame* pHostKF, Map* pMap);

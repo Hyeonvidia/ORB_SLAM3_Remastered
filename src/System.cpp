@@ -17,6 +17,7 @@
 */
 
 #include "System.hpp"
+#include "atlas/MemoryAudit.hpp"
 #include "viewer/FrameDrawer.hpp"
 #include "viewer/MapDrawer.hpp"
 #include "viewer/Viewer.hpp"
@@ -677,6 +678,9 @@ namespace ORB_SLAM3
 
         /*if(mpViewer)
         pangolin::BindToContext("ORB-SLAM2: Map Viewer");*/
+
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Report(std::cout, mpVocabulary->MemoryFootprint());
 
 #ifdef REGISTER_TIMES
         mpTracker->PrintTimeStats();

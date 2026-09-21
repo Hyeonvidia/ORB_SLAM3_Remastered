@@ -35,6 +35,8 @@
 // =============================================================================
 #pragma once
 
+#include <algorithm>
+#include <map>
 #include <cmath>
 #include <cstddef>
 #include <fstream>
@@ -65,6 +67,42 @@ namespace orbslam3r::dbow2_ext
         // Writes the vocabulary in the same format. Node 0 (the root) is implicit
         // and not written, matching the loader.
         bool saveToTextFile(const std::string &filename) const;
+
+        // What the loaded vocabulary holds, in bytes as the allocator accounts
+        // for them (a request rounded up to 16 after 8 of overhead). The tree
+        // is an array of Node, but each node's descriptor is a cv::Mat with a
+        // heap block of its own, and each inner node has a children list.
+        std::map<std::string, std::size_t> MemoryFootprint() const
+        {
+            auto Chunk = [](std::size_t n) -> std::size_t
+            { return n == 0 ? 0 : std::max<std::size_t>(32, (n + 8 + 15) / 16 * 16); };
+            std::map<std::string, std::size_t> f;
+            f["node array"] = Chunk(m_nodes.capacity() * sizeof(typename Base::Node));
+            f["word index"] = Chunk(m_words.capacity() * sizeof(typename Base::Node*));
+            std::size_t nDescriptors = 0, nChildren = 0;
+            for(const typename Base::Node &node : m_nodes)
+            {
+                nDescriptors += DescriptorHeapBytes(node.descriptor, Chunk);
+                nChildren += Chunk(node.children.capacity() * sizeof(DBoW2::NodeId));
+            }
+            f["node descriptors, one heap block each"] = nDescriptors;
+            f["node children lists"] = nChildren;
+            return f;
+        }
+
+    private:
+        // A descriptor held inside the node has no heap of its own.
+        template<class D, class ChunkFn>
+        static std::size_t DescriptorHeapBytes(const D &, ChunkFn)
+        {
+            return 0;
+        }
+
+        template<class ChunkFn>
+        static std::size_t DescriptorHeapBytes(const cv::Mat &d, ChunkFn Chunk)
+        {
+            return d.data && d.u ? Chunk(d.total() * d.elemSize() + 64) : 0; // cv::Mat pads its allocation
+        }
 
     protected:
         using Base::m_k;

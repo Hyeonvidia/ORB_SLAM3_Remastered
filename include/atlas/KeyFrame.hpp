@@ -203,6 +203,10 @@ namespace ORB_SLAM3
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         KeyFrame();
         KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+        ~KeyFrame();
+
+        // What this keyframe holds, by member group; see MemoryAudit.
+        std::map<std::string, std::size_t> MemoryFootprint() const;
 
         // Pose functions
         void SetPose(const Sophus::SE3f &Tcw);

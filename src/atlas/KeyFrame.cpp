@@ -17,6 +17,7 @@
 */
 
 #include "atlas/KeyFrame.hpp"
+#include "atlas/MemoryAudit.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
 #include "common/Converter.hpp"
 #include "common/ImuTypes.hpp"
@@ -55,6 +56,59 @@ namespace ORB_SLAM3
           mHalfBaseline(0), mbCurrentPlaceRecognition(false), mnMergeCorrectedForKF(0), NLeft(0), NRight(0),
           mnNumberOfOpt(0)
     {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Register(this);
+    }
+
+    KeyFrame::~KeyFrame()
+    {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Unregister(this);
+    }
+
+    std::map<std::string, std::size_t> KeyFrame::MemoryFootprint() const
+    {
+        auto Grid = [](const std::vector<std::vector<std::vector<std::size_t>>> &grid)
+        {
+            std::size_t n = MemoryAudit::Vector(grid);
+            for(const std::vector<std::vector<std::size_t>> &column : grid)
+            {
+                n += MemoryAudit::Vector(column);
+                for(const std::vector<std::size_t> &cell : column)
+                    n += MemoryAudit::Vector(cell);
+            }
+            return n;
+        };
+
+        std::map<std::string, std::size_t> f;
+        f["object itself"] = sizeof(KeyFrame);
+        f["keypoints mvKeys"] = MemoryAudit::Vector(mvKeys);
+        f["keypoints mvKeysUn"] = MemoryAudit::Vector(mvKeysUn);
+        f["keypoints mvKeysRight"] = MemoryAudit::Vector(mvKeysRight);
+        f["descriptors"] = MemoryAudit::Mat(mDescriptors);
+        f["stereo mvuRight + mvDepth"] = MemoryAudit::Vector(mvuRight) + MemoryAudit::Vector(mvDepth);
+        f["map point pointers"] = MemoryAudit::Vector(mvpMapPoints) + MemoryAudit::Vector(mvBackupMapPointsId);
+        f["grid"] = Grid(mGrid);
+        f["grid right"] = Grid(mGridRight);
+        f["BowVector"] = MemoryAudit::Tree(mBowVec);
+        std::size_t nFeatVec = MemoryAudit::Tree(mFeatVec);
+        for(const auto &node : mFeatVec)
+            nFeatVec += MemoryAudit::Vector(node.second);
+        f["FeatureVector"] = nFeatVec;
+        f["covisibility and spanning tree"] = MemoryAudit::Tree(mConnectedKeyFrameWeights) +
+                                              MemoryAudit::Vector(mvpOrderedConnectedKeyFrames) +
+                                              MemoryAudit::Vector(mvOrderedWeights) + MemoryAudit::Tree(mspChildrens) +
+                                              MemoryAudit::Tree(mspLoopEdges) + MemoryAudit::Tree(mspMergeEdges) +
+                                              MemoryAudit::Vector(mvpLoopCandKFs) +
+                                              MemoryAudit::Vector(mvpMergeCandKFs);
+        f["fisheye left-right matches"] = MemoryAudit::Vector(mvLeftToRightMatch) +
+                                          MemoryAudit::Vector(mvRightToLeftMatch);
+        f["scale tables"] = MemoryAudit::Vector(mvScaleFactors) + MemoryAudit::Vector(mvLevelSigma2) +
+                            MemoryAudit::Vector(mvInvLevelSigma2);
+        f["IMU preintegration"] = mpImuPreintegrated ? MemoryAudit::Chunk(sizeof(IMU::Preintegrated)) +
+                                                           MemoryAudit::Chunk(mpImuPreintegrated->MeasurementBytes())
+                                                     : 0;
+        return f;
     }
 
     KeyFrame::KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB)
@@ -78,6 +132,8 @@ namespace ORB_SLAM3
           mTlr(F.GetRelativePoseTlr()), mvKeysRight(F.mvKeysRight), NLeft(F.Nleft), NRight(F.Nright),
           mTrl(F.GetRelativePoseTrl()), mnNumberOfOpt(0)
     {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Register(this);
         mnId = nNextId++;
 
         mGrid.resize(mnGridCols);

@@ -269,6 +269,10 @@ namespace ORB_SLAM3
             std::vector<integrable> mvMeasurements;
 
             std::mutex mMutex;
+
+        public:
+            // Heap held beyond sizeof(*this): the measurements kept for re-integration.
+            std::size_t MeasurementBytes() const { return mvMeasurements.capacity() * sizeof(integrable); }
         };
 
         // Lie Algebra Functions

@@ -41,7 +41,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 LAYERS = {
-    "atlas": ["Atlas", "Map", "MapPoint", "KeyFrame", "KeyFrameDatabase", "ORBVocabulary"],
+    "atlas": ["Atlas", "Map", "MapPoint", "KeyFrame", "KeyFrameDatabase", "ORBVocabulary",
+              "MemoryAudit"],
     # ORBmatcher matches Frames against KeyFrames and MapPoints, so it sits in
     # the lowest layer that has all three; Local Mapping and Loop Closing,
     # which use it too, are above. What MapPoint and Frame need from it --

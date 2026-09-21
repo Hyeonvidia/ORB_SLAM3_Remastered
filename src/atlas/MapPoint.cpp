@@ -17,6 +17,7 @@
 */
 
 #include "atlas/MapPoint.hpp"
+#include "atlas/MemoryAudit.hpp"
 #include "atlas/KeyFrame.hpp"
 #include "features/ORBdescriptor.hpp"
 #include "tracking/Frame.hpp"
@@ -43,7 +44,25 @@ namespace ORB_SLAM3
           mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0), mnCorrectedReference(0), mnBAGlobalForKF(0),
           mnVisible(1), mnFound(1), mbBad(false), mpReplaced(static_cast<MapPoint*>(NULL))
     {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Register(this);
         mpReplaced = static_cast<MapPoint*>(NULL);
+    }
+
+    MapPoint::~MapPoint()
+    {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Unregister(this);
+    }
+
+    std::map<std::string, std::size_t> MapPoint::MemoryFootprint() const
+    {
+        std::map<std::string, std::size_t> f;
+        f["object itself"] = MemoryAudit::Chunk(sizeof(MapPoint));
+        f["observations"] = MemoryAudit::Tree(mObservations);
+        f["descriptor"] = MemoryAudit::Mat(mDescriptor);
+        f["backup ids"] = MemoryAudit::Tree(mBackupObservationsId1) + MemoryAudit::Tree(mBackupObservationsId2);
+        return f;
     }
 
     MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap)
@@ -53,6 +72,8 @@ namespace ORB_SLAM3
           mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
           mnOriginMapId(pMap->GetId())
     {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Register(this);
         SetWorldPos(Pos);
 
         mNormalVector.setZero();
@@ -72,6 +93,8 @@ namespace ORB_SLAM3
           mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
           mnOriginMapId(pMap->GetId())
     {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Register(this);
         mInvDepth = invDepth;
         mInitU = (double)uv_init.x;
         mInitV = (double)uv_init.y;
@@ -91,6 +114,8 @@ namespace ORB_SLAM3
           mnBAGlobalForKF(0), mpRefKF(static_cast<KeyFrame*>(NULL)), mnVisible(1), mnFound(1), mbBad(false),
           mpReplaced(NULL), mpMap(pMap), mnOriginMapId(pMap->GetId())
     {
+        if(MemoryAudit::Enabled())
+            MemoryAudit::Register(this);
         SetWorldPos(Pos);
 
         Eigen::Vector3f Ow;
