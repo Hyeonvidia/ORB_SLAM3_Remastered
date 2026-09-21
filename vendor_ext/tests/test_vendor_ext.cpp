@@ -6,6 +6,9 @@
 //                                     also load the real 971k-word vocabulary
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
+#include <iterator>
+#include <cstring>
 #include <cstdlib>
 #include <fstream>
 #include <memory>
@@ -18,6 +21,8 @@
 #include <boost/archive/text_oarchive.hpp>
 
 #include <opencv2/core.hpp>
+
+#include <DBoW2/FORB.h>
 
 #include "orbslam3r/dbow2_ext/orb_vocabulary.hpp"
 #include "orbslam3r/dbow2_ext/serialization.hpp"
@@ -55,6 +60,20 @@ namespace
         return out;
     }
 
+    // The same descriptors as the vocabulary takes them: 32 bytes each.
+    typedef orbslam3r::dbow2_ext::FORB32::TDescriptor Descriptor32;
+    std::vector<Descriptor32> Compact(const std::vector<cv::Mat> &descriptors)
+    {
+        std::vector<Descriptor32> out(descriptors.size());
+        for(std::size_t i = 0; i < descriptors.size(); ++i)
+            std::memcpy(out[i].w, descriptors[i].ptr<unsigned char>(), 32);
+        return out;
+    }
+
+    // The vocabulary over DBoW2's own cv::Mat policy -- what ORBVocabulary was,
+    // and what it must still agree with exactly.
+    typedef orbslam3r::dbow2_ext::TextFileVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB> MatVocabulary;
+
     // ---------------------------------------------------------------------------
     // dbow2_ext: the text vocabulary format, as a subclass of untouched upstream.
     void TestTextVocabulary()
@@ -62,9 +81,9 @@ namespace
         std::puts("dbow2_ext :: TextFileVocabulary");
 
         orbslam3r::ORBVocabulary voc(3, 3, DBoW2::TF_IDF, DBoW2::L1_NORM);
-        std::vector<std::vector<cv::Mat>> training;
+        std::vector<std::vector<Descriptor32>> training;
         for(int i = 0; i < 12; ++i)
-            training.push_back(RandomDescriptors(20, 1000 + i));
+            training.push_back(Compact(RandomDescriptors(20, 1000 + i)));
         voc.create(training);
         check(voc.size() > 0, "upstream create() still works", std::to_string(voc.size()) + " words");
 
@@ -81,7 +100,7 @@ namespace
 
         // Scoring must be identical, not merely structurally similar: transform the
         // same image twice and compare the BoW vectors.
-        const std::vector<cv::Mat> query = RandomDescriptors(30, 77);
+        const std::vector<Descriptor32> query = Compact(RandomDescriptors(30, 77));
         DBoW2::BowVector a, b;
         DBoW2::FeatureVector fa, fb;
         voc.transform(query, a, fa, 4);
@@ -237,13 +256,70 @@ namespace
         check(voc.getBranchingFactor() == 10 && voc.getDepthLevels() == 6, "tree shape k=10 L=6",
               "k=" + std::to_string(voc.getBranchingFactor()) + " L=" + std::to_string(voc.getDepthLevels()));
 
-        const std::vector<cv::Mat> query = RandomDescriptors(500, 4242);
+        const std::vector<Descriptor32> query = Compact(RandomDescriptors(500, 4242));
         DBoW2::BowVector bow;
         DBoW2::FeatureVector fv;
         voc.transform(query, bow, fv, 4);
         check(!bow.empty() && !fv.empty(), "transform() produces a BoW vector",
               std::to_string(bow.size()) + " words, " + std::to_string(fv.size()) + " nodes");
         check(std::abs(voc.score(bow, bow) - 1.0) < 1e-9, "self-score is 1.0");
+
+        // The production vocabulary under both policies, on the same 2000 descriptors.
+        MatVocabulary reference;
+        if(reference.loadFromTextFile(path))
+        {
+            const std::vector<cv::Mat> mats = RandomDescriptors(2000, 99);
+            DBoW2::BowVector bowMat, bow32;
+            DBoW2::FeatureVector fvMat, fv32;
+            reference.transform(mats, bowMat, fvMat, 4);
+            voc.transform(Compact(mats), bow32, fv32, 4);
+            check(bowMat == bow32 && fvMat == fv32, "FORB32 agrees with DBoW2::FORB bit for bit",
+                  std::to_string(bow32.size()) + " words");
+        }
+    }
+
+    // FORB32 must change nothing the vocabulary computes: the same tree, loaded
+    // under both descriptor policies, has to map the same descriptors to the same
+    // words with the same weights.
+    void TestCompactDescriptors()
+    {
+        std::puts("\n-- dbow2_ext: 32-byte descriptors give the vocabulary DBoW2::FORB gives --");
+        MatVocabulary built(4, 3, DBoW2::TF_IDF, DBoW2::L1_NORM);
+        std::vector<std::vector<cv::Mat>> training;
+        for(int i = 0; i < 40; ++i)
+            training.push_back(RandomDescriptors(25, 5000 + i));
+        built.create(training);
+        const std::string path = "/tmp/orbslam3r_forb32_equivalence.txt";
+        check(built.saveToTextFile(path), "reference vocabulary written", std::to_string(built.size()) + " words");
+
+        MatVocabulary reference;
+        orbslam3r::ORBVocabulary compact;
+        check(reference.loadFromTextFile(path) && compact.loadFromTextFile(path), "loaded under both policies");
+        check(reference.size() == compact.size(), "same number of words");
+
+        const std::vector<cv::Mat> mats = RandomDescriptors(600, 31337);
+        DBoW2::BowVector bowMat, bow32;
+        DBoW2::FeatureVector fvMat, fv32;
+        reference.transform(mats, bowMat, fvMat, 2);
+        compact.transform(Compact(mats), bow32, fv32, 2);
+        check(bowMat == bow32, "identical BowVector", std::to_string(bow32.size()) + " words");
+        check(fvMat == fv32, "identical FeatureVector", std::to_string(fv32.size()) + " nodes");
+
+        const std::string path32 = "/tmp/orbslam3r_forb32_roundtrip.txt";
+        compact.saveToTextFile(path32);
+        std::ifstream fa(path), fb(path32);
+        const std::string ta((std::istreambuf_iterator<char>(fa)), std::istreambuf_iterator<char>());
+        const std::string tb((std::istreambuf_iterator<char>(fb)), std::istreambuf_iterator<char>());
+        check(!ta.empty() && ta == tb, "and writes the same text file");
+
+        double dMax = 0.0;
+        for(int i = 0; i + 1 < 200; ++i)
+        {
+            const std::vector<Descriptor32> pair = Compact({mats[i], mats[i + 1]});
+            dMax = std::max(dMax, std::abs(DBoW2::FORB::distance(mats[i], mats[i + 1]) -
+                                           orbslam3r::dbow2_ext::FORB32::distance(pair[0], pair[1])));
+        }
+        check(dMax == 0.0, "identical Hamming distances");
     }
 
     // The pose-only problem Tracking solves on every frame: one SE3 vertex,
@@ -346,6 +422,7 @@ int main(int argc, char** argv)
 {
     std::puts("== vendor_ext wrapper tests ==\n");
     TestTextVocabulary();
+    TestCompactDescriptors();
     TestSerialization();
     TestG2oCompat();
     TestLevenbergStopOnStall();

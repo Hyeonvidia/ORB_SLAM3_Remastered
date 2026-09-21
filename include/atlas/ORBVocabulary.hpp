@@ -19,7 +19,6 @@
 #ifndef ORBVOCABULARY_H
 #define ORBVOCABULARY_H
 
-#include <DBoW2/FORB.h>
 #include <orbslam3r/dbow2_ext/orb_vocabulary.hpp>
 
 namespace ORB_SLAM3

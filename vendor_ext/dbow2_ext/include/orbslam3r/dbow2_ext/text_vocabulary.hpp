@@ -35,8 +35,8 @@
 // =============================================================================
 #pragma once
 
-#include <algorithm>
 #include <map>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <fstream>
@@ -156,10 +156,14 @@ namespace orbslam3r::dbow2_ext
         m_weighting = static_cast<DBoW2::WeightingType>(weighting);
         this->createScoringObject();
 
+        // A full tree of depth L has (k^(L+1) - 1) / (k - 1) nodes and k^L leaves.
+        // Both reserves matter beyond speed: m_words holds pointers into m_nodes,
+        // so m_nodes must never reallocate, and a words reserve one level too
+        // deep asks for 76 MB to hold 8.
         const auto expected_nodes = static_cast<std::size_t>(
             (std::pow(static_cast<double>(m_k), static_cast<double>(m_L) + 1) - 1) / (m_k - 1));
         m_nodes.reserve(expected_nodes);
-        m_words.reserve(static_cast<std::size_t>(std::pow(static_cast<double>(m_k), static_cast<double>(m_L) + 1)));
+        m_words.reserve(static_cast<std::size_t>(std::pow(static_cast<double>(m_k), static_cast<double>(m_L))));
 
         m_nodes.resize(1); // the root
         m_nodes[0].id = 0;

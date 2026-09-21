@@ -167,7 +167,8 @@ namespace ORB_SLAM3
     {
         if(mBowVec.empty() || mFeatVec.empty())
         {
-            std::vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
+            const std::vector<orbslam3r::dbow2_ext::FORB32::TDescriptor> vCurrentDesc =
+                orbslam3r::dbow2_ext::FORB32::FromMat(mDescriptors);
             // Feature vector associate features with nodes in the 4th level (from leaves up)
             // We assume the vocabulary tree has 6 levels, change the 4 otherwise
             mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);

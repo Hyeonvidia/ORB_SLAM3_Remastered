@@ -634,7 +634,8 @@ namespace ORB_SLAM3
     {
         if(mBowVec.empty())
         {
-            std::vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
+            const std::vector<orbslam3r::dbow2_ext::FORB32::TDescriptor> vCurrentDesc =
+                orbslam3r::dbow2_ext::FORB32::FromMat(mDescriptors);
             mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
         }
     }

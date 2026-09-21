@@ -9,13 +9,13 @@
 // =============================================================================
 #pragma once
 
-#include <DBoW2/FORB.h>
-
+#include "orbslam3r/dbow2_ext/forb32.hpp"
 #include "orbslam3r/dbow2_ext/text_vocabulary.hpp"
 
 namespace orbslam3r
 {
 
-    using ORBVocabulary = dbow2_ext::TextFileVocabulary<DBoW2::FORB::TDescriptor, DBoW2::FORB>;
+    // FORB32, not DBoW2::FORB: the same vocabulary in a third of the memory; see forb32.hpp.
+    using ORBVocabulary = dbow2_ext::TextFileVocabulary<dbow2_ext::FORB32::TDescriptor, dbow2_ext::FORB32>;
 
 } // namespace orbslam3r
