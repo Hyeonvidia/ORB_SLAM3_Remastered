@@ -157,9 +157,20 @@ is a use-after-free. The audit build (below) exists to catch that mechanically.
 
 Each step is a commit that can be proven on its own.
 
-1. Fixes that need no reclaimer: the three places Local Mapping `delete`s a
-   queued keyframe that Tracking still points at; the `MLPnPsolver`s
-   `Relocalization` never frees; vectors that are written and never read.
+1. Fixes that need no reclaimer: the `MLPnPsolver`s `Relocalization` never
+   frees; vectors that are written and never read.
+
+   Not among them, though every design and two reviewers put it first: the
+   three places Local Mapping `delete`s the keyframes left in its queue, which
+   Tracking made and still points at. Counted over a stereo-inertial, a
+   monocular-inertial and a stereo run, all 25 purges found the queue empty.
+   `InitializeIMU` takes the map-update mutex, which keeps Tracking out of
+   `Track()`, and processes the queue before it purges; `Release()` is covered
+   by `SetNotStop()`, which refuses a keyframe once Local Mapping has stopped.
+   Only `ScaleRefinement` has a window -- the length of its inertial
+   optimisation, between processing the queue and taking the mutex -- and it
+   was not hit in 13 calls. Those sites become a retire when keyframes are
+   reclaimed; until a run shows otherwise they are not a bug being lived with.
 2. `Reclaimer`, owned by `Atlas`, wired into every `Map`, unused. Unit test
    with synthetic readers under ThreadSanitizer. objcmp: nothing else changes.
 3. **Count**: retire wiring, nothing freed. At shutdown the graveyard must
