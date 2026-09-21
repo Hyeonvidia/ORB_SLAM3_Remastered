@@ -28,6 +28,7 @@
 #include <fstream>
 #include <mutex>
 #include <ostream>
+#include <tuple>
 #include <unordered_set>
 
 namespace ORB_SLAM3
@@ -74,6 +75,157 @@ namespace ORB_SLAM3
                     return kb;
                 }
             return 0;
+        }
+
+        // Who still names the objects that were culled. The threads have stopped
+        // when this runs, so it is what a collector would find at the end of the
+        // run: a culled object somebody still names cannot be freed by one that
+        // only proves unreachability, and one nobody names can.
+        //
+        // Each culled object is counted once, under the first holder below that
+        // names it, because that is the order a collector can do something about
+        // them: a live keyframe's slot stays until that keyframe is culled; a
+        // culled keyframe's slots go when its payload is released; a replaced-by
+        // link goes with the point that holds it.
+        void Census(std::ostream &os, const std::unordered_set<const KeyFrame*> &keyFrames,
+                    const std::unordered_set<const MapPoint*> &mapPoints)
+        {
+            std::unordered_set<const MapPoint*> inLiveSlot, inDeadSlot, replacedBy;
+            std::unordered_set<const KeyFrame*> observed, reference, covisible, inTree, inEdge, inImuChain;
+            std::size_t nLiveSlotsHoldingDead = 0, nObservedNotInSlot = 0;
+
+            for(const KeyFrame* pConstKF : keyFrames)
+            {
+                KeyFrame* pKF = const_cast<KeyFrame*>(pConstKF);
+                const bool bDeadKF = pKF->isBad();
+                for(MapPoint* pMP : pKF->GetMapPointMatches())
+                {
+                    if(!pMP || !mapPoints.count(pMP) || !pMP->isBad())
+                        continue;
+                    (bDeadKF ? inDeadSlot : inLiveSlot).insert(pMP);
+                    if(!bDeadKF)
+                        ++nLiveSlotsHoldingDead;
+                }
+                if(bDeadKF)
+                    continue;
+                for(KeyFrame* pOther : pKF->GetVectorCovisibleKeyFrames())
+                    if(pOther && pOther->isBad())
+                        covisible.insert(pOther);
+                for(KeyFrame* pOther : pKF->GetChilds())
+                    if(pOther && pOther->isBad())
+                        inTree.insert(pOther);
+                if(pKF->GetParent() && pKF->GetParent()->isBad())
+                    inTree.insert(pKF->GetParent());
+                for(KeyFrame* pOther : pKF->GetLoopEdges())
+                    if(pOther && pOther->isBad())
+                        inEdge.insert(pOther);
+                for(KeyFrame* pOther : pKF->GetMergeEdges())
+                    if(pOther && pOther->isBad())
+                        inEdge.insert(pOther);
+                if(pKF->mPrevKF && pKF->mPrevKF->isBad())
+                    inImuChain.insert(pKF->mPrevKF);
+                if(pKF->mNextKF && pKF->mNextKF->isBad())
+                    inImuChain.insert(pKF->mNextKF);
+            }
+            for(const MapPoint* pConstMP : mapPoints)
+            {
+                MapPoint* pMP = const_cast<MapPoint*>(pConstMP);
+                MapPoint* pRep = pMP->GetReplaced();
+                if(pRep && mapPoints.count(pRep) && pRep->isBad())
+                    replacedBy.insert(pRep);
+                if(pMP->isBad())
+                    continue;
+                for(const auto &obs : pMP->GetObservations())
+                    if(obs.first && obs.first->isBad())
+                    {
+                        observed.insert(obs.first);
+                        // Releasing a culled keyframe's slots and keypoints rests on its
+                        // slots naming every live point that observes it.
+                        const int idx = std::get<0>(obs.second) != -1 ? std::get<0>(obs.second)
+                                                                      : std::get<1>(obs.second);
+                        const std::vector<MapPoint*> vpSlots = obs.first->GetMapPointMatches();
+                        if(idx < 0 || idx >= static_cast<int>(vpSlots.size()) || vpSlots[idx] != pMP)
+                            ++nObservedNotInSlot;
+                    }
+                if(pMP->GetReferenceKeyFrame() && pMP->GetReferenceKeyFrame()->isBad())
+                    reference.insert(pMP->GetReferenceKeyFrame());
+            }
+
+            std::size_t nDeadMP = 0, nLive = 0, nDead = 0, nReplaced = 0, nFree = 0;
+            std::size_t bLive = 0, bDead = 0, bReplaced = 0, bFree = 0;
+            for(const MapPoint* pMP : mapPoints)
+            {
+                if(!const_cast<MapPoint*>(pMP)->isBad())
+                    continue;
+                ++nDeadMP;
+                std::size_t bytes = 0;
+                for(const auto &entry : pMP->MemoryFootprint())
+                    bytes += entry.second;
+                if(inLiveSlot.count(pMP))
+                    ++nLive, bLive += bytes;
+                else if(inDeadSlot.count(pMP))
+                    ++nDead, bDead += bytes;
+                else if(replacedBy.count(pMP))
+                    ++nReplaced, bReplaced += bytes;
+                else
+                    ++nFree, bFree += bytes;
+            }
+
+            std::size_t nDeadKF = 0, nObserved = 0, nReference = 0, nCovisible = 0, nTree = 0, nEdge = 0, nImu = 0,
+                        nNobody = 0;
+            std::size_t bObserved = 0, bReference = 0, bCovisible = 0, bTree = 0, bEdge = 0, bImu = 0, bNobody = 0;
+            for(const KeyFrame* pKF : keyFrames)
+            {
+                if(!const_cast<KeyFrame*>(pKF)->isBad())
+                    continue;
+                ++nDeadKF;
+                std::size_t bytes = 0;
+                for(const auto &entry : pKF->MemoryFootprint())
+                    bytes += entry.second;
+                if(observed.count(pKF))
+                    ++nObserved, bObserved += bytes;
+                else if(reference.count(pKF))
+                    ++nReference, bReference += bytes;
+                else if(covisible.count(pKF))
+                    ++nCovisible, bCovisible += bytes;
+                else if(inTree.count(pKF))
+                    ++nTree, bTree += bytes;
+                else if(inEdge.count(pKF))
+                    ++nEdge, bEdge += bytes;
+                else if(inImuChain.count(pKF))
+                    ++nImu, bImu += bytes;
+                else
+                    ++nNobody, bNobody += bytes;
+            }
+
+            char line[200];
+            const auto row = [&](const char* what, std::size_t n, std::size_t total, double mb)
+            {
+                std::snprintf(line, sizeof(line), "      %-52s %9zu %5.1f %% %9.1f MB\n", what, n,
+                              total ? 100.0 * n / total : 0.0, mb);
+                os << line;
+            };
+            os << "  Who still names the culled MapPoints (each counted once, first holder that applies)\n";
+            row("a slot of a keyframe still in a map", nLive, nDeadMP, bLive / 1048576.0);
+            row("only slots of culled keyframes", nDead, nDeadMP, bDead / 1048576.0);
+            row("only another point's replaced-by link", nReplaced, nDeadMP, bReplaced / 1048576.0);
+            row("no keyframe and no point", nFree, nDeadMP, bFree / 1048576.0);
+            std::snprintf(line, sizeof(line), "      (%zu slots of live keyframes hold a culled point)\n",
+                          nLiveSlotsHoldingDead);
+            os << line;
+            os << "  Who still names the culled KeyFrames (each counted once, first holder that applies)\n";
+            row("a live point's observations", nObserved, nDeadKF, bObserved / 1048576.0);
+            row("only a live point's reference keyframe", nReference, nDeadKF, bReference / 1048576.0);
+            row("a live keyframe's covisibility list", nCovisible, nDeadKF, bCovisible / 1048576.0);
+            row("a live keyframe's parent or children", nTree, nDeadKF, bTree / 1048576.0);
+            row("a live keyframe's loop or merge edges", nEdge, nDeadKF, bEdge / 1048576.0);
+            row("a live keyframe's previous/next (IMU chain)", nImu, nDeadKF, bImu / 1048576.0);
+            row("none of these", nNobody, nDeadKF, bNobody / 1048576.0);
+            std::snprintf(
+                line, sizeof(line),
+                "      (%zu observations of a culled keyframe by a live point that is not in that keyframe's slot)\n",
+                nObservedNotInSlot);
+            os << line;
         }
     } // namespace
 
@@ -136,6 +288,7 @@ namespace ORB_SLAM3
         Print(os, "MapPoints in a map", nMPLive, mpLive);
         Print(os, "MapPoints culled, never freed", nMPDead, mpDead);
         Print(os, "Vocabulary", 1, vocabulary);
+        Census(os, gKeyFrames, gMapPoints);
 
         const struct mallinfo2 mi = mallinfo2();
         char line[200];
