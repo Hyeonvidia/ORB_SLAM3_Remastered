@@ -303,6 +303,43 @@ namespace
         check(dDiff < 1e-6, "and reaches the same pose", "difference " + std::to_string(dDiff));
     }
 
+    // A symmetric system that is nonsingular but not positive definite: one
+    // pivot of the factorisation is negative. That is what an inertial bundle
+    // adjustment's Hessian looks like numerically, with its gauge left free.
+    template<typename SolverT>
+    bool SolveIndefinite(double &dResidual)
+    {
+        const int dims[] = {2, 4}; // cumulative block sizes: two 2x2 blocks
+        g2o::SparseBlockMatrix<Eigen::MatrixXd> A(dims, dims, 2, 2);
+        *A.block(0, 0, true) = (Eigen::Matrix2d() << 4.0, 1.0, 1.0, 3.0).finished();
+        *A.block(0, 1, true) = (Eigen::Matrix2d() << 0.5, 0.0, 0.0, 0.5).finished();
+        *A.block(1, 1, true) = (Eigen::Matrix2d() << -0.02, 0.0, 0.0, 5.0).finished();
+
+        Eigen::Matrix4d dense = Eigen::Matrix4d::Zero();
+        dense.block<2, 2>(0, 0) = *A.block(0, 0);
+        dense.block<2, 2>(0, 2) = *A.block(0, 1);
+        dense.block<2, 2>(2, 0) = A.block(0, 1)->transpose();
+        dense.block<2, 2>(2, 2) = *A.block(1, 1);
+
+        Eigen::Vector4d b(1.0, 2.0, 3.0, 4.0), x = Eigen::Vector4d::Zero();
+        SolverT solver;
+        solver.setWriteDebug(false);
+        solver.init();
+        const bool ok = solver.solve(A, x.data(), b.data());
+        dResidual = ok ? (dense * x - b).norm() : -1.0;
+        return ok;
+    }
+
+    void TestLinearSolverLDLT()
+    {
+        std::puts("\n-- g2o_ext: the sparse solver factorises with LDLT, as ORB-SLAM3's g2o does --");
+        double dLLT = 0.0, dLDLT = 0.0;
+        const bool bLLT = SolveIndefinite<g2o::LinearSolverEigen<Eigen::MatrixXd>>(dLLT);
+        const bool bLDLT = SolveIndefinite<orbslam3r::g2o_ext::LinearSolverEigenLDLT<Eigen::MatrixXd>>(dLDLT);
+        check(!bLLT, "upstream's LLT refuses an indefinite system");
+        check(bLDLT && dLDLT < 1e-9, "LinearSolverEigenLDLT solves it", "residual " + std::to_string(dLDLT));
+    }
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -312,6 +349,7 @@ int main(int argc, char** argv)
     TestSerialization();
     TestG2oCompat();
     TestLevenbergStopOnStall();
+    TestLinearSolverLDLT();
     if(argc > 1)
         TestRealVocabulary(argv[1]);
     else

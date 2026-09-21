@@ -20,6 +20,8 @@ results/
 CameraTrajectory.txt
 KeyFrameTrajectory.txt
 ExecTimeMean.txt
+# g2o writes this beside the binary when a factorisation fails
+debug.txt
 
 # Editor / OS
 .vscode/

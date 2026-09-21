@@ -13,9 +13,20 @@
 //   is dead code: nothing in ORB-SLAM3's src/ or include/ references SE3mat, and
 //   its ExpSO3/LogSO3 duplicate the ones in ORB-SLAM3's own G2oTypes.h.
 //
-//   So no algorithm needs porting.  Of the 26 distinct g2o symbols ORB-SLAM3
-//   names, upstream 20241228 already provides 24 under the same name.  The two
-//   below were renamed upstream, and that is the entire compatibility surface.
+//   Of the 26 distinct g2o symbols ORB-SLAM3 names, upstream 20241228 already
+//   provides 24 under the same name.  The two below were renamed upstream, and
+//   that is the entire compatibility surface -- in NAMES.
+//
+//   This comment used to conclude "so no algorithm needs porting".  That was
+//   wrong twice, and an audit of all 61 recorded deltas plus the drift of
+//   upstream itself found both:
+//     - among the packaging sits one behavioural edit, the stop rule in
+//       Levenberg-Marquardt        -> levenberg_stop_on_stall.hpp
+//     - upstream changed its sparse factorisation from LDLT to LLT in 2020,
+//       which is not ORB-SLAM3's edit and so is in no recorded delta
+//                                  -> linear_solver_eigen_ldlt.hpp
+//   Both come in through solver_factory.hpp.  The audit's other 55
+//   non-cosmetic items are reproduced, equivalent upstream, or unused.
 //
 // HOW TO USE
 //   Include this instead of reaching for g2o headers directly.  Code may keep

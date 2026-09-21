@@ -71,10 +71,12 @@ precedes its children.
 
 Both are covered by `vendor_ext/tests/test_vendor_ext.cpp`.
 
-### `g2o_ext/` — two aliases, one factory and one stop rule
+### `g2o_ext/` — two aliases, one factory, one stop rule and one solver
 
-`compat.hpp` is two `using` declarations. That really is the whole semantic
-distance between ORB-SLAM3's g2o and upstream `20241228_git`:
+`compat.hpp` is two `using` declarations. That is the whole distance between
+ORB-SLAM3's g2o and upstream `20241228_git` *in names* -- it was once described
+here as the whole semantic distance, which the two behavioural wrappers further
+down show it was not:
 
 ```cpp
 using VertexSBAPointXYZ = VertexPointXYZ;   // upstream dropped the "SBA" prefix
@@ -119,6 +121,30 @@ v1.0. On a synthetic pose problem the iteration counts match the fork's exactly
 g2o's own `SparseOptimizerTerminateAction` was not used: it stops on the first
 small gain rather than the third, and it works by taking over the optimizer's
 force-stop flag, which Local Mapping already uses to abort a bundle adjustment.
+
+`linear_solver_eigen_ldlt.hpp` undoes a change that is not ORB-SLAM3's at all,
+and so appears in no recorded delta: upstream switched its sparse solver from
+`SimplicialLDLT` to `SimplicialLLT` in 2020. LDLT fails only on a pivot that is
+exactly zero, LLT on any that is not positive -- and a visual-inertial bundle
+adjustment, with its gauge free and lambda starting at 1e-5, has a Hessian that
+is positive definite only on paper (the two that were dumped factor with exactly
+one pivot of -0.02 each). v1.0 solved those and moved on. With upstream's solver
+every inertial run logged `Cholesky failure` -- 1 to 54 times -- and each one
+wrote a 1.3 MB `debug.txt` from the Local Mapping thread, about a second, before
+Levenberg-Marquardt inflated lambda and tried again. `LinearSolverEigenLDLT` is
+upstream's class with the decomposition swapped; `MakeBlockSolver` uses it for
+`kEigen`. On EuRoC stereo-inertial (MH01, V201, V203, two runs each, the three
+builds side by side): v1.0 0 failures in 6 runs, upstream's LLT 1-10 in every
+one, the wrapper 0 in 6; ATE the same within its spread in all three.
+
+### Where the remaster differs from v1.0 on purpose
+
+Upstream fixed `Sim3`'s `exp` and `log` in 2017: for a rotation below 1e-5 rad
+with a scale change above 1e-5, v1.0's fork computes the coefficient `B` of
+`W = A*Omega + B*Omega^2 + C*I` without its `- 1`, and the small-angle rotation
+without its `/2`. That branch is what a monocular essential-graph optimisation
+sits in once scale drift is being spread along the graph. The remaster uses
+upstream's, which is the correct one, and does not port the bug back.
 
 ### `dbow2_build/` — a build definition, not a code change
 

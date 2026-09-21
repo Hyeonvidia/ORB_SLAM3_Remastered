@@ -237,13 +237,18 @@ configuration and reports the scale error separately.
 `tools/evaluate_ate.py` replaces `evaluation/evaluate_ate_scale.py`, which is
 Python 2 and will not run on any current distribution.
 
-### One behaviour worth not misreading
+### One behaviour that was misread
 
-The inertial runs log `Cholesky failure, writing debug.txt` from g2o's Eigen
-linear solver during visual-inertial BA. That is not something the port
-introduced: the identical failure path exists in ORB-SLAM3's own g2o fork at
-`Thirdparty/g2o/g2o/solvers/linear_solver_eigen.h:107`. Current g2o routes it
-through spdlog, which is the only reason it is now visible in the log.
+The inertial runs used to log `Cholesky failure, writing debug.txt` from g2o's
+Eigen linear solver during visual-inertial BA. This section said the port had
+not introduced that -- that the same failure path exists in ORB-SLAM3's fork
+and only upstream's logging made it visible. The path exists, and the fork
+would have printed the message too; it never did, because it never failed. The
+fork factorises with LDLT and upstream, since 2020, with LLT, which refuses the
+numerically indefinite Hessians an inertial BA produces. The port did introduce
+it, by taking upstream's solver as it came. `vendor_ext`'s
+`LinearSolverEigenLDLT` restores the fork's factorisation; see
+[WRAPPERS.md](WRAPPERS.md).
 
 ## Not ported
 

@@ -42,13 +42,14 @@
 #include <g2o/solvers/eigen/linear_solver_eigen.h>
 
 #include "orbslam3r/g2o_ext/levenberg_stop_on_stall.hpp"
+#include "orbslam3r/g2o_ext/linear_solver_eigen_ldlt.hpp"
 
 namespace orbslam3r::g2o_ext
 {
 
     enum class LinearSolver
     {
-        kEigen, // sparse Cholesky; what ORB-SLAM3 uses nearly everywhere
+        kEigen, // sparse LDLT, as in ORB-SLAM3's g2o (upstream's is LLT); used nearly everywhere
         kDense, // dense Cholesky; used for the small inertial-only problems
     };
 
@@ -61,7 +62,8 @@ namespace orbslam3r::g2o_ext
             using PoseMatrix = typename BlockSolverT::PoseMatrixType;
             if constexpr(kind == LinearSolver::kEigen)
             {
-                return std::make_unique<BlockSolverT>(std::make_unique<g2o::LinearSolverEigen<PoseMatrix>>());
+                // Not g2o::LinearSolverEigen: see linear_solver_eigen_ldlt.hpp.
+                return std::make_unique<BlockSolverT>(std::make_unique<LinearSolverEigenLDLT<PoseMatrix>>());
             }
             else
             {
