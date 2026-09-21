@@ -165,7 +165,11 @@ namespace ORB_SLAM3
         double y = xyz_trans[1];
         double z = xyz_trans[2];
 
-        auto projectJac = -pCamera->projectJac(xyz_trans);
+        // Not auto: that names the expression "minus a temporary", and Eigen's
+        // expression holds the temporary by reference. It is gone at the end of the
+        // statement, and the two products below then read its stack slot. v1.0
+        // has the same line; AddressSanitizer reports it on every local BA.
+        const Eigen::Matrix<double, 2, 3> projectJac = -pCamera->projectJac(xyz_trans);
 
         _jacobianOplusXi = projectJac * T.rotation().toRotationMatrix();
 
