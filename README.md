@@ -277,9 +277,9 @@ Median ATE over the repeats, in metres:
 **Accuracy is the same**, within the run-to-run spread the table further up
 puts on a single build, with one exception that goes the remaster's way. On 09
 mono, whose loop closes in its last frames, the remaster scored 8-10 m in all
-six runs of this comparison and the one before it; v1.0 did in two, and 39-55 m
-in the other four. The remaster detected the loop six times out of six, v1.0
-three. v1.0's `Shutdown()` does not wait for its threads, so the last keyframes
+nine runs of three comparisons; v1.0 did in five, and 39-55 m in the other
+four. In the first two comparisons the remaster detected the loop six times out
+of six, v1.0 three. v1.0's `Shutdown()` does not wait for its threads, so the last keyframes
 may never reach Loop Closing and a correction may not land before the
 trajectory is written; the remaster joins them first. That is the likely
 reason, not a proven one. 01 mono fails in both, as it does for everyone.
@@ -293,6 +293,33 @@ rule restored upstream's leaner iteration puts the remaster ahead.
 [docs/WRAPPERS.md](docs/WRAPPERS.md) has how it was found. `-march=native`,
 which v1.0's build adds everywhere, was measured in eight combinations of
 library and caller and does nothing on this machine.
+
+**The memory work cost tracking nothing**, though the same comparison, run
+again after it, seemed to say otherwise: 0.0 % in mono and +0.5 % in stereo
+against v1.0, where it had been -1.8 % and -0.5 %. Two builds of the same
+source, put through the same queue side by side, then came out 1.5 % apart --
+that is the floor of timing whole runs several at a time, and the shift is
+inside it. `tools/ab_stages.sh` is the finer instrument: it builds two commits
+with the stage timers on and runs them in pairs. Before and after the memory
+work, six pairs on each of three sequences:
+
+| Stage, ms | 04 stereo | 07 mono | 07 stereo |
+|---|---|---|---|
+| Tracking, total | 18.53 -> 18.65 | 15.38 -> 15.72 | 19.52 -> 19.52 |
+| of which creating a keyframe | 0.150 -> 0.128 | 0.045 -> 0.035 | 0.098 -> 0.090 |
+| Local Mapping, inserting a keyframe | 4.26 -> 3.01 | 4.59 -> 3.27 | 3.88 -> 2.50 |
+| Local Mapping, creating map points | 10.10 -> 9.71 | 22.58 -> 22.53 | 7.80 -> 7.60 |
+
+Tracking's total differs with either sign from pair to pair, and what does
+differ in 07 mono is ORB extraction, which the work did not touch. The one
+stage of tracking it did touch, the keyframe constructor, got faster. Inserting
+a keyframe got faster by a third in all eighteen pairs: that is where a
+keyframe's bag of words is computed, which no longer builds a `cv::Mat` per
+descriptor and walks a vocabulary whose nodes hold their 32 bytes in place.
+Accuracy, pooled over
+both comparisons: the remaster's median ATE is 1.3 % above v1.0's in stereo
+(higher in 7 sequences of 11) and 0.5 % below in mono (higher in 3 of 11),
+which is no difference.
 
 **Inertial configurations** had a second difference, found by auditing every
 change between the two g2o's rather than by measuring: upstream's sparse solver
