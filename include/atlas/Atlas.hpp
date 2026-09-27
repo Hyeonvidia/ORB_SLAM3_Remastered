@@ -90,9 +90,11 @@ namespace ORB_SLAM3
         // How far the Reclaimer goes, from ORBSLAM3R_RECLAIM:
         //   count   culled objects are handed over and counted; nothing else
         //   dry     the whole protocol runs -- every thread announces, batches
-        //           pass their grace periods -- and nothing is freed
+        //           pass their grace periods -- and nothing is freed (the default:
+        //           freeing costs tracking about 3 % on KITTI stereo against v1.0,
+        //           through the locality of reused addresses, until MapPoints come
+        //           from a pool of their own -- docs/OWNERSHIP.md, step 6)
         //   points  culled MapPoints are checked against every holder and freed
-        //           (the default)
         //   poison  as points, but a freed MapPoint's memory is kept, filled with
         //           0xDD and, in an AddressSanitizer build, poisoned: any later
         //           touch is reported with the stack that made it

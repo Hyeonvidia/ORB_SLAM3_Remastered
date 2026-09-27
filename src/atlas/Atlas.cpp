@@ -164,11 +164,11 @@ namespace ORB_SLAM3
             const std::string s = env ? env : "";
             if(s == "count")
                 return Reclaim::COUNT;
-            if(s == "dry")
-                return Reclaim::DRY;
+            if(s == "points")
+                return Reclaim::POINTS;
             if(s == "poison")
                 return Reclaim::POISON;
-            return Reclaim::POINTS;
+            return Reclaim::DRY;
         }();
         return mode;
     }
