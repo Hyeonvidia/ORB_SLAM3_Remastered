@@ -359,11 +359,25 @@ namespace ORB_SLAM3
 
         Eigen::Vector3f vec = evec.block<3, 1>(1, maxIndex); //extract imaginary part of the quaternion (sin*axis)
 
-        // Rotation angle. sin is the norm of the imaginary part, cos is the real part
-        double ang = atan2(vec.norm(), evec(0, maxIndex));
+        const float vecNorm = vec.norm();
+        if(vecNorm > 0.f && std::isfinite(vecNorm))
+        {
+            // Rotation angle. sin is the norm of the imaginary part, cos is the real part
+            double ang = atan2(vecNorm, evec(0, maxIndex));
 
-        vec = 2 * ang * vec / vec.norm(); //Angle-axis representation. quaternion angle is the half
-        mR12i = Sophus::SO3f::exp(vec).matrix();
+            vec = 2 * ang * vec / vecNorm; //Angle-axis representation. quaternion angle is the half
+            mR12i = Sophus::SO3f::exp(vec).matrix();
+        }
+        else
+        {
+            // An imaginary part of exactly zero is the identity rotation -- two
+            // identical point sets, which a RANSAC sample can be. v1.0 divided by it,
+            // handed Sophus the NaN, and Sophus aborted the process with its message
+            // on stdout, where it was lost: a crash of Loop Closing in about one run
+            // in thirty on KITTI 00 under load. A NaN here (degenerate or non-finite
+            // input) makes a hypothesis that CheckInliers() then rejects.
+            mR12i.setIdentity();
+        }
 
         // Step 5: Rotate set 2
         Eigen::Matrix3f P3 = mR12i * Pr2;

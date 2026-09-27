@@ -20,6 +20,11 @@ file(GLOB_RECURSE ORBSLAM3_SOURCES CONFIGURE_DEPENDS
 add_library(ORB_SLAM3 SHARED ${ORBSLAM3_SOURCES})
 add_library(orbslam3r::ORB_SLAM3 ALIAS ORB_SLAM3)
 
+# Sophus's checks abort the process with their message on stdout, which a file
+# swallows; src/common/SophusEnsure.cpp puts it on stderr. PUBLIC, because the
+# check is inline in Sophus's headers and every user must see the same one.
+target_compile_definitions(ORB_SLAM3 PUBLIC SOPHUS_ENABLE_ENSURE_HANDLER)
+
 target_include_directories(ORB_SLAM3 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
