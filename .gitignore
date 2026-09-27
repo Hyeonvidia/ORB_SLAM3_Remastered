@@ -32,3 +32,4 @@ compile_commands.json
 # Python bytecode, created when tools/ scripts import each other
 __pycache__/
 *.pyc
+/build_times/

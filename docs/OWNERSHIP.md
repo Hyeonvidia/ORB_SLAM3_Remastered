@@ -225,24 +225,27 @@ Each step is a commit that can be proven on its own.
    abort was v1.0's, after Shutdown(): the trajectory savers left their map
    pointer uninitialised when every map was empty. Fixed.
 6. On: `ORBSLAM3R_RECLAIM=points`, the default once the A/B is flat and the
-   culled-MapPoints row is near zero. *Not yet the default.* The full KITTI
-   A/B against v1.0 (110 runs) put stereo tracking at +3.3 %, slower in 10
-   sequences of 11, where it had been -0.5 % before freeing; mono +0.5 to
-   +1.4 % with mixed signs; accuracy unchanged. Where it goes, measured with
-   one binary under the same four-at-a-time load: not the announces (count
-   against dry is flat), not the scan (four times bigger batches, a quarter
-   of the scans, cost the same), but the two stages that walk the current
-   frame's and the local map's points, Pose Prediction and LM Track, +0.1 to
-   +0.15 ms each on every pair -- and nothing in `poison`, which frees the
-   members but never the block. New points land where old ones were freed,
-   scattered across a heap of hundreds of megabytes, instead of together at
-   its top. Local BA pays +1.5 to +2.5 ms a keyframe from the same heap. glibc's
-   knobs do not help (trim thresholds cost 700-900 MB of RSS). The answer is a
-   pool of MapPoints' own -- slabs, with consecutive allocations filling one
-   slab -- so that freeing never touches glibc and new points stay together;
-   `points` becomes the default when the A/B is flat with it. What freeing
-   does to the memory report meanwhile, run against the dry run on the same
-   machine at the same time:
+   culled-MapPoints row is near zero. *The default.* It was not at first: the
+   full KITTI A/B against v1.0 (110 runs) put stereo tracking at +3.3 %, slower
+   in 10 sequences of 11, where it had been -0.5 % before freeing; accuracy
+   unchanged. Where it went, measured with one binary under the same
+   four-at-a-time load: not the announces (count against dry is flat), not
+   the scan (four times bigger batches, a quarter of the scans, cost the
+   same), but the two stages that walk the current frame's and the local
+   map's points, Pose Prediction and LM Track, +0.1 to +0.15 ms each on every
+   pair -- and nothing in `poison`, which frees the members but never the
+   block. glibc's knobs do not help (trim thresholds cost 700-900 MB of RSS).
+   Two changes took it away. `atlas/SlotPool`: MapPoints come from slabs of
+   their own, consecutive allocations filling one slab, so new points stay
+   together whatever has been freed and freeing never reaches glibc. That
+   halved nothing measurable by itself. The descriptor: each point held its 32
+   bytes in a cv::Mat with its own heap block, and freeing 500,000 of those
+   scattered glibc's small-chunk bins across the heap, where Tracking's
+   per-frame vectors and local BA's g2o objects were then placed. With the 32
+   bytes inside the point, dry against points is -0.29, -0.08 and -0.38 ms of
+   tracking on KITTI 03, 04 and 07 stereo -- freeing is now slightly the
+   faster of the two -- and local BA is flat. What freeing does to the memory
+   report, run against the dry run on the same machine at the same time:
 
    | | culled MapPoints | peak RSS |
    |---|---:|---:|
