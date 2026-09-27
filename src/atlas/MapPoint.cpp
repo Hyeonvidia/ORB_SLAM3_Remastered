@@ -44,6 +44,7 @@ namespace ORB_SLAM3
           mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0), mnCorrectedReference(0), mnBAGlobalForKF(0),
           mnVisible(1), mnFound(1), mbBad(false), mpReplaced(static_cast<MapPoint*>(NULL))
     {
+        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         mpReplaced = static_cast<MapPoint*>(NULL);
@@ -111,6 +112,7 @@ namespace ORB_SLAM3
           mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
           mnOriginMapId(pMap->GetId())
     {
+        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         SetWorldPos(Pos);
@@ -132,6 +134,7 @@ namespace ORB_SLAM3
           mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
           mnOriginMapId(pMap->GetId())
     {
+        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         mInvDepth = invDepth;
@@ -153,6 +156,7 @@ namespace ORB_SLAM3
           mnBAGlobalForKF(0), mpRefKF(static_cast<KeyFrame*>(NULL)), mnVisible(1), mnFound(1), mbBad(false),
           mpReplaced(NULL), mpMap(pMap), mnOriginMapId(pMap->GetId())
     {
+        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         SetWorldPos(Pos);
@@ -485,7 +489,7 @@ namespace ORB_SLAM3
 
         {
             std::lock_guard<std::mutex> lock(mMutexFeatures);
-            mDescriptor = vDescriptors[BestIdx].clone();
+            vDescriptors[BestIdx].copyTo(mDescriptor);
         }
     }
 

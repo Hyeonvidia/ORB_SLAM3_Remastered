@@ -25,6 +25,7 @@
 #include "common/SerializationUtils.hpp"
 
 #include <opencv2/core/core.hpp>
+#include <cstdint>
 #include <mutex>
 
 #include <boost/serialization/serialization.hpp>
@@ -229,7 +230,11 @@ namespace ORB_SLAM3
         // Mean viewing direction
         Eigen::Vector3f mNormalVector;
 
-        // Best descriptor to fast matching
+        // Best descriptor to fast matching. The 32 bytes live in the object;
+        // mDescriptor is a header over them, so a point is one allocation, its
+        // descriptor sits next to its position, and freeing a point frees nothing
+        // else. copyTo() into a header of the same shape reuses the buffer.
+        alignas(16) std::uint8_t mDescriptorData[32];
         cv::Mat mDescriptor;
 
         // Reference KeyFrame
