@@ -385,6 +385,13 @@ namespace ORB_SLAM3
     void Atlas::ReportReclaimer(std::ostream &os)
     {
         const Reclaimer::Stats stats = mpReclaimer->GetStats();
+        std::size_t nCulledKeyFrames = 0;
+        {
+            std::lock_guard<std::mutex> lock(mMutexAtlas);
+            for(Map* pMap : mspMaps)
+                nCulledKeyFrames += pMap->GetCulledKeyFrames().size();
+        }
+        os << "  Culled keyframes on the maps' lists: " << nCulledKeyFrames << "\n";
         os << "  Reclaimer (" << (ReclaimMode() == Reclaim::COUNT ? "count" : "dry run") << "): retired "
            << stats.nRetired << ", freed " << stats.nFreed << ", kept " << stats.nKept << ", waiting " << stats.nWaiting
            << " (peak " << stats.nPeakWaiting << "), batches " << stats.nBatches << ", put off " << stats.nPutOffPinned

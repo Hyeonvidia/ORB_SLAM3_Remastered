@@ -740,7 +740,7 @@ namespace ORB_SLAM3
             mbBad = true;
         }
 
-        mpMap->EraseKeyFrame(this);
+        mpMap->RetireKeyFrame(this);
         mpKeyFrameDB->erase(this);
     }
 

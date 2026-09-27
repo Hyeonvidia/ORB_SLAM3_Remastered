@@ -124,6 +124,25 @@ namespace ORB_SLAM3
     void Map::EraseKeyFrame(KeyFrame* pKF)
     {
         std::lock_guard<std::mutex> lock(mMutexMap);
+        EraseKeyFrameLocked(pKF);
+    }
+
+    void Map::RetireKeyFrame(KeyFrame* pKF)
+    {
+        std::lock_guard<std::mutex> lock(mMutexMap);
+        if(mspKeyFrames.count(pKF))
+            mvpCulledKeyFrames.push_back(pKF);
+        EraseKeyFrameLocked(pKF);
+    }
+
+    std::vector<KeyFrame*> Map::GetCulledKeyFrames()
+    {
+        std::lock_guard<std::mutex> lock(mMutexMap);
+        return mvpCulledKeyFrames;
+    }
+
+    void Map::EraseKeyFrameLocked(KeyFrame* pKF)
+    {
         mspKeyFrames.erase(pKF);
         if(mspKeyFrames.size() > 0)
         {

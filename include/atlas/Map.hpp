@@ -86,6 +86,13 @@ namespace ORB_SLAM3
         // same point -- SearchAndFuse can Replace() one twice -- hands over
         // nothing.
         void RetireMapPoint(MapPoint* pMP);
+        // For a keyframe that has been culled: out of the map, and onto the list
+        // of culled keyframes, which is where the check for culled points has to
+        // look as well -- a culled keyframe keeps its slots, and Loop Closing and
+        // Tracking go on reading them through the members that name it.
+        // Keyframes are not freed, so the list only grows; it survives clear().
+        void RetireKeyFrame(KeyFrame* pKF);
+        std::vector<KeyFrame*> GetCulledKeyFrames();
         void SetReclaimer(Reclaimer* pReclaimer) { mpReclaimer = pReclaimer; }
         void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
         void InformNewBigChange();
@@ -181,6 +188,8 @@ namespace ORB_SLAM3
         KeyFrame* mpKFlowerID;
 
         Reclaimer* mpReclaimer = nullptr;
+        std::vector<KeyFrame*> mvpCulledKeyFrames;
+        void EraseKeyFrameLocked(KeyFrame* pKF);
 
         unsigned long int mnBackupKFinitialID;
         unsigned long int mnBackupKFlowerID;
