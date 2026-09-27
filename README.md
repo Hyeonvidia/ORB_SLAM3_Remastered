@@ -321,6 +321,50 @@ both comparisons: the remaster's median ATE is 1.3 % above v1.0's in stereo
 (higher in 7 sequences of 11) and 0.5 % below in mono (higher in 3 of 11),
 which is no difference.
 
+**Culled map points are freed.** ORB-SLAM3 never frees a MapPoint or a KeyFrame
+it culls: `SetBadFlag()` erases the pointer from the map and the object stays on
+the heap until the process ends, because nobody could say who might still hold
+it. On KITTI 00 stereo that is 537,000 points, 418 MB, growing about 95 KB per
+frame -- the largest thing in the process after a few minutes. The remaster
+frees them: a culled point is handed to the atlas, every thread announces once
+per loop that it holds nothing from earlier iterations except what it names,
+the atlas looks in every place a pointer can still be (every keyframe's slots,
+live and culled; the reference points; the replaced-by links) and frees what
+nobody names two grace periods later. A point somebody still names simply
+waits; nothing is ever written into a structure in its place, so the SLAM
+threads compute what they computed. [docs/OWNERSHIP.md](docs/OWNERSHIP.md) has
+the design, what was rejected and why, and the order it was built in; each step
+was proven on its own -- counts against the memory report, a dry run timed
+against the one before it, AddressSanitizer with a mode that poisons freed
+memory instead of returning it, ThreadSanitizer on a synthetic world with
+variants that must fail.
+
+With `ORBSLAM3R_MEMORY_REPORT=1`, before and after, both under the same load:
+
+| | culled MapPoints | peak RSS |
+|---|---:|---:|
+| KITTI 00 stereo | 415 MB -> 5.7 MB | 2160 -> 1676 MB |
+| KITTI 00 mono | 258 MB -> 8.1 MB | 3557 -> 3087 MB |
+| EuRoC MH01 stereo-inertial | 93 MB -> 18 MB | 515 -> 424 MB |
+| EuRoC MH01 mono-inertial | 85 MB -> 11 MB | 656 -> 537 MB |
+
+What stays is what the census said would stay: the points that only culled
+keyframes' slots still name (one in five on MH01), which go when keyframes are
+reclaimed, and the few thousand in flight when the run ends. Freeing cost
+tracking at first -- new points were allocated where old ones had been freed,
+scattered across the heap, and each point's descriptor was a heap block of its
+own whose freeing scattered everything allocated after it. MapPoints now come
+from a pool of their own (`atlas/SlotPool`) and carry their descriptor inside;
+with that, freeing against not freeing is -0.3 ms of tracking per frame on
+KITTI stereo, the freeing side faster. Against v1.0, the full KITTI comparison, run again with everything on (110 runs),
+puts tracking at -0.6 % per frame in stereo, faster in 9 sequences of 11,
+and 0.0 % in mono, with either sign; accuracy is the same within the
+spread, and 09 mono closed its loop in all three runs against v1.0's two.
+Before the pool and the inline descriptor the same comparison had said
++3.3 % in stereo, which is why both exist.
+`ORBSLAM3R_RECLAIM=dry` turns freeing off and leaves the rest running, for a
+comparison on any sequence.
+
 **Inertial configurations** had a second difference, found by auditing every
 change between the two g2o's rather than by measuring: upstream's sparse solver
 refuses the numerically indefinite Hessians an inertial BA produces, and v1.0's

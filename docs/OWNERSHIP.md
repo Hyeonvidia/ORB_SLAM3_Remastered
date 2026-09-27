@@ -244,8 +244,11 @@ Each step is a commit that can be proven on its own.
    per-frame vectors and local BA's g2o objects were then placed. With the 32
    bytes inside the point, dry against points is -0.29, -0.08 and -0.38 ms of
    tracking on KITTI 03, 04 and 07 stereo -- freeing is now slightly the
-   faster of the two -- and local BA is flat. What freeing does to the memory
-   report, run against the dry run on the same machine at the same time:
+   faster of the two -- and local BA is flat. The full KITTI A/B against v1.0,
+   run again with it all on: stereo -0.6 % per frame, faster in 9 sequences
+   of 11; mono 0.0 %, either sign; accuracy the same within the spread. What
+   freeing does to the memory report, run against the dry run on the same
+   machine at the same time:
 
    | | culled MapPoints | peak RSS |
    |---|---:|---:|
