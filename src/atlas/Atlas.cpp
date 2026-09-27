@@ -17,6 +17,7 @@
 */
 
 #include "atlas/Atlas.hpp"
+#include "atlas/Reclaimer.hpp"
 
 #include "camera/GeometricCamera.hpp"
 #include "camera/Pinhole.hpp"
@@ -36,12 +37,24 @@
 namespace ORB_SLAM3
 {
 
-    Atlas::Atlas()
+    namespace
+    {
+        // For now the Reclaimer only counts: Retire() is wired, nothing drives it,
+        // and its count is checked against the memory report's culled objects.
+        std::unique_ptr<Reclaimer> MakeReclaimer()
+        {
+            Reclaimer::Options options;
+            options.bCheckAndFree = false;
+            return std::unique_ptr<Reclaimer>(new Reclaimer(Reclaimer::Hooks(), options));
+        }
+    } // namespace
+
+    Atlas::Atlas() : mpReclaimer(MakeReclaimer())
     {
         mpCurrentMap = static_cast<Map*>(NULL);
     }
 
-    Atlas::Atlas(int initKFid) : mnLastInitKFidMap(initKFid)
+    Atlas::Atlas(int initKFid) : mpReclaimer(MakeReclaimer()), mnLastInitKFidMap(initKFid)
     {
         mpCurrentMap = static_cast<Map*>(NULL);
         CreateNewMap();
@@ -80,6 +93,7 @@ namespace ORB_SLAM3
         std::cout << "Creation of new map with last KF id: " << mnLastInitKFidMap << std::endl;
 
         mpCurrentMap = new Map(mnLastInitKFidMap);
+        mpCurrentMap->SetReclaimer(mpReclaimer.get());
         mpCurrentMap->SetCurrentMap();
         mspMaps.insert(mpCurrentMap);
     }
@@ -347,11 +361,21 @@ namespace ORB_SLAM3
         for(Map* pMi : mvpBackupMaps)
         {
             mspMaps.insert(pMi);
+            pMi->SetReclaimer(mpReclaimer.get());
             pMi->PostLoad(mpKeyFrameDB, mpORBVocabulary, mpCams);
             numKF += pMi->GetAllKeyFrames().size();
             numMP += pMi->GetAllMapPoints().size();
         }
         mvpBackupMaps.clear();
+    }
+
+    void Atlas::ReportReclaimer(std::ostream &os)
+    {
+        const Reclaimer::Stats stats = mpReclaimer->GetStats();
+        os << "  Reclaimer: retired " << stats.nRetired << ", freed " << stats.nFreed << ", kept " << stats.nKept
+           << ", waiting " << stats.nWaiting << " (peak " << stats.nPeakWaiting << "), batches " << stats.nBatches
+           << ", put off " << stats.nPutOffPinned << " pinned + " << stats.nPutOffNamed << " named, late pins "
+           << stats.nLatePins << ", longest step " << stats.longestStep.count() << " us\n";
     }
 
     void Atlas::SetKeyFrameDababase(KeyFrameDatabase* pKFDB)

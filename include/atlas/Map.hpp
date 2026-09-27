@@ -37,6 +37,7 @@ namespace ORB_SLAM3
     class MapPoint;
     class KeyFrame;
     class KeyFrameDatabase;
+    class Reclaimer;
 
     class Map
     {
@@ -75,8 +76,17 @@ namespace ORB_SLAM3
 
         void AddKeyFrame(KeyFrame* pKF);
         void AddMapPoint(MapPoint* pMP);
+        // Takes the pointer out of the map and nothing else; for a point that is
+        // moving to another map.
         void EraseMapPoint(MapPoint* pMP);
         void EraseKeyFrame(KeyFrame* pKF);
+        // For a point that has been culled: out of the map, and over to the
+        // atlas's Reclaimer, which frees it once nobody can still be using it.
+        // Only a point that was in this map goes over, so a second call for the
+        // same point -- SearchAndFuse can Replace() one twice -- hands over
+        // nothing.
+        void RetireMapPoint(MapPoint* pMP);
+        void SetReclaimer(Reclaimer* pReclaimer) { mpReclaimer = pReclaimer; }
         void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
         void InformNewBigChange();
         int GetLastBigChangeIdx();
@@ -169,6 +179,8 @@ namespace ORB_SLAM3
 
         KeyFrame* mpKFinitial;
         KeyFrame* mpKFlowerID;
+
+        Reclaimer* mpReclaimer = nullptr;
 
         unsigned long int mnBackupKFinitialID;
         unsigned long int mnBackupKFlowerID;

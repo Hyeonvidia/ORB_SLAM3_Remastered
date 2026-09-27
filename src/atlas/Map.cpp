@@ -17,6 +17,7 @@
 */
 
 #include "atlas/Map.hpp"
+#include "atlas/Reclaimer.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
 
 #include <mutex>
@@ -107,9 +108,17 @@ namespace ORB_SLAM3
     {
         std::lock_guard<std::mutex> lock(mMutexMap);
         mspMapPoints.erase(pMP);
+    }
 
-        // TODO: This only erase the pointer.
-        // Delete the MapPoint
+    void Map::RetireMapPoint(MapPoint* pMP)
+    {
+        bool bWasHere;
+        {
+            std::lock_guard<std::mutex> lock(mMutexMap);
+            bWasHere = mspMapPoints.erase(pMP) == 1;
+        }
+        if(bWasHere && mpReclaimer)
+            mpReclaimer->Retire(pMP);
     }
 
     void Map::EraseKeyFrame(KeyFrame* pKF)

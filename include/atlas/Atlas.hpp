@@ -22,7 +22,9 @@
 #include "camera/GeometricCamera.hpp"
 
 #include <set>
+#include <memory>
 #include <mutex>
+#include <ostream>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/export.hpp>
 
@@ -42,6 +44,8 @@ namespace ORB_SLAM3
 
     //BOOST_CLASS_EXPORT_GUID(Pinhole, "Pinhole")
     //BOOST_CLASS_EXPORT_GUID(KannalaBrandt8, "KannalaBrandt8")
+
+    class Reclaimer;
 
     class Atlas
     {
@@ -77,6 +81,11 @@ namespace ORB_SLAM3
 
         void CreateNewMap();
         void ChangeMap(Map* pMap);
+
+        // Owns what the maps have culled, until nobody can still be using it
+        // (docs/OWNERSHIP.md). Every map hands its culled objects to it.
+        Reclaimer &GetReclaimer() { return *mpReclaimer; }
+        void ReportReclaimer(std::ostream &os);
 
         unsigned long int GetLastInitKFid();
 
@@ -143,6 +152,8 @@ namespace ORB_SLAM3
         std::vector<Map*> mvpBackupMaps;
 
         Map* mpCurrentMap;
+
+        std::unique_ptr<Reclaimer> mpReclaimer;
 
         std::vector<GeometricCamera*> mvpCameras;
 

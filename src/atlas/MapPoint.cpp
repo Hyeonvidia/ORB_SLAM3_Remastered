@@ -279,7 +279,7 @@ namespace ORB_SLAM3
             }
         }
 
-        mpMap->EraseMapPoint(this);
+        mpMap->RetireMapPoint(this);
     }
 
     MapPoint* MapPoint::GetReplaced()
@@ -342,7 +342,7 @@ namespace ORB_SLAM3
         pMP->IncreaseVisible(nvisible);
         pMP->ComputeDistinctiveDescriptors();
 
-        mpMap->EraseMapPoint(this);
+        mpMap->RetireMapPoint(this);
     }
 
     bool MapPoint::isBad()

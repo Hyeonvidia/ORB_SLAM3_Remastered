@@ -680,7 +680,10 @@ namespace ORB_SLAM3
         pangolin::BindToContext("ORB-SLAM2: Map Viewer");*/
 
         if(MemoryAudit::Enabled())
+        {
             MemoryAudit::Report(std::cout, mpVocabulary->MemoryFootprint());
+            mpAtlas->ReportReclaimer(std::cout);
+        }
 
 #ifdef REGISTER_TIMES
         PrintTimeStats();
