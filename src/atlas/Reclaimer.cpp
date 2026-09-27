@@ -214,6 +214,14 @@ namespace ORB_SLAM3
                 for(const Entry &entry : mvBatch)
                     mvpCandidates.push_back(entry.p);
                 mCandidates.Build(mvpCandidates);
+                mvpWaiting.clear();
+                for(const Entry &entry : mvPutOff)
+                    mvpWaiting.push_back(entry.p);
+                {
+                    std::lock_guard<std::mutex> lock(mMutexIncoming);
+                    for(const Entry &entry : mvIncoming)
+                        mvpWaiting.push_back(entry.p);
+                }
                 mvpNamed.clear();
                 mbScanRestart = true;
                 Enter(State::CHECK, start);
@@ -230,7 +238,8 @@ namespace ORB_SLAM3
             const std::chrono::microseconds used = spent();
             if(used < budget)
             {
-                const bool bDone = mvBatch.empty() || mHooks.scan(mCandidates, mvpNamed, mbScanRestart, budget - used);
+                const bool bDone = mvBatch.empty() ||
+                                   mHooks.scan(mCandidates, mvpWaiting, mvpNamed, mbScanRestart, budget - used);
                 mbScanRestart = false;
                 if(bDone)
                 {
@@ -272,6 +281,7 @@ namespace ORB_SLAM3
             if(mnFreeCursor >= mvBatch.size())
             {
                 mvBatch.clear();
+                mvpWaiting.clear();
                 mnFreeCursor = 0;
                 Enter(State::IDLE, start);
             }
@@ -306,6 +316,7 @@ namespace ORB_SLAM3
         }
         std::lock_guard<std::mutex> lock(mMutexIncoming);
         stats.nRetired = mnRetired;
+        stats.nWaiting = static_cast<std::size_t>(mnRetired - stats.nFreed - stats.nKept);
         return stats;
     }
 

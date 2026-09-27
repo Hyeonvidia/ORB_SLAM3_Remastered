@@ -16,8 +16,13 @@ foreach(variant "" "_tsan")
   endif()
   add_test(NAME reclaimer${variant} COMMAND ${t})
   add_test(NAME reclaimer${variant}_dry_run COMMAND ${t} --dry-run)
-  # A reader that keeps a pointer across its quiescent point without pinning it
-  # must be caught: a test that cannot fail proves nothing.
-  add_test(NAME reclaimer${variant}_forget_pins COMMAND ${t} --forget-pins)
-  set_tests_properties(reclaimer${variant}_forget_pins PROPERTIES WILL_FAIL TRUE)
+  # A reader that keeps a pointer across its quiescent point without pinning
+  # it, a check that skips the culled keyframes' slots, and one that does not
+  # follow replaced-by links must each be caught: a test that cannot fail
+  # proves nothing.
+  foreach(broken forget_pins forget_culled forget_replaced)
+    string(REPLACE "_" "-" flag ${broken})
+    add_test(NAME reclaimer${variant}_${broken} COMMAND ${t} --${flag})
+    set_tests_properties(reclaimer${variant}_${broken} PROPERTIES WILL_FAIL TRUE)
+  endforeach()
 endforeach()

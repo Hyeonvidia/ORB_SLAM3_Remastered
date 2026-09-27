@@ -101,11 +101,16 @@ namespace ORB_SLAM3
         struct Hooks
         {
             // Look in the long-lived holders for members of `candidates` and append
-            // the ones found to `vpNamed`; nullptr entries are ignored. Called again
-            // and again until it returns true (done); each call should take about
-            // `budget`. `bRestart` is true on the first call for a batch.
-            std::function<bool(const PointerSet &candidates, std::vector<void*> &vpNamed, bool bRestart,
-                               std::chrono::microseconds budget)>
+            // the ones found to `vpNamed`; nullptr entries are ignored. `waiting` is
+            // every other retired object, still held here -- a retired object can
+            // name a candidate (a replaced point names its replacement), and one
+            // that a reader still pins may be followed to it. A named candidate
+            // is kept too, so what IT names must be followed as well, to a fixed
+            // point: a chain of replacements can lie entirely inside one batch.
+            // Called again and again until it returns true (done); each call
+            // should take about `budget`. `bRestart` is true on the first call.
+            std::function<bool(const PointerSet &candidates, const std::vector<void*> &waiting,
+                               std::vector<void*> &vpNamed, bool bRestart, std::chrono::microseconds budget)>
                 scan;
             // Free one object.
             std::function<void(void*)> destroy;
@@ -134,8 +139,8 @@ namespace ORB_SLAM3
         {
             std::uint64_t nRetired = 0, nFreed = 0, nKept = 0, nBatches = 0;
             std::uint64_t nPutOffPinned = 0, nPutOffNamed = 0, nLatePins = 0;
-            // As of the end of the last Step(): retired and neither freed nor kept.
-            // nRetired == nFreed + nKept + nWaiting once everything is quiet.
+            // Retired and neither freed nor kept -- so nRetired == nFreed + nKept +
+            // nWaiting always. The peak is as measured at the end of each Step().
             std::size_t nWaiting = 0, nPeakWaiting = 0;
             std::chrono::microseconds longestStep{0};
             // Where the driver is and for how long, so that a stall can be seen.
@@ -228,7 +233,7 @@ namespace ORB_SLAM3
         std::chrono::steady_clock::time_point mStateSince;
         std::uint32_t mnGraceEpoch = 0;
         std::vector<Entry> mvBatch, mvPutOff;
-        std::vector<void*> mvpCandidates, mvpNamed;
+        std::vector<void*> mvpCandidates, mvpWaiting, mvpNamed;
         PointerSet mCandidates;
         bool mbScanRestart = true;
         std::size_t mnFreeCursor = 0;

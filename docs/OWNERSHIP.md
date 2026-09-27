@@ -86,11 +86,16 @@ So:
 
 **Retire.** `MapPoint::SetBadFlag` and `Replace` end in
 `Map::RetireMapPoint(this)` instead of `Map::EraseMapPoint(this)`: erase from
-the set as today, then one `push_back` into the Reclaimer's incoming list under
-its mutex. A state byte in the point (in existing padding) makes retiring
-idempotent -- `SearchAndFuse` can `Replace` the same point twice, and a second
-record for a point whose batch has already gone would be a double free.
-`Map::EraseMapPoint` stays for the map-to-map moves of a merge.
+the set as today, and then, only if the point was in the set, one `push_back`
+into the Reclaimer's incoming list under its mutex. Set membership is what
+makes retiring idempotent -- `SearchAndFuse` can `Replace` the same point
+twice, and a second record for a point whose batch has already gone would be a
+double free. It also means a point that was never in a map, or whose map was
+wiped by `Map::clear()`, is never handed over: it leaks as in v1.0, which is
+the state of wiped units until they get an answer of their own.
+`Map::EraseMapPoint` stays for the map-to-map moves of a merge. A culled
+keyframe goes the same way, `Map::RetireKeyFrame`, onto a list the map keeps:
+keyframes are not freed, and their slots must stay findable (below).
 
 **Wait.** Readers are the threads: Tracking, Local Mapping, Loop Closing, the
 viewer, and a running Global BA. Each announces at a point in its loop where it
@@ -119,11 +124,17 @@ snapshot was taken.)
 **Check.** After the first grace period the batch is checked against every
 structure that can outlive a loop iteration, by looking, not by argument:
 
-- every keyframe's slots, in every map, in Local Mapping's queue, and the
-  culled keyframes that still have slots. Each keyframe's slot vector is copied
-  under its mutex (16 KB, the same hold as `GetMapPointMatches()`), and probed
-  against the batch outside the lock;
-- the replaced-by link of every retired point not in the batch;
+- every keyframe's slots: the live ones of every map, the culled ones of every
+  map (`Map::GetCulledKeyFrames()` -- a culled keyframe keeps its slots, and
+  Loop Closing and Tracking go on reading them through the members that name
+  it, `mpCurrentKF` from the loop queue, `mpReferenceKF`), and Local Mapping's
+  queue. Each keyframe's slot vector is copied under its mutex (16 KB, the same
+  hold as `GetMapPointMatches()`), and probed against the batch outside the
+  lock;
+- the replaced-by link of every retired point not in the batch, which the
+  Reclaimer hands the scan as `waiting`: `Tracking::CheckReplacedInLastFrame`
+  follows a pinned culled point to its replacement and puts the replacement in
+  the last frame, and the replacement may have been culled since;
 - the pins;
 - `Map::mvpReferenceMapPoints` of every map.
 
@@ -155,6 +166,13 @@ before the check.
 What this rests on is the list of *members* that survive a thread's quiescent
 point. A new long-lived pointer member that is not added to its thread's pins
 is a use-after-free. The audit build (below) exists to catch that mechanically.
+A pin that appears at the second grace period and was not there at the first
+("late pin") is what an incomplete list looks like from the inside: it is put
+off, never freed, and counted, and the count must be zero.
+
+`System::GetTrackedMapPoints()` hands the last frame's pointers to the caller.
+They are valid until the next `Track*()` call begins; a wrapper that keeps
+them longer was safe under v1.0, which freed nothing, and is not now.
 
 ## Order of work
 
