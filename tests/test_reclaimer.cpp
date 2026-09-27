@@ -104,7 +104,7 @@ namespace
             p = gLive[i];
             gLive[i] = gLive.back();
             gLive.pop_back();
-            if(rng() % 2 == 0)
+            if(rng() % 4 != 0)
                 pReplacement = gLive[rng() % gLive.size()];
         }
         p->bad.store(true);
@@ -150,8 +150,10 @@ namespace
             // What it kept is still usable -- bad, perhaps, but there. Now and
             // then a culled one that names a replacement is followed there, and
             // the replacement kept: Tracking::CheckReplacedInLastFrame, once a
-            // frame, which is many batches of culling later than the cull.
-            const bool bFollow = id == Reclaimer::TRACKING && rng() % 32 == 0;
+            // frame, which is many batches of culling later than the cull. A
+            // variant that must fail runs until it does, up to 40 s: this one's
+            // chance per batch is small.
+            const bool bFollow = id == Reclaimer::TRACKING && rng() % 16 == 0;
             const std::size_t nHeld = held.size();
             for(std::size_t i = 0; i < nHeld; ++i)
             {
@@ -327,7 +329,7 @@ int main(int argc, char** argv)
     long nCreated = 0, nCulled = 0, nStale = 0, nKeyFramesCulled = 0, nIterations = 0;
     std::chrono::steady_clock::time_point lastGBA = std::chrono::steady_clock::now();
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now() +
-                                                      std::chrono::seconds(bMustFail ? 20 : 4);
+                                                      std::chrono::seconds(bMustFail ? 40 : 4);
     while(std::chrono::steady_clock::now() < end)
     {
         ++nIterations;

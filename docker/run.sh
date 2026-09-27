@@ -19,6 +19,9 @@ done
 [ ${#ARGS[@]} -eq 0 ] && ARGS=(/bin/bash)
 
 ENVS=(-e "ORBSLAM3R_DISPLAY_MODE=${MODE}")
+# glibc prints "free(): invalid pointer" and the like to /dev/tty, of which there is
+# none in a docker exec, unless asked to use stderr.
+ENVS+=(-e "LIBC_FATAL_STDERR_=1")
 if [ "$MODE" = "x11" ]; then
   if ! pgrep -qx Xquartz 2>/dev/null; then
     echo "[run.sh] XQuartz does not look like it is running."
