@@ -109,9 +109,12 @@ An announce costs one relaxed load of an atomic epoch and a compare. Only when
 the epoch has moved -- twice per batch, a batch every few seconds -- does the
 reader copy its pins into a buffer, behind a `try_lock` that Tracking never
 waits for. A batch passes a grace period when every online reader has announced
-since it began. Because a Global BA never announces, nothing is freed while one
-runs: its snapshot of the whole map contains everything culled meanwhile, and
-`FullInertialBA` does not ask `isBad()`.
+since it began. A Global BA never announces, so no batch that begins a grace
+period after it came online passes that grace period until it is over: its
+snapshot of the whole map contains everything culled meanwhile, and
+`FullInertialBA` does not ask `isBad()`. (A batch already past its retire when
+the BA started may still be freed -- everything in it was unlinked before the
+snapshot was taken.)
 
 **Check.** After the first grace period the batch is checked against every
 structure that can outlive a loop iteration, by looking, not by argument:

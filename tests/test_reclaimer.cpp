@@ -3,6 +3,7 @@
 // to show that the test can tell.
 //
 //   test_reclaimer                 must pass
+//   test_reclaimer --dry-run       must pass: the protocol runs, nothing is freed
 //   test_reclaimer --forget-pins   must fail: a reader keeps a pointer in a member
 //                                  across its quiescent point and does not pin it
 //
@@ -161,6 +162,7 @@ namespace
 int main(int argc, char** argv)
 {
     const bool bForgetPins = argc > 1 && std::strcmp(argv[1], "--forget-pins") == 0;
+    const bool bDryRun = argc > 1 && std::strcmp(argv[1], "--dry-run") == 0;
 
     std::vector<Object*> vpFreed;
     int nScanCursor = 0;
@@ -191,6 +193,7 @@ int main(int argc, char** argv)
     Reclaimer::Options options;
     options.nBatchObjects = 256;
     options.maxAge = std::chrono::seconds(1);
+    options.bCheckAndFree = !bDryRun;
     Reclaimer reclaimer(hooks, options);
 
     std::thread tracking(Reader, std::ref(reclaimer), Reclaimer::TRACKING, 1u, !bForgetPins);
@@ -264,6 +267,16 @@ int main(int argc, char** argv)
         reclaimer.Step(std::chrono::microseconds(1000));
         std::this_thread::sleep_for(std::chrono::microseconds(500));
     }
+    // The run is over, nothing is retired any more, and the readers go on.
+    // What was put off must still come back and be freed.
+    const std::size_t nWaitingAtEnd = reclaimer.GetStats().nWaiting;
+    recent.clear();
+    for(int n = 0; n < 2500; ++n)
+    {
+        reclaimer.Announce(Reclaimer::LOCAL_MAPPING, [](std::vector<const void*> &) {});
+        reclaimer.Step(std::chrono::microseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     gStop.store(true);
     tracking.join();
     loopClosing.join();
@@ -279,6 +292,7 @@ int main(int argc, char** argv)
                 static_cast<unsigned long long>(stats.nPutOffPinned),
                 static_cast<unsigned long long>(stats.nPutOffNamed), static_cast<unsigned long long>(stats.nLatePins),
                 static_cast<long long>(stats.longestStep.count()));
+    std::printf("waiting when the run ended %zu, after idling %zu\n", nWaitingAtEnd, stats.nWaiting);
 
     int rc = 0;
     const auto expect = [&rc](bool ok, const char* what)
@@ -290,11 +304,20 @@ int main(int argc, char** argv)
         }
     };
     expect(stats.nRetired == static_cast<std::uint64_t>(nCulled), "every culled object was retired");
-    expect(stats.nFreed + stats.nWaiting == stats.nRetired, "retired = freed + still waiting");
-    expect(stats.nFreed > stats.nRetired / 2, "most of what was culled was freed");
-    expect(stats.nPutOffNamed > 0, "objects left in a slot were found by the check and put off");
+    expect(stats.nFreed + stats.nKept + stats.nWaiting == stats.nRetired, "retired = freed + kept + still waiting");
+    if(bDryRun)
+    {
+        expect(stats.nFreed == 0 && vpFreed.empty(), "a dry run frees nothing");
+        expect(stats.nKept > stats.nRetired / 2, "a dry run runs the protocol to its end");
+    }
+    else
+    {
+        expect(stats.nFreed > stats.nRetired / 2, "most of what was culled was freed");
+        expect(stats.nPutOffNamed > 0, "objects left in a slot were found by the check and put off");
+        expect(stats.nLatePins == 0, "nothing was pinned after the check that was not pinned before it");
+    }
     expect(stats.nPutOffPinned > 0, "objects a reader kept were put off");
-    expect(stats.nLatePins == 0, "nothing was pinned after the check that was not pinned before it");
+    expect(stats.nWaiting < nWaitingAtEnd / 4 + 64, "what was put off came back once nothing held it");
     expect(stats.longestStep < std::chrono::milliseconds(20), "a step stays near its budget");
     for(Object* p : vpFreed)
         delete p;

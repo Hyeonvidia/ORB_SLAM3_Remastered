@@ -19,6 +19,7 @@
 #include "atlas/Reclaimer.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <utility>
 
 namespace ORB_SLAM3
@@ -26,7 +27,7 @@ namespace ORB_SLAM3
 
     namespace
     {
-        // An object that was put off n times is looked at again every 2^n batches,
+        // An object that was put off n times is looked at again after maxAge * 2^n,
         // up to this: one that a live keyframe names may be named for the rest of
         // the run, and must not bring the whole map's scan with it every time.
         const unsigned kMaxPutOffShift = 6;
@@ -55,7 +56,12 @@ namespace ORB_SLAM3
         }
     }
 
-    Reclaimer::Reclaimer(Hooks hooks, Options options) : mHooks(std::move(hooks)), mOptions(options) {}
+    Reclaimer::Reclaimer(Hooks hooks, Options options) : mHooks(std::move(hooks)), mOptions(options)
+    {
+        assert(!mOptions.bCheckAndFree || (mHooks.scan && mHooks.destroy));
+        mStateSince = std::chrono::steady_clock::now();
+        mStats.stateSince = mStateSince;
+    }
 
     Reclaimer::~Reclaimer()
     {
@@ -79,9 +85,10 @@ namespace ORB_SLAM3
         Slot &slot = mSlots[r];
         slot.bOnline = bOnline;
         slot.vpPins.clear();
-        // It holds nothing now, which is what announcing says.
+        // It holds nothing now, which is what announcing says. nSeen is the
+        // reader's thread's own and is left alone: if it is behind, the reader
+        // publishes once more at its next Announce, which changes nothing.
         slot.nAnnounced = mEpoch.load();
-        slot.nSeen = slot.nAnnounced;
     }
 
     void Reclaimer::Publish(Reader r, std::uint32_t epoch, bool bWait)
@@ -110,119 +117,141 @@ namespace ORB_SLAM3
         return true;
     }
 
+    // Takes out of the batch whatever `vp` names, counting it under `counter`.
+    void Reclaimer::PutOffAll(const std::vector<const void*> &vp, std::uint64_t &counter,
+                              std::chrono::steady_clock::time_point now)
+    {
+        if(vp.empty() || mvBatch.empty())
+            return;
+        std::vector<void*> vpNamed;
+        vpNamed.reserve(vp.size());
+        for(const void* p : vp)
+            vpNamed.push_back(const_cast<void*>(p));
+        PointerSet named;
+        named.Build(vpNamed);
+        for(Entry &entry : mvBatch)
+            if(named.Contains(entry.p))
+            {
+                if(entry.nPutOff < 255)
+                    ++entry.nPutOff;
+                const unsigned shift = std::min<unsigned>(entry.nPutOff - 1, kMaxPutOffShift);
+                entry.when = now + mOptions.maxAge * (1u << shift);
+                mvPutOff.push_back(entry);
+                entry.p = nullptr;
+                ++counter;
+            }
+        mvBatch.erase(std::remove_if(mvBatch.begin(), mvBatch.end(), [](const Entry &e) { return !e.p; }),
+                      mvBatch.end());
+    }
+
+    void Reclaimer::Enter(State state, std::chrono::steady_clock::time_point now)
+    {
+        mState = state;
+        mStateSince = now;
+    }
+
     void Reclaimer::Step(std::chrono::microseconds budget)
     {
+        if(mDriver == std::thread::id())
+            mDriver = std::this_thread::get_id();
+        assert(mDriver == std::this_thread::get_id() && "Reclaimer::Step has one driver");
+
         const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-        const auto spent = [&start] { return std::chrono::steady_clock::now() - start; };
+        const auto spent = [&start]
+        { return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start); };
         Stats delta;
 
-        // Removes from the batch what `vp` names, counting it under `counter`.
-        const auto putOffAll = [this](const std::vector<const void*> &vp, std::uint64_t &counter)
-        {
-            if(vp.empty() || mvBatch.empty())
-                return;
-            std::vector<void*> vpNamed;
-            vpNamed.reserve(vp.size());
-            for(const void* p : vp)
-                vpNamed.push_back(const_cast<void*>(p));
-            PointerSet named;
-            named.Build(vpNamed);
-            for(Entry &entry : mvBatch)
-                if(entry.p && named.Contains(entry.p))
-                {
-                    if(entry.nPutOff < 255)
-                        ++entry.nPutOff;
-                    mvPutOff.push_back(entry);
-                    entry.p = nullptr;
-                    ++counter;
-                }
-            mvBatch.erase(std::remove_if(mvBatch.begin(), mvBatch.end(), [](const Entry &e) { return !e.p; }),
-                          mvBatch.end());
-        };
-        const auto rebuildCandidates = [this]
-        {
-            mvpCandidates.clear();
-            mvpCandidates.reserve(mvBatch.size());
-            for(const Entry &entry : mvBatch)
-                mvpCandidates.push_back(entry.p);
-            mCandidates.Build(mvpCandidates);
-        };
-
-        bool bBegin = false;
         if(mState == State::IDLE)
         {
-            std::lock_guard<std::mutex> lock(mMutexIncoming);
-            const bool bFull = mvIncoming.size() >= mOptions.nBatchObjects;
-            const bool bOld = !mvIncoming.empty() && start - mvIncoming.front().retired >= mOptions.maxAge;
-            bBegin = bFull || bOld;
-            if(bBegin)
-                mvBatch.swap(mvIncoming);
-        }
-        if(bBegin)
-        {
-            // The ones put off before come along when their turn is due.
+            bool bBegin = false;
+            {
+                std::lock_guard<std::mutex> lock(mMutexIncoming);
+                const bool bFull = !mvIncoming.empty() && mvIncoming.size() >= mOptions.nBatchObjects;
+                const bool bOld = !mvIncoming.empty() && start - mvIncoming.front().when >= mOptions.maxAge;
+                if(bFull || bOld)
+                {
+                    bBegin = true;
+                    if(mvIncoming.size() <= mOptions.nMaxBatchObjects)
+                        mvBatch.swap(mvIncoming);
+                    else
+                    {
+                        // The oldest go first; the rest stay, and bOld keeps firing.
+                        mvBatch.assign(mvIncoming.begin(), mvIncoming.begin() + mOptions.nMaxBatchObjects);
+                        mvIncoming.erase(mvIncoming.begin(), mvIncoming.begin() + mOptions.nMaxBatchObjects);
+                    }
+                }
+            }
+            // The ones put off before come along when their turn is due -- and can
+            // begin a batch by themselves, or they would wait for the next retire,
+            // which after the last keyframe never comes.
             std::vector<Entry> vStill;
             for(const Entry &entry : mvPutOff)
             {
-                const unsigned shift = std::min<unsigned>(entry.nPutOff, kMaxPutOffShift);
-                if(mnBatch % (1ull << shift) == 0)
+                if(entry.when <= start)
+                {
                     mvBatch.push_back(entry);
+                    bBegin = true;
+                }
                 else
                     vStill.push_back(entry);
             }
             mvPutOff.swap(vStill);
-
+            if(!bBegin)
+                return;
             mnGraceEpoch = mEpoch.fetch_add(1) + 1;
-            mState = State::GRACE1;
+            Enter(State::GRACE1, start);
             ++delta.nBatches;
         }
 
         std::vector<const void*> vpPins;
-        if(mState == State::GRACE1)
+        if(mState == State::GRACE1 && GraceOver(mnGraceEpoch, vpPins))
         {
-            if(GraceOver(mnGraceEpoch, vpPins))
+            PutOffAll(vpPins, delta.nPutOffPinned, start);
+            if(mOptions.bCheckAndFree)
             {
-                putOffAll(vpPins, delta.nPutOffPinned);
-                rebuildCandidates();
+                mvpCandidates.clear();
+                mvpCandidates.reserve(mvBatch.size());
+                for(const Entry &entry : mvBatch)
+                    mvpCandidates.push_back(entry.p);
+                mCandidates.Build(mvpCandidates);
                 mvpNamed.clear();
                 mbScanRestart = true;
-                if(mOptions.bCheckAndFree)
-                    mState = State::CHECK;
-                else
+                Enter(State::CHECK, start);
+            }
+            else
+            {
+                mnGraceEpoch = mEpoch.fetch_add(1) + 1;
+                Enter(State::GRACE2, start);
+            }
+        }
+
+        if(mState == State::CHECK)
+        {
+            const std::chrono::microseconds used = spent();
+            if(used < budget)
+            {
+                const bool bDone = mvBatch.empty() || mHooks.scan(mCandidates, mvpNamed, mbScanRestart, budget - used);
+                mbScanRestart = false;
+                if(bDone)
                 {
+                    const std::vector<const void*> vpNamed(mvpNamed.begin(), mvpNamed.end());
+                    PutOffAll(vpNamed, delta.nPutOffNamed, start);
+                    mvpNamed.clear();
                     mnGraceEpoch = mEpoch.fetch_add(1) + 1;
-                    mState = State::GRACE2;
+                    Enter(State::GRACE2, start);
                 }
             }
         }
 
-        if(mState == State::CHECK && spent() < budget)
+        if(mState == State::GRACE2 && GraceOver(mnGraceEpoch, vpPins))
         {
-            const std::chrono::microseconds left = budget -
-                                                   std::chrono::duration_cast<std::chrono::microseconds>(spent());
-            const bool bDone = mvBatch.empty() || mHooks.scan(mCandidates, mvpNamed, mbScanRestart, left);
-            mbScanRestart = false;
-            if(bDone)
-            {
-                std::vector<const void*> vpNamed(mvpNamed.begin(), mvpNamed.end());
-                putOffAll(vpNamed, delta.nPutOffNamed);
-                rebuildCandidates();
-                mnGraceEpoch = mEpoch.fetch_add(1) + 1;
-                mState = State::GRACE2;
-            }
-        }
-
-        if(mState == State::GRACE2)
-        {
-            if(GraceOver(mnGraceEpoch, vpPins))
-            {
-                // Nothing should be pinned that was not pinned before the check: a
-                // reader can only have got it from a holder the check looked in. If
-                // it happens, the list of holders is incomplete.
-                putOffAll(vpPins, delta.nLatePins);
-                mnFreeCursor = 0;
-                mState = State::FREE;
-            }
+            // Nothing should be pinned now that was not pinned before the check: a
+            // reader can only have got it from a holder the check looked in. If it
+            // happens, the list of holders is incomplete. In a dry run there was no
+            // check, so a pin here is an ordinary one.
+            PutOffAll(vpPins, mOptions.bCheckAndFree ? delta.nLatePins : delta.nPutOffPinned, start);
+            mnFreeCursor = 0;
+            Enter(State::FREE, start);
         }
 
         if(mState == State::FREE)
@@ -231,27 +260,24 @@ namespace ORB_SLAM3
             {
                 if((mnFreeCursor & 63) == 0 && spent() >= budget)
                     break;
+                void* const p = mvBatch[mnFreeCursor++].p;
                 if(mOptions.bCheckAndFree)
                 {
-                    mHooks.destroy(mvBatch[mnFreeCursor].p);
+                    mHooks.destroy(p);
                     ++delta.nFreed;
                 }
                 else
                     ++delta.nKept;
-                ++mnFreeCursor;
             }
             if(mnFreeCursor >= mvBatch.size())
             {
                 mvBatch.clear();
-                mvpCandidates.clear();
-                mCandidates.Build(mvpCandidates);
                 mnFreeCursor = 0;
-                ++mnBatch;
-                mState = State::IDLE;
+                Enter(State::IDLE, start);
             }
         }
 
-        const std::chrono::microseconds took = std::chrono::duration_cast<std::chrono::microseconds>(spent());
+        const std::chrono::microseconds took = spent();
         std::size_t nIncoming = 0;
         {
             std::lock_guard<std::mutex> lock(mMutexIncoming);
@@ -264,9 +290,11 @@ namespace ORB_SLAM3
         mStats.nPutOffPinned += delta.nPutOffPinned;
         mStats.nPutOffNamed += delta.nPutOffNamed;
         mStats.nLatePins += delta.nLatePins;
-        mStats.nWaiting = nIncoming + mvPutOff.size() + (mvBatch.size() - std::min(mnFreeCursor, mvBatch.size()));
+        mStats.nWaiting = nIncoming + mvPutOff.size() + (mvBatch.size() - mnFreeCursor);
         mStats.nPeakWaiting = std::max(mStats.nPeakWaiting, mStats.nWaiting);
         mStats.longestStep = std::max(mStats.longestStep, took);
+        mStats.state = mState;
+        mStats.stateSince = mStateSince;
     }
 
     Reclaimer::Stats Reclaimer::GetStats() const

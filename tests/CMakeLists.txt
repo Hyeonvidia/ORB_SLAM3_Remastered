@@ -15,6 +15,7 @@ foreach(variant "" "_tsan")
     target_link_options(${t} PRIVATE -fsanitize=thread)
   endif()
   add_test(NAME reclaimer${variant} COMMAND ${t})
+  add_test(NAME reclaimer${variant}_dry_run COMMAND ${t} --dry-run)
   # A reader that keeps a pointer across its quiescent point without pinning it
   # must be caught: a test that cannot fail proves nothing.
   add_test(NAME reclaimer${variant}_forget_pins COMMAND ${t} --forget-pins)
