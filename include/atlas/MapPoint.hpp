@@ -20,6 +20,7 @@
 #define MAPPOINT_H
 
 #include "common/Converter.hpp"
+#include "atlas/SlotPool.hpp"
 
 #include "common/SerializationUtils.hpp"
 
@@ -104,7 +105,14 @@ namespace ORB_SLAM3
         }
 
     public:
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        // From a pool of MapPoints' own (atlas/SlotPool.hpp), so that a frame's
+        // new points sit together whatever has been freed, and freeing them
+        // never reaches glibc. 16-byte aligned, as Eigen's operator new was.
+        static void* operator new(std::size_t nBytes);
+        static void operator delete(void* p);
+        static void operator delete(void* p, std::size_t nBytes);
+        static const SlotPool &Pool();
+
         MapPoint();
         ~MapPoint();
 

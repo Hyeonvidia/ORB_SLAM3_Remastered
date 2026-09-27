@@ -503,6 +503,9 @@ namespace ORB_SLAM3
                 nCulledKeyFrames += pMap->GetCulledKeyFrames().size();
         }
         os << "  Culled keyframes on the maps' lists: " << nCulledKeyFrames << "\n";
+        const SlotPool::Stats pool = MapPoint::Pool().GetStats();
+        os << "  MapPoint pool: " << pool.nSlabs << " slabs, " << pool.nUsed << " of " << pool.nSlots
+           << " slots in use, " << pool.nBytes / 1048576.0 << " MB\n";
         const char* mode = ReclaimMode() == Reclaim::COUNT    ? "count"
                            : ReclaimMode() == Reclaim::DRY    ? "dry run"
                            : ReclaimMode() == Reclaim::POINTS ? "points"

@@ -55,6 +55,45 @@ namespace ORB_SLAM3
             MemoryAudit::Unregister(this);
     }
 
+    namespace
+    {
+        SlotPool &ThePool()
+        {
+            // Never destroyed: MapPoints are deleted from static destructors' point
+            // of view in no particular order, and the pool must outlive them all.
+            static SlotPool* pPool = new SlotPool(sizeof(MapPoint));
+            return *pPool;
+        }
+    } // namespace
+
+    const SlotPool &MapPoint::Pool()
+    {
+        return ThePool();
+    }
+
+    void* MapPoint::operator new(std::size_t nBytes)
+    {
+        // Nothing derives from MapPoint; the size is the pool's slot.
+        if(nBytes != sizeof(MapPoint))
+            return ::operator new(nBytes);
+        return ThePool().Allocate();
+    }
+
+    void MapPoint::operator delete(void* p)
+    {
+        ThePool().Free(p);
+    }
+
+    void MapPoint::operator delete(void* p, std::size_t nBytes)
+    {
+        if(nBytes != sizeof(MapPoint))
+        {
+            ::operator delete(p);
+            return;
+        }
+        ThePool().Free(p);
+    }
+
     std::map<std::string, std::size_t> MapPoint::MemoryFootprint() const
     {
         std::map<std::string, std::size_t> f;
