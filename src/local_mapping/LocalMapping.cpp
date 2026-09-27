@@ -470,6 +470,16 @@ namespace ORB_SLAM3
 
     void LocalMapping::ProcessNewKeyFrame()
     {
+        // One at a time. Loop Closing runs this too, through EmptyQueue(), and in
+        // v1.0 it could run while this thread was inside it: both set
+        // mpCurrentKeyFrame, so the loop below added the first keyframe's points
+        // to the second keyframe's observations at the first keyframe's indices --
+        // the 323 observations of a culled keyframe on MH01 whose point is not
+        // in that keyframe's slot (the memory report's census). The same mutex
+        // keeps the Reclaimer's check from looking between the pop and the
+        // AddKeyFrame() below, when the keyframe is in neither the queue nor a
+        // map.
+        std::lock_guard<std::mutex> pass(mMutexPass);
         {
             std::lock_guard<std::mutex> lock(mMutexNewKFs);
             mpCurrentKeyFrame = mlNewKeyFrames.front();
@@ -512,7 +522,6 @@ namespace ORB_SLAM3
 
     void LocalMapping::EmptyQueue()
     {
-        std::lock_guard<std::mutex> lock(mMutexPass);
         while(CheckNewKeyFrames())
             ProcessNewKeyFrame();
     }

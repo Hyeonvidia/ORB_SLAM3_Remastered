@@ -746,8 +746,10 @@ namespace ORB_SLAM3
             mbBad = true;
         }
 
-        mpMap->RetireKeyFrame(this);
+        // Out of the database first: once the map has it as culled, the Reclaimer
+        // may act on it, and the database's readers score mBowVec without a lock.
         mpKeyFrameDB->erase(this);
+        mpMap->RetireKeyFrame(this);
     }
 
     bool KeyFrame::isBad()

@@ -42,6 +42,14 @@ namespace ORB_SLAM3
     {
         std::lock_guard<std::mutex> lock(mMutex);
 
+        // A keyframe culled while it waited in Loop Closing's queue arrives here
+        // after its erase(), and v1.0 put it back for the rest of the run: every
+        // later query scored it, and DetectNBestCandidates could stall on it.
+        // Checked under this mutex: a SetBadFlag() that comes later runs its
+        // erase() under this mutex after this add() and takes it out again.
+        if(pKF->isBad())
+            return;
+
         for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             mvInvertedFile[vit->first].push_back(pKF);
     }
@@ -739,7 +747,13 @@ namespace ORB_SLAM3
         {
             KeyFrame* pKFi = it->second;
             if(pKFi->isBad())
+            {
+                // v1.0 went round again without moving on: a culled keyframe among
+                // the candidates kept Loop Closing here for good.
+                i++;
+                it++;
                 continue;
+            }
 
             if(!spAlreadyAddedKF.count(pKFi))
             {
