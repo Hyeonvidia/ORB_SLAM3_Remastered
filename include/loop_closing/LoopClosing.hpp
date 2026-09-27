@@ -120,6 +120,9 @@ namespace ORB_SLAM3
 
     protected:
         bool CheckNewKeyFrames();
+        // Top of the loop: this thread holds nothing from earlier iterations but
+        // its members (docs/OWNERSHIP.md).
+        void AnnounceQuiescent();
 
         //Methods to implement the new place recognition algorithm
         bool NewDetectCommonRegions();

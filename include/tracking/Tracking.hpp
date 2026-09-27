@@ -192,6 +192,11 @@ namespace ORB_SLAM3
         // Main tracking function. It is independent of the input sensor.
         void Track();
 
+        // Before Track(): Tracking holds nothing from earlier frames but its
+        // members, and says so to the Reclaimer (docs/OWNERSHIP.md). Outside
+        // Track() so that Track()'s object code is untouched.
+        void AnnounceQuiescent();
+
         // Map initialization for stereo and RGB-D
         void StereoInitialization();
 

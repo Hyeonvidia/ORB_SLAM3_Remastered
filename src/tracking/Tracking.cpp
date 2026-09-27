@@ -17,6 +17,7 @@
 */
 
 #include "tracking/Tracking.hpp"
+#include "atlas/Reclaimer.hpp"
 
 #include "tracking/ORBmatcher.hpp"
 #include "viewer/FrameDrawer.hpp"
@@ -64,6 +65,7 @@ namespace ORB_SLAM3
           mnLastRelocFrameId(0), time_recently_lost(5.0), mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0),
           mpCamera2(nullptr), mpLastKeyFrame(static_cast<KeyFrame*>(NULL))
     {
+        mpAtlas->GetReclaimer().SetOnline(Reclaimer::TRACKING, true);
         // Load camera parameters from settings file
         if(settings)
         {
@@ -1251,6 +1253,7 @@ namespace ORB_SLAM3
 #endif
 
         //cout << "Tracking start" << endl;
+        AnnounceQuiescent();
         Track();
         //cout << "Tracking end" << endl;
 
@@ -1295,6 +1298,7 @@ namespace ORB_SLAM3
         vdORBExtract_ms.push_back(mCurrentFrame.mTimeORB_Ext);
 #endif
 
+        AnnounceQuiescent();
         Track();
 
         return mCurrentFrame.GetPose();
@@ -1350,6 +1354,7 @@ namespace ORB_SLAM3
 #endif
 
         lastID = mCurrentFrame.mnId;
+        AnnounceQuiescent();
         Track();
 
         return mCurrentFrame.GetPose();
@@ -1538,6 +1543,23 @@ namespace ORB_SLAM3
     void Tracking::ResetFrameIMU()
     {
         // TODO To implement...
+    }
+
+    void Tracking::AnnounceQuiescent()
+    {
+        // The members that hold a MapPoint* from one frame to the next. The
+        // current frame's slots are all null here: it was made a moment ago.
+        // The temporal points are Tracking's own and never retired. With bWait
+        // false this never waits for the Reclaimer's lock; it tries again next
+        // frame. When no batch is waiting it is one load and a compare.
+        mpAtlas->GetReclaimer().Announce(
+            Reclaimer::TRACKING,
+            [this](std::vector<const void*> &pins)
+            {
+                pins.insert(pins.end(), mLastFrame.mvpMapPoints.begin(), mLastFrame.mvpMapPoints.end());
+                pins.insert(pins.end(), mvpLocalMapPoints.begin(), mvpLocalMapPoints.end());
+            },
+            false);
     }
 
     void Tracking::Track()

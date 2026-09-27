@@ -161,6 +161,8 @@ namespace ORB_SLAM3
         // Information from most recent processed frame
         // You can call this right after TrackMonocular (or stereo or RGBD)
         int GetTrackingState();
+        // The last frame's map points. Valid until the next Track*() call
+        // begins: after that the atlas may reclaim what was culled meanwhile.
         std::vector<MapPoint*> GetTrackedMapPoints();
         std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
 

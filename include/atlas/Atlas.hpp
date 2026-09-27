@@ -87,6 +87,17 @@ namespace ORB_SLAM3
         Reclaimer &GetReclaimer() { return *mpReclaimer; }
         void ReportReclaimer(std::ostream &os);
 
+        // How far the Reclaimer goes, from ORBSLAM3R_RECLAIM:
+        //   count  culled objects are handed over and counted; nothing else
+        //   dry    the whole protocol runs -- every thread announces, batches
+        //          pass their grace periods -- and nothing is freed (the default)
+        enum class Reclaim
+        {
+            COUNT,
+            DRY
+        };
+        static Reclaim ReclaimMode();
+
         unsigned long int GetLastInitKFid();
 
         // Method for change components in the current map

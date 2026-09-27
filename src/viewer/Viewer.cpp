@@ -17,6 +17,8 @@
 */
 
 #include "viewer/Viewer.hpp"
+#include "atlas/Atlas.hpp"
+#include "atlas/Reclaimer.hpp"
 #include "viewer/FrameDrawer.hpp"
 #include <pangolin/pangolin.h>
 #include <pangolin/display/process.h>
@@ -549,8 +551,13 @@ namespace ORB_SLAM3
         float trackedImageScale = mpTracker->GetImageScale();
 
         std::cout << "Starting the Viewer" << std::endl;
+        // A reader while it runs. It copies what it draws inside one iteration
+        // and keeps no MapPoint* in a member, so it has nothing to pin.
+        Reclaimer &reclaimer = mpMapDrawer->mpAtlas->GetReclaimer();
+        reclaimer.SetOnline(Reclaimer::VIEWER, true);
         while(1)
         {
+            reclaimer.Announce(Reclaimer::VIEWER, [](std::vector<const void*> &) {});
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             mpMapDrawer->GetCurrentOpenGLCameraMatrix(Twc, Ow);
@@ -918,16 +925,21 @@ namespace ORB_SLAM3
 
             if(Stop())
             {
+                // Not a reader while it waits, or nothing would be reclaimed until
+                // it is released.
+                reclaimer.SetOnline(Reclaimer::VIEWER, false);
                 while(isStopped())
                 {
                     usleep(3000);
                 }
+                reclaimer.SetOnline(Reclaimer::VIEWER, true);
             }
 
             if(CheckFinish())
                 break;
         }
 
+        reclaimer.SetOnline(Reclaimer::VIEWER, false);
         SetFinish();
     }
 

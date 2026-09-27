@@ -19,6 +19,9 @@
 #include "atlas/Atlas.hpp"
 #include "atlas/Reclaimer.hpp"
 
+#include <cstdlib>
+#include <string>
+
 #include "camera/GeometricCamera.hpp"
 #include "camera/Pinhole.hpp"
 #include "camera/KannalaBrandt8.hpp"
@@ -39,8 +42,8 @@ namespace ORB_SLAM3
 
     namespace
     {
-        // For now the Reclaimer only counts: Retire() is wired, nothing drives it,
-        // and its count is checked against the memory report's culled objects.
+        // Nothing is freed yet in any mode: the hooks that would look in the
+        // holders and free come with the next steps of docs/OWNERSHIP.md.
         std::unique_ptr<Reclaimer> MakeReclaimer()
         {
             Reclaimer::Options options;
@@ -48,6 +51,16 @@ namespace ORB_SLAM3
             return std::unique_ptr<Reclaimer>(new Reclaimer(Reclaimer::Hooks(), options));
         }
     } // namespace
+
+    Atlas::Reclaim Atlas::ReclaimMode()
+    {
+        static const Reclaim mode = []
+        {
+            const char* env = std::getenv("ORBSLAM3R_RECLAIM");
+            return env && std::string(env) == "count" ? Reclaim::COUNT : Reclaim::DRY;
+        }();
+        return mode;
+    }
 
     Atlas::Atlas() : mpReclaimer(MakeReclaimer())
     {
@@ -372,10 +385,11 @@ namespace ORB_SLAM3
     void Atlas::ReportReclaimer(std::ostream &os)
     {
         const Reclaimer::Stats stats = mpReclaimer->GetStats();
-        os << "  Reclaimer: retired " << stats.nRetired << ", freed " << stats.nFreed << ", kept " << stats.nKept
-           << ", waiting " << stats.nWaiting << " (peak " << stats.nPeakWaiting << "), batches " << stats.nBatches
-           << ", put off " << stats.nPutOffPinned << " pinned + " << stats.nPutOffNamed << " named, late pins "
-           << stats.nLatePins << ", longest step " << stats.longestStep.count() << " us\n";
+        os << "  Reclaimer (" << (ReclaimMode() == Reclaim::COUNT ? "count" : "dry run") << "): retired "
+           << stats.nRetired << ", freed " << stats.nFreed << ", kept " << stats.nKept << ", waiting " << stats.nWaiting
+           << " (peak " << stats.nPeakWaiting << "), batches " << stats.nBatches << ", put off " << stats.nPutOffPinned
+           << " pinned + " << stats.nPutOffNamed << " named, late pins " << stats.nLatePins << ", longest step "
+           << stats.longestStep.count() << " us\n";
     }
 
     void Atlas::SetKeyFrameDababase(KeyFrameDatabase* pKFDB)

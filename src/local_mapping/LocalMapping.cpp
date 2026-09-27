@@ -17,6 +17,8 @@
 */
 
 #include "local_mapping/LocalMapping.hpp"
+#include "atlas/Atlas.hpp"
+#include "atlas/Reclaimer.hpp"
 #include "loop_closing/LoopClosing.hpp"
 #include "tracking/ORBmatcher.hpp"
 #include "optimization/Optimizer.hpp"
@@ -179,6 +181,7 @@ namespace ORB_SLAM3
     void LocalMapping::Run()
     {
         mbFinished = false;
+        mpAtlas->GetReclaimer().SetOnline(Reclaimer::LOCAL_MAPPING, true);
 
         while(1)
         {
@@ -409,10 +412,35 @@ namespace ORB_SLAM3
             if(CheckFinish())
                 break;
 
-            usleep(3000);
+            SleepAndReclaim();
         }
 
+        mpAtlas->GetReclaimer().SetOnline(Reclaimer::LOCAL_MAPPING, false);
         SetFinish();
+    }
+
+    void LocalMapping::SleepAndReclaim()
+    {
+        // This thread holds nothing from earlier iterations but its members: the
+        // recently added points, which MapPointCulling still reads, and keyframes,
+        // which are not reclaimed. It is also the Reclaimer's driver, and the
+        // driver's slice comes out of the 3 ms the loop slept here anyway.
+        Reclaimer &reclaimer = mpAtlas->GetReclaimer();
+        reclaimer.Announce(Reclaimer::LOCAL_MAPPING,
+                           [this](std::vector<const void*> &pins) {
+                               pins.insert(pins.end(), mlpRecentAddedMapPoints.begin(), mlpRecentAddedMapPoints.end());
+                           });
+        if(Atlas::ReclaimMode() == Atlas::Reclaim::COUNT)
+        {
+            usleep(3000);
+            return;
+        }
+        const std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        reclaimer.Step(std::chrono::microseconds(1000));
+        const std::chrono::microseconds took = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - t0);
+        if(took < std::chrono::microseconds(3000))
+            usleep(3000 - took.count());
     }
 
     void LocalMapping::InsertKeyFrame(KeyFrame* pKF)

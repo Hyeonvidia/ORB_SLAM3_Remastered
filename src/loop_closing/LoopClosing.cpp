@@ -17,6 +17,7 @@
 */
 
 #include "loop_closing/LoopClosing.hpp"
+#include "atlas/Reclaimer.hpp"
 
 #include "loop_closing/Sim3Solver.hpp"
 #include "common/Converter.hpp"
@@ -209,9 +210,14 @@ namespace ORB_SLAM3
     void LoopClosing::Run()
     {
         mbFinished = false;
+        mpAtlas->GetReclaimer().SetOnline(Reclaimer::LOOP_CLOSING, true);
 
         while(1)
         {
+            // At the top rather than the bottom: one path leaves an iteration with
+            // `continue`, and the top is where every iteration begins.
+            AnnounceQuiescent();
+
             //NEW LOOP AND MERGE DETECTION ALGORITHM
             //----------------------------
 
@@ -438,7 +444,20 @@ namespace ORB_SLAM3
         // reporting finished is what extends that wait to cover it.
         StopAndJoinGBA();
 
+        mpAtlas->GetReclaimer().SetOnline(Reclaimer::LOOP_CLOSING, false);
         SetFinish();
+    }
+
+    void LoopClosing::AnnounceQuiescent()
+    {
+        mpAtlas->GetReclaimer().Announce(Reclaimer::LOOP_CLOSING,
+                                         [this](std::vector<const void*> &pins)
+                                         {
+                                             for(const std::vector<MapPoint*>* pv :
+                                                 {&mvpLoopMPs, &mvpLoopMatchedMPs, &mvpMergeMPs, &mvpMergeMatchedMPs,
+                                                  &mvpLoopMapPoints, &mvpCurrentMatchedPoints})
+                                                 pins.insert(pins.end(), pv->begin(), pv->end());
+                                         });
     }
 
     void LoopClosing::InsertKeyFrame(KeyFrame* pKF)
@@ -1378,6 +1397,7 @@ namespace ORB_SLAM3
             mbStopGBA = false;
             mnCorrectionGBA = mnNumCorrection;
 
+            mpAtlas->GetReclaimer().SetOnline(Reclaimer::GLOBAL_BA, true);
             mThreadGBA = std::thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
         }
 
@@ -1946,6 +1966,7 @@ namespace ORB_SLAM3
             mbRunningGBA = true;
             mbFinishedGBA = false;
             mbStopGBA = false;
+            mpAtlas->GetReclaimer().SetOnline(Reclaimer::GLOBAL_BA, true);
             mThreadGBA = std::thread(&LoopClosing::RunGlobalBundleAdjustment, this, pMergeMap, mpCurrentKF->mnId);
         }
 
@@ -2429,6 +2450,15 @@ namespace ORB_SLAM3
 
     void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF)
     {
+        // Online since just before this thread was started; offline at whichever
+        // exit it takes. It works on a snapshot of the whole map and never
+        // announces, so no batch that begins meanwhile passes a grace period.
+        struct Offline
+        {
+            Reclaimer &r;
+            ~Offline() { r.SetOnline(Reclaimer::GLOBAL_BA, false); }
+        } offline{mpAtlas->GetReclaimer()};
+
         Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
 
 #ifdef REGISTER_TIMES
@@ -2717,6 +2747,7 @@ namespace ORB_SLAM3
         }
 
         mThreadGBA.join();
+        mpAtlas->GetReclaimer().SetOnline(Reclaimer::GLOBAL_BA, false);
 
         // Set here, with the thread gone, whichever exit the BA took: an aborted
         // run can return at the mnFullBAIdx guard without ever reaching the

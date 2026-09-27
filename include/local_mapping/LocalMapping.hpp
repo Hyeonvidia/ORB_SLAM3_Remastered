@@ -136,6 +136,9 @@ namespace ORB_SLAM3
     protected:
         bool CheckNewKeyFrames();
         void ProcessNewKeyFrame();
+        // The loop's 3 ms sleep, with the Reclaimer's announce and its driver's
+        // slice inside it (docs/OWNERSHIP.md).
+        void SleepAndReclaim();
         void CreateNewMapPoints();
 
         void MapPointCulling();
