@@ -1103,6 +1103,14 @@ namespace ORB_SLAM3
                                                       ? pKF2->mvKeys[bestIdx2]
                                                       : pKF2->mvKeysRight[bestIdx2 - pKF2->NLeft];
                         vMatches12[idx1] = bestIdx2;
+                        // v1.0 declared vbMatched2 and tested it above but never set
+                        // it (SearchByBoW does), so several features of pKF1 could
+                        // take the same feature of pKF2. CreateNewMapPoints then made
+                        // a point for each and wrote them into the one slot in turn,
+                        // and every point but the last kept an observation of pKF2
+                        // whose slot held another point -- 284 of them on MH01 at
+                        // the end, all first seen right after CreateNewMapPoints.
+                        vbMatched2[bestIdx2] = true;
                         nmatches++;
 
                         if(mbCheckOrientation)
