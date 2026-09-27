@@ -58,6 +58,14 @@ namespace ORB_SLAM3
         // vocabulary: what ORBVocabulary::MemoryFootprint() returned.
         static void Report(std::ostream &os, const Footprint &vocabulary);
 
+        // With ORBSLAM3R_SLOT_AUDIT=1 as well: walks every live point's
+        // observations and reports, once per pair, an observation of a keyframe
+        // whose slot at that index does not hold the point -- the state the
+        // census counts at the end -- naming `where` in the mapping loop it first
+        // appeared. For finding the writer, not for production.
+        static bool SlotAuditEnabled();
+        static void AuditSlots(const char* where);
+
         // A heap block of n bytes as glibc malloc accounts for it.
         static std::size_t Chunk(std::size_t n)
         {

@@ -19,6 +19,7 @@
 #include "local_mapping/LocalMapping.hpp"
 #include "atlas/Atlas.hpp"
 #include "atlas/Reclaimer.hpp"
+#include "atlas/MemoryAudit.hpp"
 #include "loop_closing/LoopClosing.hpp"
 #include "tracking/ORBmatcher.hpp"
 #include "optimization/Optimizer.hpp"
@@ -198,7 +199,9 @@ namespace ORB_SLAM3
                 std::chrono::steady_clock::time_point time_StartProcessKF = std::chrono::steady_clock::now();
 #endif
                 // BoW conversion and insertion in Map
+                MemoryAudit::AuditSlots("the previous iteration (other threads)");
                 ProcessNewKeyFrame();
+                MemoryAudit::AuditSlots("ProcessNewKeyFrame");
 #ifdef REGISTER_TIMES
                 std::chrono::steady_clock::time_point time_EndProcessKF = std::chrono::steady_clock::now();
 
@@ -210,6 +213,7 @@ namespace ORB_SLAM3
 
                 // Check recent MapPoints
                 MapPointCulling();
+                MemoryAudit::AuditSlots("MapPointCulling");
 #ifdef REGISTER_TIMES
                 std::chrono::steady_clock::time_point time_EndMPCulling = std::chrono::steady_clock::now();
 
@@ -221,6 +225,7 @@ namespace ORB_SLAM3
 
                 // Triangulate new MapPoints
                 CreateNewMapPoints();
+                MemoryAudit::AuditSlots("CreateNewMapPoints");
 
                 mbAbortBA = false;
 
@@ -228,6 +233,7 @@ namespace ORB_SLAM3
                 {
                     // Find more matches in neighbor keyframes and fuse point duplications
                     SearchInNeighbors();
+                    MemoryAudit::AuditSlots("SearchInNeighbors");
                 }
 
 #ifdef REGISTER_TIMES
@@ -320,6 +326,7 @@ namespace ORB_SLAM3
 
                     // Check redundant local Keyframes
                     KeyFrameCulling();
+                    MemoryAudit::AuditSlots("KeyFrameCulling");
 
 #ifdef REGISTER_TIMES
                     std::chrono::steady_clock::time_point time_EndKFCulling = std::chrono::steady_clock::now();

@@ -28,7 +28,10 @@
 #include <fstream>
 #include <mutex>
 #include <ostream>
+#include <set>
 #include <tuple>
+#include <utility>
+#include <vector>
 #include <unordered_set>
 
 namespace ORB_SLAM3
@@ -228,6 +231,57 @@ namespace ORB_SLAM3
             os << line;
         }
     } // namespace
+
+    bool MemoryAudit::SlotAuditEnabled()
+    {
+        static const bool bEnabled = []
+        {
+            const char* env = std::getenv("ORBSLAM3R_SLOT_AUDIT");
+            return Enabled() && env && std::string(env) == "1";
+        }();
+        return bEnabled;
+    }
+
+    void MemoryAudit::AuditSlots(const char* where)
+    {
+        if(!SlotAuditEnabled())
+            return;
+        static std::set<std::pair<const MapPoint*, const KeyFrame*>> sReported;
+        static std::size_t nReported = 0;
+        std::vector<const MapPoint*> vpPoints;
+        {
+            std::lock_guard<std::mutex> lock(gMutex);
+            vpPoints.assign(gMapPoints.begin(), gMapPoints.end());
+        }
+        std::size_t nNew = 0;
+        for(const MapPoint* pConst : vpPoints)
+        {
+            MapPoint* pMP = const_cast<MapPoint*>(pConst);
+            if(pMP->isBad())
+                continue;
+            for(const auto &obs : pMP->GetObservations())
+            {
+                KeyFrame* pKF = obs.first;
+                const int idx = std::get<0>(obs.second) != -1 ? std::get<0>(obs.second) : std::get<1>(obs.second);
+                MapPoint* pInSlot = idx >= 0 && idx < pKF->N ? pKF->GetMapPoint(idx) : nullptr;
+                if(pInSlot == pMP)
+                    continue;
+                if(!sReported.insert(std::make_pair(pConst, static_cast<const KeyFrame*>(pKF))).second)
+                    continue;
+                ++nNew;
+                if(++nReported <= 40)
+                    std::fprintf(stderr,
+                                 "SLOT AUDIT after %s: point %lu (first KF %ld) observes keyframe %lu (%s) at %d; the "
+                                 "slot holds %s%lu\n",
+                                 where, pMP->mnId, pMP->mnFirstKFid, pKF->mnId, pKF->isBad() ? "culled" : "live", idx,
+                                 pInSlot ? (pInSlot->isBad() ? "culled point " : "point ") : "nothing ",
+                                 pInSlot ? pInSlot->mnId : 0ul);
+            }
+        }
+        if(nNew)
+            std::fprintf(stderr, "SLOT AUDIT after %s: %zu new mismatched observations, %zu so far\n", where, nNew,
+                         nReported);
+    }
 
     bool MemoryAudit::Enabled()
     {
