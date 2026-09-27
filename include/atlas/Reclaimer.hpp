@@ -143,6 +143,9 @@ namespace ORB_SLAM3
             // nWaiting always. The peak is as measured at the end of each Step().
             std::size_t nWaiting = 0, nPeakWaiting = 0;
             std::chrono::microseconds longestStep{0};
+            // The longest a single Step() spent in each part: beginning a batch,
+            // ending the first grace period, the check, ending the second, freeing.
+            std::array<std::chrono::microseconds, 5> longestPart{};
             // Where the driver is and for how long, so that a stall can be seen.
             State state = State::IDLE;
             std::chrono::steady_clock::time_point stateSince;

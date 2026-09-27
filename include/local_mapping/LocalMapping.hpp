@@ -174,6 +174,11 @@ namespace ORB_SLAM3
         std::list<MapPoint*> mlpRecentAddedMapPoints;
 
         std::mutex mMutexNewKFs;
+        // Held by EmptyQueue(), which Loop Closing runs on its own thread, and
+        // by SleepAndReclaim(): between a pop from the queue and the keyframe's
+        // AddKeyFrame() it is in neither the queue nor a map, and the Reclaimer's
+        // check must not look then.
+        std::mutex mMutexPass;
 
         bool mbAbortBA;
 

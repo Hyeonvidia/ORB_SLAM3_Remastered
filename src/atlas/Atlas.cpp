@@ -20,7 +20,13 @@
 #include "atlas/Reclaimer.hpp"
 
 #include <cstdlib>
+#include <cstring>
+#include <memory>
 #include <string>
+#include <unordered_set>
+#if defined(__SANITIZE_ADDRESS__)
+#include <sanitizer/asan_interface.h>
+#endif
 
 #include "camera/GeometricCamera.hpp"
 #include "camera/Pinhole.hpp"
@@ -42,13 +48,111 @@ namespace ORB_SLAM3
 
     namespace
     {
-        // Nothing is freed yet in any mode: the hooks that would look in the
-        // holders and free come with the next steps of docs/OWNERSHIP.md.
-        std::unique_ptr<Reclaimer> MakeReclaimer()
+        // The check: where a MapPoint* can still be, looked in rather than
+        // reasoned about (docs/OWNERSHIP.md). Runs on the Reclaimer's driver, in
+        // slices; the keyframe list is taken once per batch and walked with a
+        // cursor.
+        struct HolderScan
         {
+            Atlas* pAtlas;
+            std::vector<KeyFrame*> vpKeyFrames;
+            std::vector<MapPoint*> vpSlots;
+            std::size_t nCursor = 0, nWaitingCursor = 0;
+
+            bool Run(const Reclaimer::PointerSet &candidates, const std::vector<void*> &waiting,
+                     std::vector<void*> &vpNamed, bool bRestart, std::chrono::microseconds budget)
+            {
+                const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+                if(bRestart)
+                {
+                    vpKeyFrames.clear();
+                    nCursor = 0;
+                    nWaitingCursor = 0;
+                    for(Map* pMap : pAtlas->GetAllMaps())
+                    {
+                        // The live keyframes and the culled ones: a culled keyframe
+                        // keeps its slots, and is still read through the members
+                        // that name it.
+                        for(KeyFrame* pKF : pMap->GetAllKeyFrames())
+                            vpKeyFrames.push_back(pKF);
+                        for(KeyFrame* pKF : pMap->GetCulledKeyFrames())
+                            vpKeyFrames.push_back(pKF);
+                        // What the viewer draws, one frame behind Tracking, and for
+                        // as long as the map is not the current one.
+                        for(MapPoint* pMP : pMap->GetReferenceMapPoints())
+                            if(candidates.Contains(pMP))
+                                vpNamed.push_back(pMP);
+                    }
+                }
+                // The budget is looked at every few keyframes and every few
+                // hundred links: a keyframe is 2000 slots copied under its mutex
+                // and probed, a link is two mutexes.
+                for(; nCursor < vpKeyFrames.size(); ++nCursor)
+                {
+                    if((nCursor & 3) == 0 && std::chrono::steady_clock::now() - start > budget)
+                        return false;
+                    vpKeyFrames[nCursor]->CopyMapPointMatches(vpSlots);
+                    for(MapPoint* pMP : vpSlots)
+                        if(candidates.Contains(pMP))
+                            vpNamed.push_back(pMP);
+                }
+                // A replaced point names its replacement, and Tracking follows
+                // that link from a point it still holds. From every retired point
+                // still waiting, and then from every named candidate, to a fixed
+                // point: a chain of replacements can lie inside one batch.
+                for(; nWaitingCursor < waiting.size(); ++nWaitingCursor)
+                {
+                    if((nWaitingCursor & 255) == 0 && std::chrono::steady_clock::now() - start > budget)
+                        return false;
+                    MapPoint* pRep = static_cast<MapPoint*>(waiting[nWaitingCursor])->GetReplaced();
+                    if(candidates.Contains(pRep))
+                        vpNamed.push_back(pRep);
+                }
+                std::unordered_set<void*> named(vpNamed.begin(), vpNamed.end());
+                for(std::size_t i = 0; i < vpNamed.size(); ++i)
+                {
+                    MapPoint* pRep = static_cast<MapPoint*>(vpNamed[i])->GetReplaced();
+                    if(candidates.Contains(pRep) && named.insert(pRep).second)
+                        vpNamed.push_back(pRep);
+                }
+                return true;
+            }
+        };
+
+        void Destroy(void* p)
+        {
+            MapPoint* pMP = static_cast<MapPoint*>(p);
+            if(Atlas::ReclaimMode() == Atlas::Reclaim::POISON)
+            {
+                // Its members go, its memory stays: nothing can be allocated over
+                // it, so a later touch cannot be masked by a new object there.
+                pMP->~MapPoint();
+                std::memset(static_cast<void*>(pMP), 0xDD, sizeof(MapPoint));
+#if defined(__SANITIZE_ADDRESS__)
+                ASAN_POISON_MEMORY_REGION(pMP, sizeof(MapPoint));
+#endif
+                return;
+            }
+            delete pMP;
+        }
+
+        std::unique_ptr<Reclaimer> MakeReclaimer(Atlas* pAtlas)
+        {
+            const Atlas::Reclaim mode = Atlas::ReclaimMode();
+            Reclaimer::Hooks hooks;
             Reclaimer::Options options;
-            options.bCheckAndFree = false;
-            return std::unique_ptr<Reclaimer>(new Reclaimer(Reclaimer::Hooks(), options));
+            options.bCheckAndFree = mode == Atlas::Reclaim::POINTS || mode == Atlas::Reclaim::POISON;
+            if(options.bCheckAndFree)
+            {
+                std::shared_ptr<HolderScan> pScan(new HolderScan{pAtlas});
+                hooks.scan = [pScan](const Reclaimer::PointerSet &candidates, const std::vector<void*> &waiting,
+                                     std::vector<void*> &vpNamed, bool bRestart, std::chrono::microseconds budget)
+                { return pScan->Run(candidates, waiting, vpNamed, bRestart, budget); };
+                hooks.destroy = &Destroy;
+            }
+            if(const char* env = std::getenv("ORBSLAM3R_RECLAIM_BATCH"))
+                options.nBatchObjects = static_cast<std::size_t>(std::max(1L, std::atol(env)));
+            return std::unique_ptr<Reclaimer>(new Reclaimer(hooks, options));
         }
     } // namespace
 
@@ -57,17 +161,24 @@ namespace ORB_SLAM3
         static const Reclaim mode = []
         {
             const char* env = std::getenv("ORBSLAM3R_RECLAIM");
-            return env && std::string(env) == "count" ? Reclaim::COUNT : Reclaim::DRY;
+            const std::string s = env ? env : "";
+            if(s == "count")
+                return Reclaim::COUNT;
+            if(s == "dry")
+                return Reclaim::DRY;
+            if(s == "poison")
+                return Reclaim::POISON;
+            return Reclaim::POINTS;
         }();
         return mode;
     }
 
-    Atlas::Atlas() : mpReclaimer(MakeReclaimer())
+    Atlas::Atlas() : mpReclaimer(MakeReclaimer(this))
     {
         mpCurrentMap = static_cast<Map*>(NULL);
     }
 
-    Atlas::Atlas(int initKFid) : mpReclaimer(MakeReclaimer()), mnLastInitKFidMap(initKFid)
+    Atlas::Atlas(int initKFid) : mpReclaimer(MakeReclaimer(this)), mnLastInitKFidMap(initKFid)
     {
         mpCurrentMap = static_cast<Map*>(NULL);
         CreateNewMap();
@@ -392,11 +503,17 @@ namespace ORB_SLAM3
                 nCulledKeyFrames += pMap->GetCulledKeyFrames().size();
         }
         os << "  Culled keyframes on the maps' lists: " << nCulledKeyFrames << "\n";
-        os << "  Reclaimer (" << (ReclaimMode() == Reclaim::COUNT ? "count" : "dry run") << "): retired "
-           << stats.nRetired << ", freed " << stats.nFreed << ", kept " << stats.nKept << ", waiting " << stats.nWaiting
-           << " (peak " << stats.nPeakWaiting << "), batches " << stats.nBatches << ", put off " << stats.nPutOffPinned
-           << " pinned + " << stats.nPutOffNamed << " named, late pins " << stats.nLatePins << ", longest step "
-           << stats.longestStep.count() << " us\n";
+        const char* mode = ReclaimMode() == Reclaim::COUNT    ? "count"
+                           : ReclaimMode() == Reclaim::DRY    ? "dry run"
+                           : ReclaimMode() == Reclaim::POINTS ? "points"
+                                                              : "poison";
+        os << "  Reclaimer (" << mode << "): retired " << stats.nRetired << ", freed " << stats.nFreed << ", kept "
+           << stats.nKept << ", waiting " << stats.nWaiting << " (peak " << stats.nPeakWaiting << "), batches "
+           << stats.nBatches << ", put off " << stats.nPutOffPinned << " pinned + " << stats.nPutOffNamed
+           << " named, late pins " << stats.nLatePins << ", longest step " << stats.longestStep.count() << " us (begin "
+           << stats.longestPart[0].count() << ", grace 1 " << stats.longestPart[1].count() << ", check "
+           << stats.longestPart[2].count() << ", grace 2 " << stats.longestPart[3].count() << ", free "
+           << stats.longestPart[4].count() << ")\n";
     }
 
     void Atlas::SetKeyFrameDababase(KeyFrameDatabase* pKFDB)

@@ -433,6 +433,12 @@ namespace ORB_SLAM3
         return mvpMapPoints;
     }
 
+    void KeyFrame::CopyMapPointMatches(std::vector<MapPoint*> &vpMapPoints)
+    {
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
+        vpMapPoints.assign(mvpMapPoints.begin(), mvpMapPoints.end());
+    }
+
     MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
     {
         std::lock_guard<std::mutex> lock(mMutexFeatures);

@@ -806,7 +806,7 @@ namespace ORB_SLAM3
 
         std::vector<Map*> vpMaps = mpAtlas->GetAllMaps();
         int numMaxKFs = 0;
-        Map* pBiggerMap;
+        Map* pBiggerMap = nullptr;
         std::cout << "There are " << std::to_string(vpMaps.size()) << " maps in the atlas" << std::endl;
         for(Map* pMap : vpMaps)
         {
@@ -819,6 +819,13 @@ namespace ORB_SLAM3
             }
         }
 
+        // Every map empty -- a reset just before the end -- left this pointer
+        // uninitialised in v1.0, and the lock on whatever it pointed at threw.
+        if(!pBiggerMap)
+        {
+            std::cout << "No keyframes: nothing to save" << std::endl;
+            return;
+        }
         std::vector<KeyFrame*> vpKFs = pBiggerMap->GetAllKeyFrames();
         std::sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
 
@@ -1198,7 +1205,7 @@ namespace ORB_SLAM3
         std::cout << std::endl << "Saving keyframe trajectory to " << filename << " ..." << std::endl;
 
         std::vector<Map*> vpMaps = mpAtlas->GetAllMaps();
-        Map* pBiggerMap;
+        Map* pBiggerMap = nullptr;
         int numMaxKFs = 0;
         for(Map* pMap : vpMaps)
         {
@@ -1215,6 +1222,13 @@ namespace ORB_SLAM3
             return;
         }
 
+        // Every map empty -- a reset just before the end -- left this pointer
+        // uninitialised in v1.0, and the lock on whatever it pointed at threw.
+        if(!pBiggerMap)
+        {
+            std::cout << "No keyframes: nothing to save" << std::endl;
+            return;
+        }
         std::vector<KeyFrame*> vpKFs = pBiggerMap->GetAllKeyFrames();
         std::sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
 

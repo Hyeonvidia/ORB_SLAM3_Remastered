@@ -160,6 +160,13 @@ namespace ORB_SLAM3
         const auto spent = [&start]
         { return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start); };
         Stats delta;
+        std::chrono::microseconds partStart = spent();
+        const auto part = [&](State state)
+        {
+            const std::chrono::microseconds now = spent();
+            delta.longestPart[static_cast<int>(state)] = now - partStart;
+            partStart = now;
+        };
 
         if(mState == State::IDLE)
         {
@@ -201,6 +208,7 @@ namespace ORB_SLAM3
             mnGraceEpoch = mEpoch.fetch_add(1) + 1;
             Enter(State::GRACE1, start);
             ++delta.nBatches;
+            part(State::IDLE);
         }
 
         std::vector<const void*> vpPins;
@@ -231,6 +239,7 @@ namespace ORB_SLAM3
                 mnGraceEpoch = mEpoch.fetch_add(1) + 1;
                 Enter(State::GRACE2, start);
             }
+            part(State::GRACE1);
         }
 
         if(mState == State::CHECK)
@@ -249,6 +258,7 @@ namespace ORB_SLAM3
                     mnGraceEpoch = mEpoch.fetch_add(1) + 1;
                     Enter(State::GRACE2, start);
                 }
+                part(State::CHECK);
             }
         }
 
@@ -261,13 +271,14 @@ namespace ORB_SLAM3
             PutOffAll(vpPins, mOptions.bCheckAndFree ? delta.nLatePins : delta.nPutOffPinned, start);
             mnFreeCursor = 0;
             Enter(State::FREE, start);
+            part(State::GRACE2);
         }
 
         if(mState == State::FREE)
         {
             while(mnFreeCursor < mvBatch.size())
             {
-                if((mnFreeCursor & 63) == 0 && spent() >= budget)
+                if((mnFreeCursor & 15) == 0 && spent() >= budget)
                     break;
                 void* const p = mvBatch[mnFreeCursor++].p;
                 if(mOptions.bCheckAndFree)
@@ -285,6 +296,7 @@ namespace ORB_SLAM3
                 mnFreeCursor = 0;
                 Enter(State::IDLE, start);
             }
+            part(State::FREE);
         }
 
         const std::chrono::microseconds took = spent();
@@ -303,6 +315,8 @@ namespace ORB_SLAM3
         mStats.nWaiting = nIncoming + mvPutOff.size() + (mvBatch.size() - mnFreeCursor);
         mStats.nPeakWaiting = std::max(mStats.nPeakWaiting, mStats.nWaiting);
         mStats.longestStep = std::max(mStats.longestStep, took);
+        for(std::size_t i = 0; i < mStats.longestPart.size(); ++i)
+            mStats.longestPart[i] = std::max(mStats.longestPart[i], delta.longestPart[i]);
         mStats.state = mState;
         mStats.stateSince = mStateSince;
     }

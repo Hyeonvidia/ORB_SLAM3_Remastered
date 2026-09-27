@@ -266,6 +266,9 @@ namespace ORB_SLAM3
         void ReplaceMapPointMatch(const int &idx, MapPoint* pMP);
         std::set<MapPoint*> GetMapPoints();
         std::vector<MapPoint*> GetMapPointMatches();
+        // The same into a vector the caller keeps, for a caller that asks every
+        // keyframe in turn and would otherwise allocate 16 KB for each.
+        void CopyMapPointMatches(std::vector<MapPoint*> &vpMapPoints);
         int TrackedMapPoints(const int &minObs);
         MapPoint* GetMapPoint(const size_t &idx);
 

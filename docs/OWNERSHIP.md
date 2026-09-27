@@ -194,22 +194,52 @@ Each step is a commit that can be proven on its own.
    reclaimed; until a run shows otherwise they are not a bug being lived with.
 2. `Reclaimer`, owned by `Atlas`, wired into every `Map`, unused. Unit test
    with synthetic readers under ThreadSanitizer. objcmp: nothing else changes.
+   *Done.* Three reviewers then read it against the real threads; what they
+   found and what the test found afterwards is in the commits, and the test
+   has a variant for each way the protocol can be broken.
 3. **Count**: retire wiring, nothing freed. At shutdown the graveyard must
-   equal the memory report's "culled, never freed" rows.
+   equal the memory report's "culled, never freed" rows. *Done*: equal on
+   KITTI 00 stereo and mono and on MH01 stereo- and mono-inertial (26 maps).
+   The culled keyframes' list is checked the same way: 468 of 468.
 4. **Dry run**: announces, pins, the batch state machine; nothing checked or
    freed. The A/B against v1.0 must be flat -- this is the only cost the design
-   ever adds to a frame.
-5. **Audit**: the check runs read-only with a batch threshold of zero; where it
-   would free, it stops the world and scans every holder, and aborts naming the
-   holder if a batch member is found. Run over KITTI with loops and Global BA,
-   EuRoC inertial with resets, a merge, localisation mode, save and load.
-6. **Poison**, under AddressSanitizer: instead of `delete`, fill the block with
-   0xDD and poison it, so that no address is reused and any later touch reports
-   with a stack. Then real `delete` under ASan.
-7. On: `ORBSLAM3R_RECLAIM=points`, then the default once the A/B is flat and
-   the culled-MapPoints row is near zero.
-8. KeyFrames, designed against the census.
-9. After that, the live objects: `sizeof(MapPoint)` (three mutexes, two maps
+   ever adds to a frame. *Done*: `tools/ab_stages.sh`, count against dry run,
+   six pairs on three sequences, tracking +0.18, +0.01, -0.03 ms with either
+   sign from pair to pair.
+5. **Poison**, under AddressSanitizer: `ORBSLAM3R_RECLAIM=poison` runs the check
+   and, instead of `delete`, destroys the point, fills its block with 0xDD and
+   poisons it, so that no address is reused and any later touch is a report
+   with the stack that made it. With `ORBSLAM3R_RECLAIM_BATCH=64` a batch is
+   every 64 culls rather than every 8192, so that whatever can go wrong goes
+   wrong often. Run over KITTI stereo with loops and a Global BA, EuRoC
+   stereo-inertial, and mono-inertial, which under the sanitizer's slowdown
+   loses tracking, resets and merges over and over.
+
+   This replaces the stop-the-world audit planned here: the report from a
+   poisoned access names the holder as well as an audit would, and needs no
+   mechanism of its own. Late pins are the other audit and must stay at zero.
+   *Done*: no report and no late pin in any of the five --
+   KITTI 04 and 07 stereo, KITTI 00 stereo (a loop closure and its Global BA;
+   446,663 points freed in 74 batches), MH01 stereo-inertial (371 batches) and
+   MH01 mono-inertial, which under the sanitizer reset 211 times. The one
+   abort was v1.0's, after Shutdown(): the trajectory savers left their map
+   pointer uninitialised when every map was empty. Fixed.
+6. On: `ORBSLAM3R_RECLAIM=points`, the default once the A/B is flat and the
+   culled-MapPoints row is near zero. What it does to the memory report, run
+   against the dry run on the same machine at the same time:
+
+   | | culled MapPoints | peak RSS |
+   |---|---:|---:|
+   | KITTI 00 stereo | 415 MB -> 5.7 MB | 2160 -> 1676 MB |
+   | KITTI 00 mono | 258 MB -> 8.1 MB | 3557 -> 3087 MB |
+   | MH01 stereo-inertial | 93 MB -> 18 MB | 515 -> 424 MB |
+   | MH01 mono-inertial | 85 MB -> 11 MB | 656 -> 537 MB |
+
+   What stays is what the census said would stay: on MH01 the culled points
+   that only culled keyframes' slots still name (19 %), which step 7 releases,
+   and on all of them the few thousand that were in flight at the end.
+7. KeyFrames, designed against the census.
+8. After that, the live objects: `sizeof(MapPoint)` (three mutexes, two maps
    used only while saving), the descriptor held as a `cv::Mat`, and the 16 KB of
    `mvuRight`/`mvDepth` a monocular keyframe carries for nothing.
 

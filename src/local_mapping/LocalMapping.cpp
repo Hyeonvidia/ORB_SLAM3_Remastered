@@ -422,21 +422,33 @@ namespace ORB_SLAM3
     void LocalMapping::SleepAndReclaim()
     {
         // This thread holds nothing from earlier iterations but its members: the
-        // recently added points, which MapPointCulling still reads, and keyframes,
-        // which are not reclaimed. It is also the Reclaimer's driver, and the
-        // driver's slice comes out of the 3 ms the loop slept here anyway.
+        // recently added points, which MapPointCulling still reads, and the
+        // queued keyframes, which are in no map yet and whose slots hold what
+        // Tracking gave them. It is also the Reclaimer's driver, and the driver's
+        // slice comes out of the 3 ms the loop slept here anyway.
         Reclaimer &reclaimer = mpAtlas->GetReclaimer();
-        reclaimer.Announce(Reclaimer::LOCAL_MAPPING,
-                           [this](std::vector<const void*> &pins) {
-                               pins.insert(pins.end(), mlpRecentAddedMapPoints.begin(), mlpRecentAddedMapPoints.end());
-                           });
-        if(Atlas::ReclaimMode() == Atlas::Reclaim::COUNT)
-        {
-            usleep(3000);
-            return;
-        }
         const std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-        reclaimer.Step(std::chrono::microseconds(1000));
+        {
+            std::lock_guard<std::mutex> pass(mMutexPass);
+            reclaimer.Announce(Reclaimer::LOCAL_MAPPING,
+                               [this](std::vector<const void*> &pins)
+                               {
+                                   pins.insert(pins.end(), mlpRecentAddedMapPoints.begin(),
+                                               mlpRecentAddedMapPoints.end());
+                                   std::lock_guard<std::mutex> lock(mMutexNewKFs);
+                                   for(KeyFrame* pKF : mlNewKeyFrames)
+                                   {
+                                       const std::vector<MapPoint*> vpSlots = pKF->GetMapPointMatches();
+                                       pins.insert(pins.end(), vpSlots.begin(), vpSlots.end());
+                                   }
+                               });
+            if(Atlas::ReclaimMode() == Atlas::Reclaim::COUNT)
+            {
+                usleep(3000);
+                return;
+            }
+            reclaimer.Step(std::chrono::microseconds(1000));
+        }
         const std::chrono::microseconds took = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - t0);
         if(took < std::chrono::microseconds(3000))
@@ -500,6 +512,7 @@ namespace ORB_SLAM3
 
     void LocalMapping::EmptyQueue()
     {
+        std::lock_guard<std::mutex> lock(mMutexPass);
         while(CheckNewKeyFrames())
             ProcessNewKeyFrame();
     }

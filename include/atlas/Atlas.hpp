@@ -88,13 +88,22 @@ namespace ORB_SLAM3
         void ReportReclaimer(std::ostream &os);
 
         // How far the Reclaimer goes, from ORBSLAM3R_RECLAIM:
-        //   count  culled objects are handed over and counted; nothing else
-        //   dry    the whole protocol runs -- every thread announces, batches
-        //          pass their grace periods -- and nothing is freed (the default)
+        //   count   culled objects are handed over and counted; nothing else
+        //   dry     the whole protocol runs -- every thread announces, batches
+        //           pass their grace periods -- and nothing is freed
+        //   points  culled MapPoints are checked against every holder and freed
+        //           (the default)
+        //   poison  as points, but a freed MapPoint's memory is kept, filled with
+        //           0xDD and, in an AddressSanitizer build, poisoned: any later
+        //           touch is reported with the stack that made it
+        // ORBSLAM3R_RECLAIM_BATCH=n starts a batch at n retired objects instead
+        // of 8192, to make batches frequent and small in a test.
         enum class Reclaim
         {
             COUNT,
-            DRY
+            DRY,
+            POINTS,
+            POISON
         };
         static Reclaim ReclaimMode();
 
