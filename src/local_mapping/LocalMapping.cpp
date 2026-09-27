@@ -1046,10 +1046,18 @@ namespace ORB_SLAM3
             return;
         mbStopped = false;
         mbStopRequested = false;
-        for(std::list<KeyFrame*>::iterator lit = mlNewKeyFrames.begin(), lend = mlNewKeyFrames.end(); lit != lend;
-            lit++)
-            delete *lit;
-        mlNewKeyFrames.clear();
+        // Under the queue's mutex: the moment mbStopped is false the mapping
+        // thread leaves its wait and, at the bottom of its loop, reads the queue
+        // -- and the slots of the keyframes in it -- for the Reclaimer. v1.0 read
+        // the queue's size there without the mutex either; it never held a
+        // keyframe of the queue while this ran.
+        {
+            std::lock_guard<std::mutex> lock(mMutexNewKFs);
+            for(std::list<KeyFrame*>::iterator lit = mlNewKeyFrames.begin(), lend = mlNewKeyFrames.end(); lit != lend;
+                lit++)
+                delete *lit;
+            mlNewKeyFrames.clear();
+        }
 
         std::cout << "Local Mapping RELEASE" << std::endl;
     }
