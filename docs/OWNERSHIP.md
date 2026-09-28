@@ -59,14 +59,24 @@ counted once, under the first holder that names it.
 | only another point's replaced-by link | 2.1 % | 5.1 % | 2.2 % |
 | no keyframe and no point | **97.8 %** | **94.6 %** | **77.7 %** |
 
-| culled KeyFrames named by (MH01) | |
-|---|---:|
-| a live point's observations | 40.7 % |
-| a live keyframe's covisibility list | 0.2 % |
-| none of these | 59.1 % |
+| culled KeyFrames named by (MH01) | as first measured | after `c4c6201` |
+|---|---:|---:|
+| a live point's observations | 40.7 % | 0 |
+| a live keyframe's covisibility list | 0.2 % | 1.1 % |
+| none of these | 59.1 % | 98.9 % |
 
-and 323 of those observations are by a live point that is *not* in the culled
-keyframe's own slot.
+As first measured, 323 of those observations were by a live point that was
+*not* in the culled keyframe's own slot, and that looked like a permanent
+fact about the system. It was a bug. `ORBmatcher::SearchForTriangulation`
+declared `vbMatched2`, tested it, and never set it, so several features of one
+keyframe could take the same feature of its neighbour; `CreateNewMapPoints`
+made a point for each and wrote them into the one slot in turn, and every
+point but the last kept an observation whose slot held another point. Since a
+culled keyframe erases itself from its points' observations by walking its own
+slots, those points never heard of the cull. Found with the slot audit
+(`ORBSLAM3R_SLOT_AUDIT=1`, one line per mismatched pair with the mapping stage
+it first appeared after: all after `CreateNewMapPoints`), fixed in one line,
+and the census now reads zero for both rows.
 
 So:
 
@@ -76,11 +86,14 @@ So:
 2. **MapPoints first.** They are the part that grows with every frame, and on
    KITTI they are all of it.
 3. **A culled keyframe's payload cannot be released on the strength of its own
-   slots.** Live points go on observing culled keyframes, and
-   `MapPoint::UpdateNormalAndDepth` reads, without asking `isBad()`, the pose of
-   every keyframe in a point's observations and the keypoints of its reference
-   keyframe. KeyFrames get their own design, after the MapPoints are done and
-   with this table in hand.
+   slots alone.** `MapPoint::UpdateNormalAndDepth` reads, without asking
+   `isBad()`, the pose of every keyframe in a point's observations and the
+   keypoints of its reference keyframe, so a live point observing a culled
+   keyframe is a reader of its payload. With the duplicate-point bug fixed
+   that is a race-only residue rather than the steady state it first looked
+   like -- but the check still has to look for it, not assume it away.
+   KeyFrames get their own design, after the MapPoints are done and with this
+   table in hand.
 
 ## MapPoints: retire, wait, check, free
 
