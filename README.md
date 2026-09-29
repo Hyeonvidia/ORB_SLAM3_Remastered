@@ -2,8 +2,9 @@
 
 ORB-SLAM3 rebuilt for a robot's onboard computer: monocular, stereo and RGB-D
 SLAM that tracks a frame in a little over half the time of ORB-SLAM3 v1.0 and
-runs in half the memory or less, at the same accuracy, with the defects found
-on the way fixed and the code laid out along the architecture of the paper.
+runs in half the memory or less -- a third less in monocular -- at the same
+accuracy, with the defects found on the way fixed and the code laid out along
+the architecture of the paper.
 
 ![KITTI 07, stereo: the frame with its features, and the map being built](docs/media/kitti07_stereo.gif)
 
@@ -13,23 +14,27 @@ on the way fixed and the code laid out along the architecture of the paper.
 
 | Run | Tracking per frame, ms | Peak memory, MB | ATE, m |
 |---|---:|---:|---:|
-| KITTI 07 monocular | 13.3 → **7.9** (-41 %) | 1545 → **1021** (-34 %) | 2.13 → 2.79 |
-| KITTI 07 stereo | 17.1 → **9.5** (-44 %) | 896 → **449** (-50 %) | 0.408 → 0.402 |
-| TUM fr1_desk RGB-D | 12.5 → **8.3** (-33 %) | 808 → **304** (-62 %) | 0.018 → 0.018 |
-| EuRoC V101 stereo | – → 7.3 | 752 → **274** (-64 %) | 0.037 → 0.039 |
+| KITTI 07 monocular | 13.3 → **7.0** (-47 %) | 1545 → **1059** (-31 %) | 2.13 → 2.51 |
+| KITTI 07 stereo | 17.1 → **9.0** (-47 %) | 896 → **447** (-50 %) | 0.408 → 0.443 |
+| TUM fr1_desk RGB-D | 12.5 → **7.5** (-40 %) | 808 → **299** (-63 %) | 0.018 → 0.017 |
+| EuRoC V101 stereo | – → 7.0 | 752 → **278** (-63 %) | 0.037 → 0.037 |
 
 v1.0 → now, medians of three runs of each, four runs sharing the machine
-(linux/arm64 in Docker, Apple M-series). Monocular accuracy on KITTI moves by
-more than this from one run to the next of the same binary.
+(linux/arm64 in Docker, Apple M-series). Accuracy moves from one run to the
+next of the same binary by more than the two columns differ: KITTI 07 stereo
+between 0.40 and 0.48 m, monocular between 2.0 and 3.0.
 
 **Place recognition** finds what is there to be found:
 
 | Run | Loops closed | Maps merged | Tracking per frame, ms | ATE, m |
 |---|---:|---:|---:|---:|
-| KITTI 05 stereo (three loops) | 3 | – | 10.7 | 0.94 |
-| KITTI 05 monocular | 3 | – | 8.1 | 4.76 |
-| EuRoC V101 + V102 in one session, stereo | 2 | 1 | 7.6 | 0.037 |
-| EuRoC V101 + V102 in one session, monocular | 1 | 1 | 7.7 | 0.029 |
+| KITTI 05 stereo (three loops) | 3 | – | 10.2 | 0.98 |
+| KITTI 05 monocular | 3 | – | 7.5 | 7.41 |
+| EuRoC V101 + V102 in one session, stereo | 2 | 1 | 7.2 | 0.035 |
+| EuRoC V101 + V102 in one session, monocular | 1 | 1 | 6.8 | 0.030 |
+
+One run of each. KITTI 05 monocular has ended between 4.3 and 7.4 m in the
+runs of this tree, and between 5.6 and 7.8 in those of v1.0.
 
 Both tables come from one command, which takes three minutes (five for the
 second) and compares with what was last accepted:
@@ -43,18 +48,33 @@ second) and compares with what was last accepted:
 
 **Faster**
 
-| | Before | After |
-|---|---:|---:|
-| ORB extraction, KITTI image, 2000 features | 9.8 ms | 4.5 ms on two threads, 3.3 on three |
-| – of which descriptors | 1.9 ms | 0.3 ms |
-| Tracking on KITTI 07 stereo after that, with stereo matching and descriptor comparison reworked | 11.5 ms | 9.5 ms |
+Per stage, KITTI 07, before this work and now (`tools/ab_stages.sh`):
 
-- The levels of the image pyramid are extracted in parallel; what is extracted
-  does not depend on the number of threads (`ORBextractor.nThreads`).
-- A descriptor's 512 sampling points are rotated four at a time (SSE2 / NEON).
-- Descriptors are compared 64 bits at a time, inline, in every search.
-- Stereo matching sums its windows on the pixels instead of making a matrix
-  for each.
+| Stage, ms | Stereo | Monocular |
+|---|---:|---:|
+| ORB extraction | 12.5 → **6.2** | 10.8 → **5.4** |
+| Stereo matching | 2.9 → **1.0** | |
+| Tracking, all of it, per frame | 19.2 → **11.5** | 14.5 → **8.6** |
+| Creating map points, per keyframe | 7.7 → **5.7** | 23.1 → **15.8** |
+| Local bundle adjustment | 17.5 → **14.1** | 60.3 → 65.6 |
+| Culling keyframes | 0.8 → 0.8 | 8.7 → **4.8** |
+| Local Mapping, all of it, per keyframe | 28.7 → **23.4** | 95.2 → **89.3** |
+
+- **Extraction**: the levels of the image pyramid in parallel -- what is
+  extracted does not depend on the number of threads
+  (`ORBextractor.nThreads`) -- and a descriptor's 512 sampling points rotated
+  four at a time (SSE2 / NEON). 9.8 → 4.5 ms an image on two threads.
+- **Matching**: descriptors compared 64 bits at a time, inline, in every
+  search; stereo matching sums its windows on the pixels instead of making a
+  matrix for each.
+- **Data structures**: a Frame's feature grid and a map point's observations
+  are each one block instead of a heap block per cell and per observation, so
+  that the copies every frame and every search make of them cost one copy.
+- **Local bundle adjustment** had not converged after its ten iterations:
+  g2o's initial damping is sized by a keyframe's rotation and holds the points
+  back for six or seven of them. Started small, two iterations reach what ten
+  did. In stereo and RGB-D; in monocular it cost accuracy and is as it was.
+  KITTI 04 stereo: 48.5 → 36.7 ms.
 
 **Smaller**
 
@@ -119,10 +139,14 @@ odometry and TUM RGB-D.
 - On TUM fr1_desk RGB-D, tracking is lost right after initialisation in about
   one run in ten and recovered by a second map that is merged later: v1.0 in 2
   runs of 12, this tree in 1 of 12.
+- One run of TUM fr1_desk RGB-D in fourteen of one build ended at an ATE of
+  0.140 m without losing tracking; not explained, and not seen since.
 - FAST detection is what is left of extraction's cost, 5.5 ms of 8 on one
   thread.
-- The back end -- local bundle adjustment, point creation, keyframe culling --
-  is as v1.0 left it.
+- Local bundle adjustment in monocular still runs with g2o's damping; half of
+  what an adjustment costs besides is building the graph for g2o.
+- Tracking the local map takes 0.1 to 0.4 ms longer per frame in stereo than
+  before extraction was made parallel; not looked into.
 - Culled KeyFrames are not freed yet; cross-thread reads of public members and
   the cycle between the three threads' classes remain.
 
