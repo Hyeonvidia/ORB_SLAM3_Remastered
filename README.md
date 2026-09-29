@@ -365,6 +365,20 @@ Before the pool and the inline descriptor the same comparison had said
 `ORBSLAM3R_RECLAIM=dry` turns freeing off and leaves the rest running, for a
 comparison on any sequence.
 
+`ORBmatcher::SearchForTriangulation` let several features of one keyframe take
+the same feature of another (v1.0 tests `vbMatched2` and never sets it), so
+points were made twice and one of each pair observed a keyframe that did not
+know it. With that fixed the comparison was stopped at 78 runs of 110
+(sequences 00-07): tracking -2.2 % per frame in stereo, faster in all eight,
+-0.4 % in mono with either sign, accuracy the same within the spread.
+
+**How much to run.** The 110 runs take two hours and are for a release. For a
+change, `./tools/ab_kitti.sh 04 07` (20 runs, six minutes) or
+`./tools/ab_stages.sh <before> <after>`, which times the stages the change
+touches and uses the ones it does not as its control. v1.0 is a reference
+here, not a limit: what a change is held to is the remaster's own last
+figures.
+
 **Inertial configurations** had a second difference, found by auditing every
 change between the two g2o's rather than by measuring: upstream's sparse solver
 refuses the numerically indefinite Hessians an inertial BA produces, and v1.0's

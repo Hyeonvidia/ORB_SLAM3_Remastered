@@ -34,5 +34,5 @@ mkdir -p build
   echo '--- artefacts ---'
   ls /workspace/build/lib/ 2>/dev/null | head -3
   find /workspace/build/bin -type f 2>/dev/null | wc -l | xargs -I{} echo 'example binaries: {}'
-  cd /workspace/build && ctest --output-on-failure 2>&1 | tail -4
+  cd /workspace/build && ctest -j 4 --output-on-failure 2>&1 | tail -4
 "

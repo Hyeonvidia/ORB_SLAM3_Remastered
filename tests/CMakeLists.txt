@@ -15,16 +15,22 @@ foreach(variant "" "_tsan")
     target_link_options(${t} PRIVATE -fsanitize=thread)
   endif()
   add_test(NAME reclaimer${variant} COMMAND ${t})
-  add_test(NAME reclaimer${variant}_dry_run COMMAND ${t} --dry-run)
-  # A reader that keeps a pointer across its quiescent point without pinning
-  # it, a check that skips the culled keyframes' slots, and one that does not
-  # follow replaced-by links must each be caught: a test that cannot fail
-  # proves nothing.
-  foreach(broken forget_pins forget_culled forget_replaced)
-    string(REPLACE "_" "-" flag ${broken})
-    add_test(NAME reclaimer${variant}_${broken} COMMAND ${t} --${flag})
-    set_tests_properties(reclaimer${variant}_${broken} PROPERTIES WILL_FAIL TRUE)
-  endforeach()
+  # Under ThreadSanitizer only the real run: the dry run takes the same locks
+  # on the same threads, and whether the test can fail is a property of its
+  # checks, not of the sanitizer -- the must-fail runs took 44 of ctest's 73
+  # seconds there and told nothing the plain ones had not.
+  if(variant STREQUAL "")
+    add_test(NAME reclaimer_dry_run COMMAND ${t} --dry-run)
+    # A reader that keeps a pointer across its quiescent point without pinning
+    # it, a check that skips the culled keyframes' slots, and one that does
+    # not follow replaced-by links must each be caught: a test that cannot
+    # fail proves nothing.
+    foreach(broken forget_pins forget_culled forget_replaced)
+      string(REPLACE "_" "-" flag ${broken})
+      add_test(NAME reclaimer_${broken} COMMAND ${t} --${flag})
+      set_tests_properties(reclaimer_${broken} PROPERTIES WILL_FAIL TRUE)
+    endforeach()
+  endif()
 endforeach()
 
 # The MapPoint slot pool, plain and under ThreadSanitizer.

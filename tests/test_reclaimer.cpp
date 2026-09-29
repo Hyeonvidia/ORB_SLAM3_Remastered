@@ -330,9 +330,18 @@ int main(int argc, char** argv)
     std::chrono::steady_clock::time_point lastGBA = std::chrono::steady_clock::now();
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now() +
                                                       std::chrono::seconds(bMustFail ? 40 : 4);
+    bool bFaultSeen = false;
     while(std::chrono::steady_clock::now() < end)
     {
         ++nIterations;
+        // A run that must fail is over once the fault has shown: a pin that
+        // came after the check is one way it shows, a read of a freed object
+        // (which ends the process where it happens) the other.
+        if(bMustFail && nIterations % 64 == 0 && reclaimer.GetStats().nLatePins > 0)
+        {
+            bFaultSeen = true;
+            break;
+        }
         for(int n = 0; n < 32; ++n)
         {
             Object* p = new Object;
@@ -400,7 +409,7 @@ int main(int argc, char** argv)
     // What was put off must still come back and be freed.
     const std::size_t nWaitingAtEnd = reclaimer.GetStats().nWaiting;
     recent.clear();
-    for(int n = 0; n < 2500; ++n)
+    for(int n = 0; n < (bFaultSeen ? 0 : 2500); ++n)
     {
         reclaimer.Announce(Reclaimer::LOCAL_MAPPING, [](std::vector<const void*> &) {});
         reclaimer.Step(std::chrono::microseconds(1000));
@@ -449,7 +458,9 @@ int main(int argc, char** argv)
         expect(stats.nLatePins == 0, "nothing was pinned after the check that was not pinned before it");
     }
     expect(stats.nPutOffPinned > 0, "objects a reader kept were put off");
-    expect(stats.nWaiting < nWaitingAtEnd / 4 + 64, "what was put off came back once nothing held it");
+    // Half, not all: what was put off twice is due two seconds later and what
+    // was put off three times four, and the idling above lasts two and a half.
+    expect(stats.nWaiting < nWaitingAtEnd / 2 + 64, "what was put off came back once nothing held it");
 #if !defined(__SANITIZE_THREAD__)
     // Not under ThreadSanitizer, where every mutex costs what a scan costs here.
     expect(stats.longestStep < std::chrono::milliseconds(20), "a step stays near its budget");
