@@ -21,6 +21,7 @@
 
 #include <DBoW2/BowVector.h>
 #include <DBoW2/FeatureVector.h>
+#include "features/FeatureGrid.hpp"
 #include "atlas/ORBVocabulary.hpp"
 #include "common/ImuTypes.hpp"
 #include "common/NavState.hpp"
@@ -463,19 +464,7 @@ namespace ORB_SLAM3
         KeyFrameDatabase* mpKeyFrameDB;
         ORBVocabulary* mpORBvocabulary;
 
-        // Grid over the image to speed up feature matching
-        // Which features fall in each cell of the image grid, flat: cell
-        // c = column * mnGridRows + row holds indices[offsets[c] .. offsets[c + 1]),
-        // in the order Frame assigned them. As a vector of vectors of vectors this
-        // was 103 KB a keyframe, most of it vector headers and one small heap block
-        // per occupied cell; it is 20.
-        struct FeatureGrid
-        {
-            std::vector<std::uint32_t> offsets;
-            std::vector<std::uint32_t> indices;
-
-            bool empty() const { return offsets.empty(); }
-        };
+        // Grid over the image to speed up feature matching: the Frame's.
         FeatureGrid mGrid;
 
         template<class Cells>

@@ -26,6 +26,7 @@
 
 #include <sophus/geometry.hpp>
 
+#include "features/FeatureGrid.hpp"
 #include "common/ImuTypes.hpp"
 #include "common/NavState.hpp"
 #include "atlas/ORBVocabulary.hpp"
@@ -235,7 +236,7 @@ namespace ORB_SLAM3
         // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
         float mfGridElementWidthInv = 0.0f;
         float mfGridElementHeightInv = 0.0f;
-        std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+        FeatureGrid mGrid;
 
         IMU::Bias mPredBias;
 
@@ -327,7 +328,7 @@ namespace ORB_SLAM3
         std::vector<Eigen::Vector3f> mvStereo3Dpoints;
 
         //Grid for the right image
-        std::vector<std::size_t> mGridRight[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+        FeatureGrid mGridRight;
 
         Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, ORBextractor* extractorLeft,
               ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf,

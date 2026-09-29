@@ -147,9 +147,9 @@ namespace ORB_SLAM3
             MemoryAudit::Register(this);
         mnId = nNextId++;
 
-        FillGrid(mGrid, F.mGrid);
+        mGrid = F.mGrid;
         if(F.Nleft != -1)
-            FillGrid(mGridRight, F.mGridRight);
+            mGridRight = F.mGridRight;
 
         if(F.HasVelocity())
             SetVelocity(F.GetVelocity());

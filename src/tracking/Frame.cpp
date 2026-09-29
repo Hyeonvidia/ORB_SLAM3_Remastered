@@ -95,15 +95,9 @@ namespace ORB_SLAM3
         mnMinY = frame.mnMinY;
         mnMaxY = frame.mnMaxY;
 
-        for(int i = 0; i < FRAME_GRID_COLS; i++)
-            for(int j = 0; j < FRAME_GRID_ROWS; j++)
-            {
-                mGrid[i][j] = frame.mGrid[i][j];
-                if(frame.Nleft > 0)
-                {
-                    mGridRight[i][j] = frame.mGridRight[i][j];
-                }
-            }
+        mGrid = frame.mGrid;
+        if(frame.Nleft > 0)
+            mGridRight = frame.mGridRight;
 
         mmProjectPoints = frame.mmProjectPoints;
         mmMatchedInImage = frame.mmMatchedInImage;
@@ -362,20 +356,9 @@ namespace ORB_SLAM3
 
     void Frame::AssignFeaturesToGrid()
     {
-        // Fill matrix with points
+        // The cell of each feature, then the features of each cell
         const int nCells = FRAME_GRID_COLS * FRAME_GRID_ROWS;
-
-        int nReserve = 0.5f * N / (nCells);
-
-        for(unsigned int i = 0; i < FRAME_GRID_COLS; i++)
-            for(unsigned int j = 0; j < FRAME_GRID_ROWS; j++)
-            {
-                mGrid[i][j].reserve(nReserve);
-                if(Nleft != -1)
-                {
-                    mGridRight[i][j].reserve(nReserve);
-                }
-            }
+        std::vector<int> vCells(N, -1);
 
         for(int i = 0; i < N; i++)
         {
@@ -383,12 +366,15 @@ namespace ORB_SLAM3
 
             int nGridPosX, nGridPosY;
             if(PosInGrid(kp, nGridPosX, nGridPosY))
-            {
-                if(Nleft == -1 || i < Nleft)
-                    mGrid[nGridPosX][nGridPosY].push_back(i);
-                else
-                    mGridRight[nGridPosX][nGridPosY].push_back(i - Nleft);
-            }
+                vCells[i] = nGridPosX * FRAME_GRID_ROWS + nGridPosY;
+        }
+
+        if(Nleft == -1)
+            mGrid.Assign(nCells, vCells.data(), N);
+        else
+        {
+            mGrid.Assign(nCells, vCells.data(), Nleft);
+            mGridRight.Assign(nCells, vCells.data() + Nleft, N - Nleft);
         }
     }
 
@@ -584,19 +570,20 @@ namespace ORB_SLAM3
 
         const bool bCheckLevels = (minLevel > 0) || (maxLevel >= 0);
 
+        // A Frame made from no image has no grid.
+        const FeatureGrid &grid = (!bRight) ? mGrid : mGridRight;
+        if(grid.empty())
+            return vIndices;
+
         for(int ix = nMinCellX; ix <= nMaxCellX; ix++)
         {
             for(int iy = nMinCellY; iy <= nMaxCellY; iy++)
             {
-                const std::vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
-                if(vCell.empty())
-                    continue;
+                const std::size_t c = static_cast<std::size_t>(ix) * FRAME_GRID_ROWS + iy;
 
-                for(size_t j = 0, jend = vCell.size(); j < jend; j++)
+                for(const std::uint32_t *j = grid.begin(c), *jend = grid.end(c); j != jend; ++j)
                 {
-                    const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKeysUn[vCell[j]]
-                                               : (!bRight)   ? mvKeys[vCell[j]]
-                                                             : mvKeysRight[vCell[j]];
+                    const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKeysUn[*j] : (!bRight) ? mvKeys[*j] : mvKeysRight[*j];
                     if(bCheckLevels)
                     {
                         if(kpUn.octave < minLevel)
@@ -610,7 +597,7 @@ namespace ORB_SLAM3
                     const float disty = kpUn.pt.y - y;
 
                     if(std::fabs(distx) < factorX && std::fabs(disty) < factorY)
-                        vIndices.push_back(vCell[j]);
+                        vIndices.push_back(*j);
                 }
             }
         }
