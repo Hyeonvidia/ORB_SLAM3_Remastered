@@ -19,15 +19,17 @@
 #ifndef ORBVOCABULARY_H
 #define ORBVOCABULARY_H
 
-#include <orbslam3r/dbow2_ext/orb_vocabulary.hpp>
+#include <orbslam3r/dbow2_ext/compact_vocabulary.hpp>
 
 namespace ORB_SLAM3
 {
 
-    // Was DBoW2::TemplatedVocabulary directly, which only ORB-SLAM3's edited
-    // copy could load from ORBvoc.txt.  vendor_ext supplies that format as a
-    // subclass of untouched upstream instead; see docs/WRAPPERS.md.
-    typedef orbslam3r::ORBVocabulary ORBVocabulary;
+    // The vocabulary tree in arrays, 59 MB of them, where DBoW2's
+    // TemplatedVocabulary holds a node object for each of its 1.1 million
+    // nodes, 106 MB; the same words and the same scores. See
+    // vendor_ext/dbow2_ext's compact_vocabulary.hpp. DBoW2's own, which can
+    // also create a vocabulary and save it, is orbslam3r::ORBVocabulary.
+    typedef orbslam3r::dbow2_ext::CompactVocabulary ORBVocabulary;
 
 } // namespace ORB_SLAM3
 

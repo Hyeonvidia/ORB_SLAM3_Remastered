@@ -2,10 +2,15 @@
 // as DBoW2 scores the same words in its std::map, and the flat map must find,
 // insert and erase as a std::map does.
 #include <cstdio>
+#include <cstdint>
 #include <map>
+#include <string>
+#include <vector>
 #include <random>
 
 #include <DBoW2/BowVector.h>
+#include <DBoW2/FeatureVector.h>
+#include <orbslam3r/dbow2_ext/orb_vocabulary.hpp>
 
 #include "atlas/BowWords.hpp"
 #include "common/FlatMap.hpp"
@@ -45,6 +50,48 @@ int main()
         nDifferent += fa.size() != a.size() || fa.capacity() != a.size();
     }
     expect(nDifferent == 0, "the score of the words in one block is DBoW2's score of them");
+
+    // The vocabulary in arrays against DBoW2's, from one file: a tree that
+    // DBoW2 makes of random descriptors and writes in the order it made it,
+    // which is not the order the arrays are in.
+    {
+        typedef orbslam3r::dbow2_ext::FORB32::TDescriptor Descriptor;
+        const auto Random = [&rng](std::size_t n)
+        {
+            std::vector<Descriptor> v(n);
+            for(Descriptor &d : v)
+                for(std::uint64_t &w : d.w)
+                    w = (static_cast<std::uint64_t>(rng()) << 32) | rng();
+            return v;
+        };
+        std::vector<std::vector<Descriptor>> training;
+        for(int i = 0; i < 40; ++i)
+            training.push_back(Random(300));
+        orbslam3r::ORBVocabulary made(4, 3, DBoW2::TF_IDF, DBoW2::L1_NORM);
+        made.create(training);
+        const std::string file = "test_bowwords_vocabulary.txt";
+        expect(made.saveToTextFile(file), "DBoW2 writes the vocabulary it made");
+
+        orbslam3r::ORBVocabulary theirs;
+        ORB_SLAM3::ORBVocabulary ours;
+        expect(theirs.loadFromTextFile(file) && ours.loadFromTextFile(file), "both load it");
+        expect(ours.size() == theirs.size() && ours.size() > 0, "both have as many words");
+        long nOther = 0;
+        for(int n = 0; n < 500; ++n)
+        {
+            const std::vector<Descriptor> features = Random(1 + rng() % 500);
+            for(int levelsup = 0; levelsup <= 4; ++levelsup)
+            {
+                DBoW2::BowVector bowTheirs, bowOurs;
+                DBoW2::FeatureVector fvTheirs, fvOurs;
+                theirs.transform(features, bowTheirs, fvTheirs, levelsup);
+                ours.transform(features, bowOurs, fvOurs, levelsup);
+                nOther += !(bowTheirs == bowOurs) || !(fvTheirs == fvOurs);
+            }
+        }
+        expect(nOther == 0, "the words and the feature vector of an image are DBoW2's");
+        std::remove(file.c_str());
+    }
 
     std::map<long, int> reference;
     ORB_SLAM3::FlatMap<long, int> flat;

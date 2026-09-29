@@ -49,6 +49,7 @@
 #include "tracking/MLPnPsolver.hpp"
 #include "camera/GeometricCamera.hpp"
 
+#include <DUtils/Random.h>
 #include <Eigen/Sparse>
 
 #include <algorithm>
