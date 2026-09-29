@@ -19,6 +19,7 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
+#include "features/ORBdescriptor.hpp"
 #include "common/Converter.hpp"
 #include "atlas/SlotPool.hpp"
 
@@ -155,6 +156,7 @@ namespace ORB_SLAM3
         void ComputeDistinctiveDescriptors();
 
         cv::Mat GetDescriptor();
+        ORBdescriptor::Bytes GetDescriptorBytes();
 
         void UpdateNormalAndDepth();
 

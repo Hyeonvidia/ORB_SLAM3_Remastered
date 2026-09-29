@@ -22,6 +22,7 @@
 #include "features/ORBdescriptor.hpp"
 #include "tracking/Frame.hpp"
 
+#include <cstring>
 #include <mutex>
 
 #include <algorithm>
@@ -497,6 +498,17 @@ namespace ORB_SLAM3
     {
         std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mDescriptor.clone();
+    }
+
+    ORBdescriptor::Bytes MapPoint::GetDescriptorBytes()
+    {
+        std::lock_guard<std::mutex> lock(mMutexFeatures);
+        // Through mDescriptor, which is where a loaded atlas puts it; zeros
+        // for a point that has none yet.
+        ORBdescriptor::Bytes d = {};
+        if(mDescriptor.data && mDescriptor.total() == sizeof(d.b))
+            std::memcpy(d.b, mDescriptor.data, sizeof(d.b));
+        return d;
     }
 
     std::tuple<int, int> MapPoint::GetIndexInKeyFrame(KeyFrame* pKF)

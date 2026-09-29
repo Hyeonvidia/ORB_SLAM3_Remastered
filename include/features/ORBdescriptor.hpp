@@ -51,6 +51,14 @@ namespace ORB_SLAM3
 
         static int Distance(const cv::Mat &a, const cv::Mat &b) { return Distance(a.data, b.data); }
 
+        // A descriptor by value, for what hands one out under a lock: copying
+        // 32 bytes allocates nothing, a cv::Mat of them does.
+        struct Bytes
+        {
+            unsigned char b[32];
+            operator const unsigned char*() const { return b; }
+        };
+
         static constexpr int TH_LOW = 50;
         static constexpr int TH_HIGH = 100;
 
