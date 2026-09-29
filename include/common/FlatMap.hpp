@@ -72,6 +72,23 @@ namespace ORB_SLAM3
 
         std::size_t count(const K &key) const { return find(key) != mvEntries.end() ? 1 : 0; }
 
+        const_iterator lower_bound(const K &key) const
+        {
+            return std::lower_bound(mvEntries.begin(), mvEntries.end(), key, Before);
+        }
+
+        // The entries of a std::map or of anything else that gives them in the
+        // order of their keys, in a block of exactly their size.
+        template<class Map>
+        void assign(const Map &map)
+        {
+            std::vector<value_type> entries;
+            entries.reserve(map.size());
+            for(const auto &entry : map)
+                entries.emplace_back(entry.first, entry.second);
+            mvEntries.swap(entries);
+        }
+
         V &operator[](const K &key)
         {
             iterator it = Lower(key);

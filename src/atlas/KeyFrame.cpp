@@ -98,7 +98,7 @@ namespace ORB_SLAM3
         f["map point pointers"] = MemoryAudit::Vector(mvpMapPoints) + MemoryAudit::Vector(mvBackupMapPointsId);
         f["grid"] = Grid(mGrid);
         f["grid right"] = Grid(mGridRight);
-        f["BowVector"] = MemoryAudit::Tree(mBowVec);
+        f["BowVector"] = MemoryAudit::Chunk(mBowVec.capacity() * sizeof(BowWords::value_type));
         std::size_t nFeatVec = MemoryAudit::Tree(mFeatVec);
         for(const auto &node : mFeatVec)
             nFeatVec += MemoryAudit::Vector(node.second);
@@ -168,7 +168,9 @@ namespace ORB_SLAM3
                 orbslam3r::dbow2_ext::FORB32::FromMat(mDescriptors);
             // Feature vector associate features with nodes in the 4th level (from leaves up)
             // We assume the vocabulary tree has 6 levels, change the 4 otherwise
-            mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
+            DBoW2::BowVector bow;
+            mpORBvocabulary->transform(vCurrentDesc, bow, mFeatVec, 4);
+            mBowVec.assign(bow);
         }
     }
 

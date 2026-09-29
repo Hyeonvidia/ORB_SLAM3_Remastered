@@ -58,3 +58,10 @@ target_compile_definitions(bench_orb PRIVATE ORBSLAM3R_ORB_PROFILE)
 target_compile_options(bench_orb PRIVATE -ffp-contract=off) # as the library compiles the extractor
 target_compile_features(bench_orb PRIVATE cxx_std_17)
 target_link_libraries(bench_orb PRIVATE ${OpenCV_LIBS} Threads::Threads)
+
+# The flat map, and the words of an image in it against DBoW2's own score.
+add_executable(test_bowwords test_bowwords.cpp)
+target_include_directories(test_bowwords PRIVATE ${PROJECT_SOURCE_DIR}/include ${OpenCV_INCLUDE_DIRS})
+target_compile_features(test_bowwords PRIVATE cxx_std_17)
+target_link_libraries(test_bowwords PRIVATE orbslam3r::dbow2_ext ${OpenCV_LIBS})
+add_test(NAME bowwords COMMAND test_bowwords)

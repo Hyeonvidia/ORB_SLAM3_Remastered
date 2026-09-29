@@ -50,7 +50,7 @@ namespace ORB_SLAM3
         if(pKF->isBad())
             return;
 
-        for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
+        for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             mvInvertedFile[vit->first].push_back(pKF);
     }
 
@@ -59,7 +59,7 @@ namespace ORB_SLAM3
         std::lock_guard<std::mutex> lock(mMutex);
 
         // Erase elements in the Inverse File for the entry
-        for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
+        for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
         {
             // List of keyframes that share the word
             std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
@@ -118,8 +118,7 @@ namespace ORB_SLAM3
         {
             std::lock_guard<std::mutex> lock(mMutex);
 
-            for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend;
-                vit++)
+            for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             {
                 std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
 
@@ -172,7 +171,7 @@ namespace ORB_SLAM3
             {
                 nscores++;
 
-                float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
+                float si = Score(*mpVoc, pKF->mBowVec, pKFi->mBowVec);
 
                 pKFi->mLoopScore = si;
                 if(si >= minScore)
@@ -251,8 +250,7 @@ namespace ORB_SLAM3
         {
             std::lock_guard<std::mutex> lock(mMutex);
 
-            for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend;
-                vit++)
+            for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             {
                 std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
 
@@ -320,7 +318,7 @@ namespace ORB_SLAM3
                 {
                     nscores++;
 
-                    float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
+                    float si = Score(*mpVoc, pKF->mBowVec, pKFi->mBowVec);
 
                     pKFi->mLoopScore = si;
                     if(si >= minScore)
@@ -414,7 +412,7 @@ namespace ORB_SLAM3
                 {
                     nscores++;
 
-                    float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
+                    float si = Score(*mpVoc, pKF->mBowVec, pKFi->mBowVec);
 
                     pKFi->mMergeScore = si;
                     if(si >= minScore)
@@ -481,7 +479,7 @@ namespace ORB_SLAM3
             }
         }
 
-        for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
+        for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
         {
             std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
 
@@ -506,8 +504,7 @@ namespace ORB_SLAM3
 
             spConnectedKF = pKF->GetConnectedKeyFrames();
 
-            for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend;
-                vit++)
+            for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             {
                 std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
 
@@ -560,7 +557,7 @@ namespace ORB_SLAM3
             if(pKFi->mnPlaceRecognitionWords > minCommonWords)
             {
                 nscores++;
-                float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
+                float si = Score(*mpVoc, pKF->mBowVec, pKFi->mBowVec);
                 pKFi->mPlaceRecognitionScore = si;
                 lScoreAndMatch.push_back(std::make_pair(si, pKFi));
             }
@@ -646,8 +643,7 @@ namespace ORB_SLAM3
 
             spConnectedKF = pKF->GetConnectedKeyFrames();
 
-            for(DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend;
-                vit++)
+            for(BowWords::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
             {
                 std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
 
@@ -695,7 +691,7 @@ namespace ORB_SLAM3
             if(pKFi->mnPlaceRecognitionWords > minCommonWords)
             {
                 nscores++;
-                float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
+                float si = Score(*mpVoc, pKF->mBowVec, pKFi->mBowVec);
                 pKFi->mPlaceRecognitionScore = si;
                 lScoreAndMatch.push_back(std::make_pair(si, pKFi));
             }
@@ -781,7 +777,7 @@ namespace ORB_SLAM3
         {
             std::lock_guard<std::mutex> lock(mMutex);
 
-            for(DBoW2::BowVector::const_iterator vit = F->mBowVec.begin(), vend = F->mBowVec.end(); vit != vend; vit++)
+            for(BowWords::const_iterator vit = F->mBowVec.begin(), vend = F->mBowVec.end(); vit != vend; vit++)
             {
                 std::list<KeyFrame*> &lKFs = mvInvertedFile[vit->first];
 
@@ -825,7 +821,7 @@ namespace ORB_SLAM3
             if(pKFi->mnRelocWords > minCommonWords)
             {
                 nscores++;
-                float si = mpVoc->score(F->mBowVec, pKFi->mBowVec);
+                float si = Score(*mpVoc, F->mBowVec, pKFi->mBowVec);
                 pKFi->mRelocScore = si;
                 lScoreAndMatch.push_back(std::make_pair(si, pKFi));
             }

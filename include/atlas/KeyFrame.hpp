@@ -20,6 +20,7 @@
 #define KEYFRAME_H
 
 #include <DBoW2/BowVector.h>
+#include "atlas/BowWords.hpp"
 #include <DBoW2/FeatureVector.h>
 #include "features/FeatureGrid.hpp"
 #include "atlas/ORBVocabulary.hpp"
@@ -133,8 +134,16 @@ namespace ORB_SLAM3
             ar & const_cast<std::vector<float>& >(mvuRight);
             ar & const_cast<std::vector<float>& >(mvDepth);
             serializeMatrix<Archive>(ar,mDescriptors,version);
-            // BOW
-            ar & mBowVec;
+            // BOW: on disk as v1.0 wrote it, a std::map
+            {
+                DBoW2::BowVector bow;
+                if(Archive::is_saving::value)
+                    for(const BowWords::value_type &word : mBowVec)
+                        bow.insert(bow.end(), word);
+                ar & bow;
+                if(Archive::is_loading::value)
+                    mBowVec.assign(bow);
+            }
             ar & mFeatVec;
             // Pose relative to parent
             serializeSophusSE3<Archive>(ar, mTcp, version);
@@ -402,7 +411,7 @@ namespace ORB_SLAM3
         const cv::Mat mDescriptors;
 
         //BoW
-        DBoW2::BowVector mBowVec;
+        BowWords mBowVec;
         DBoW2::FeatureVector mFeatVec;
 
         // Pose relative to parent (this is computed when bad flag is activated)

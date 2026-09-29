@@ -22,6 +22,7 @@
 #include <vector>
 
 #include <DBoW2/BowVector.h>
+#include "atlas/BowWords.hpp"
 #include <DBoW2/FeatureVector.h>
 
 #include <sophus/geometry.hpp>
@@ -230,7 +231,7 @@ namespace ORB_SLAM3
         std::vector<float> mvDepth;
 
         // Bag of Words Vector structures.
-        DBoW2::BowVector mBowVec;
+        BowWords mBowVec;
         DBoW2::FeatureVector mFeatVec;
 
         // ORB descriptor, each row associated to a keypoint.

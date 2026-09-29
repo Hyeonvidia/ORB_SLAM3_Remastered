@@ -623,7 +623,9 @@ namespace ORB_SLAM3
         {
             const std::vector<orbslam3r::dbow2_ext::FORB32::TDescriptor> vCurrentDesc =
                 orbslam3r::dbow2_ext::FORB32::FromMat(mDescriptors);
-            mpORBvocabulary->transform(vCurrentDesc, mBowVec, mFeatVec, 4);
+            DBoW2::BowVector bow;
+            mpORBvocabulary->transform(vCurrentDesc, bow, mFeatVec, 4);
+            mBowVec.assign(bow);
         }
     }
 
