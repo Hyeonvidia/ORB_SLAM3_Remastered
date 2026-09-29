@@ -730,24 +730,32 @@ namespace ORB_SLAM3
 
         const int nRows = mpORBextractorLeft->mvImagePyramid[0].rows;
 
-        //Assign keypoints to row table
-        std::vector<std::vector<size_t>> vRowIndices(nRows, std::vector<size_t>());
-
-        for(int i = 0; i < nRows; i++)
-            vRowIndices[i].reserve(200);
-
+        // Assign keypoints to row table: for each row, the right keypoints
+        // whose band of rows it is in, in their order. One array with where
+        // each row begins in it -- counted first, then filled -- instead of a
+        // vector for each of the image's rows.
         const int Nr = mvKeysRight.size();
-
+        std::vector<int> vRowBegin(nRows + 1, 0);
+        std::vector<int> vBandMin(Nr), vBandMax(Nr);
         for(int iR = 0; iR < Nr; iR++)
         {
             const cv::KeyPoint &kp = mvKeysRight[iR];
             const float &kpY = kp.pt.y;
             const float r = 2.0f * mvScaleFactors[mvKeysRight[iR].octave];
-            const int maxr = std::ceil(kpY + r);
-            const int minr = std::floor(kpY - r);
+            vBandMax[iR] = std::ceil(kpY + r);
+            vBandMin[iR] = std::floor(kpY - r);
 
-            for(int yi = minr; yi <= maxr; yi++)
-                vRowIndices[yi].push_back(iR);
+            for(int yi = vBandMin[iR]; yi <= vBandMax[iR]; yi++)
+                vRowBegin[yi + 1]++;
+        }
+        for(int i = 0; i < nRows; i++)
+            vRowBegin[i + 1] += vRowBegin[i];
+        std::vector<int> vRowIndices(vRowBegin[nRows]);
+        {
+            std::vector<int> vRowNext(vRowBegin.begin(), vRowBegin.end() - 1);
+            for(int iR = 0; iR < Nr; iR++)
+                for(int yi = vBandMin[iR]; yi <= vBandMax[iR]; yi++)
+                    vRowIndices[vRowNext[yi]++] = iR;
         }
 
         // Set limits for search
@@ -766,9 +774,10 @@ namespace ORB_SLAM3
             const float &vL = kpL.pt.y;
             const float &uL = kpL.pt.x;
 
-            const std::vector<size_t> &vCandidates = vRowIndices[vL];
+            const int* const vCandidates = vRowIndices.data() + vRowBegin[static_cast<int>(vL)];
+            const int nCandidates = vRowBegin[static_cast<int>(vL) + 1] - vRowBegin[static_cast<int>(vL)];
 
-            if(vCandidates.empty())
+            if(nCandidates == 0)
                 continue;
 
             const float minU = uL - maxD;
@@ -780,10 +789,10 @@ namespace ORB_SLAM3
             int bestDist = ORBdescriptor::TH_HIGH;
             size_t bestIdxR = 0;
 
-            const cv::Mat &dL = mDescriptors.row(iL);
+            const unsigned char* const dL = mDescriptors.ptr(iL);
 
             // Compare descriptor to right keypoints
-            for(size_t iC = 0; iC < vCandidates.size(); iC++)
+            for(int iC = 0; iC < nCandidates; iC++)
             {
                 const size_t iR = vCandidates[iC];
                 const cv::KeyPoint &kpR = mvKeysRight[iR];
@@ -795,8 +804,7 @@ namespace ORB_SLAM3
 
                 if(uR >= minU && uR <= maxU)
                 {
-                    const cv::Mat &dR = mDescriptorsRight.row(iR);
-                    const int dist = ORBdescriptor::Distance(dL, dR);
+                    const int dist = ORBdescriptor::Distance(dL, mDescriptorsRight.ptr(static_cast<int>(iR)));
 
                     if(dist < bestDist)
                     {
@@ -816,30 +824,39 @@ namespace ORB_SLAM3
                 const float scaledvL = std::round(kpL.pt.y * scaleFactor);
                 const float scaleduR0 = std::round(uR0 * scaleFactor);
 
-                // sliding window search
+                // sliding window search: the sum of absolute differences of
+                // two windows of 11 x 11 pixels, eleven times for each match.
+                // Summed here, on the pixels, rather than by cv::norm on two
+                // matrices made for the purpose.
                 const int w = 5;
-                cv::Mat IL = mpORBextractorLeft->mvImagePyramid[kpL.octave]
-                                 .rowRange(scaledvL - w, scaledvL + w + 1)
-                                 .colRange(scaleduL - w, scaleduL + w + 1);
+                const cv::Mat &imL = mpORBextractorLeft->mvImagePyramid[kpL.octave];
+                const cv::Mat &imR = mpORBextractorRight->mvImagePyramid[kpL.octave];
+                const int rowL = static_cast<int>(scaledvL) - w;
+                const int colL = static_cast<int>(scaleduL) - w;
 
                 int bestDist = INT_MAX;
                 int bestincR = 0;
                 const int L = 5;
-                std::vector<float> vDists;
-                vDists.resize(2 * L + 1);
+                float vDists[2 * L + 1];
 
                 const float iniu = scaleduR0 + L - w;
                 const float endu = scaleduR0 + L + w + 1;
-                if(iniu < 0 || endu >= mpORBextractorRight->mvImagePyramid[kpL.octave].cols)
+                if(iniu < 0 || endu >= imR.cols)
                     continue;
 
                 for(int incR = -L; incR <= +L; incR++)
                 {
-                    cv::Mat IR = mpORBextractorRight->mvImagePyramid[kpL.octave]
-                                     .rowRange(scaledvL - w, scaledvL + w + 1)
-                                     .colRange(scaleduR0 + incR - w, scaleduR0 + incR + w + 1);
+                    const int colR = static_cast<int>(scaleduR0) + incR - w;
+                    int sum = 0;
+                    for(int row = 0; row < 2 * w + 1; ++row)
+                    {
+                        const unsigned char* const pL = imL.ptr(rowL + row) + colL;
+                        const unsigned char* const pR = imR.ptr(rowL + row) + colR;
+                        for(int col = 0; col < 2 * w + 1; ++col)
+                            sum += std::abs(static_cast<int>(pL[col]) - static_cast<int>(pR[col]));
+                    }
 
-                    float dist = cv::norm(IL, IR, cv::NORM_L1);
+                    float dist = sum;
                     if(dist < bestDist)
                     {
                         bestDist = dist;

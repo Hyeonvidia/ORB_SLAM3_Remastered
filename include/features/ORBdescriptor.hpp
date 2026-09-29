@@ -19,6 +19,9 @@
 #ifndef ORBDESCRIPTOR_H
 #define ORBDESCRIPTOR_H
 
+#include <cstdint>
+#include <cstring>
+
 #include <opencv2/core/core.hpp>
 
 namespace ORB_SLAM3
@@ -31,11 +34,38 @@ namespace ORB_SLAM3
     class ORBdescriptor
     {
     public:
-        // Computes the Hamming distance between two ORB descriptors
-        static int Distance(const cv::Mat &a, const cv::Mat &b);
+        // The Hamming distance between two ORB descriptors of 32 bytes. Every
+        // search compares descriptors in its innermost loop, so it is here to
+        // be inlined, and counts 64 bits at a time: one instruction where the
+        // processor has it, as every ARMv8 does.
+        static int Distance(const unsigned char* a, const unsigned char* b)
+        {
+            std::uint64_t x[4], y[4];
+            std::memcpy(x, a, 32);
+            std::memcpy(y, b, 32);
+            int dist = 0;
+            for(int i = 0; i < 4; ++i)
+                dist += Count(x[i] ^ y[i]);
+            return dist;
+        }
+
+        static int Distance(const cv::Mat &a, const cv::Mat &b) { return Distance(a.data, b.data); }
 
         static constexpr int TH_LOW = 50;
         static constexpr int TH_HIGH = 100;
+
+    private:
+        static int Count(std::uint64_t v)
+        {
+#if defined(__aarch64__) || defined(__POPCNT__)
+            return __builtin_popcountll(v);
+#else
+            // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+            v = v - ((v >> 1) & 0x5555555555555555ULL);
+            v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
+            return static_cast<int>((((v + (v >> 4)) & 0x0F0F0F0F0F0F0F0FULL) * 0x0101010101010101ULL) >> 56);
+#endif
+        }
     };
 
 } // namespace ORB_SLAM3
