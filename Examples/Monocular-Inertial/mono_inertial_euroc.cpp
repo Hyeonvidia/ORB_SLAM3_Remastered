@@ -114,7 +114,7 @@ int main(int argc, char* argv[])
 
     // Vector for tracking time statistics
     std::vector<float> vTimesTrack;
-    vTimesTrack.resize(tot_images);
+    vTimesTrack.reserve(tot_images);
 
     std::cout.precision(17);
 
@@ -196,7 +196,7 @@ int main(int argc, char* argv[])
             ttrack_tot += ttrack;
             // std::cout << "ttrack: " << ttrack << std::endl;
 
-            vTimesTrack[ni] = ttrack;
+            vTimesTrack.push_back(ttrack);
 
             // Wait to load the next frame
             double T = 0;
@@ -218,6 +218,19 @@ int main(int argc, char* argv[])
 
     // Stop all threads
     SLAM.Shutdown();
+
+    // Tracking time statistics, as the KITTI and TUM examples print them; the
+    // times were kept here and never reported.
+    if(!vTimesTrack.empty())
+    {
+        std::sort(vTimesTrack.begin(), vTimesTrack.end());
+        float totaltime = 0;
+        for(const float t : vTimesTrack)
+            totaltime += t;
+        std::cout << "-------" << std::endl << std::endl;
+        std::cout << "median tracking time: " << vTimesTrack[vTimesTrack.size() / 2] << std::endl;
+        std::cout << "mean tracking time: " << totaltime / vTimesTrack.size() << std::endl;
+    }
 
     // Save camera trajectory
     if(bFileName)
