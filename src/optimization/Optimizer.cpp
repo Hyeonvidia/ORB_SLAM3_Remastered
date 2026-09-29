@@ -151,12 +151,11 @@ namespace ORB_SLAM3
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+            const MapPoint::ObservationMap observations = pMP->GetObservations();
 
             int nEdges = 0;
             //SET EDGES
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin();
-                mit != observations.end(); mit++)
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(); mit != observations.end(); mit++)
             {
                 KeyFrame* pKF = mit->first;
                 if(pKF->isBad() || pKF->mnId > maxKFid)
@@ -613,13 +612,12 @@ namespace ORB_SLAM3
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+            const MapPoint::ObservationMap observations = pMP->GetObservations();
 
             bool bAllFixed = true;
 
             //Set edges
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin(),
-                                                                          mend = observations.end();
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(), mend = observations.end();
                 mit != mend; mit++)
             {
                 KeyFrame* pKFi = mit->first;
@@ -1175,10 +1173,9 @@ namespace ORB_SLAM3
         for(std::list<MapPoint*>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end(); lit != lend;
             lit++)
         {
-            std::map<KeyFrame*, std::tuple<int, int>> observations = (*lit)->GetObservations();
-            for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = observations.begin(),
-                                                                    mend = observations.end();
-                mit != mend; mit++)
+            MapPoint::ObservationMap observations = (*lit)->GetObservations();
+            for(MapPoint::ObservationMap::iterator mit = observations.begin(), mend = observations.end(); mit != mend;
+                mit++)
             {
                 KeyFrame* pKFi = mit->first;
 
@@ -1302,11 +1299,10 @@ namespace ORB_SLAM3
             optimizer.addVertex(vPoint);
             nPoints++;
 
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+            const MapPoint::ObservationMap observations = pMP->GetObservations();
 
             //Set edges
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin(),
-                                                                          mend = observations.end();
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(), mend = observations.end();
                 mit != mend; mit++)
             {
                 KeyFrame* pKFi = mit->first;
@@ -2512,10 +2508,9 @@ namespace ORB_SLAM3
         for(std::list<MapPoint*>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end(); lit != lend;
             lit++)
         {
-            std::map<KeyFrame*, std::tuple<int, int>> observations = (*lit)->GetObservations();
-            for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = observations.begin(),
-                                                                    mend = observations.end();
-                mit != mend; mit++)
+            MapPoint::ObservationMap observations = (*lit)->GetObservations();
+            for(MapPoint::ObservationMap::iterator mit = observations.begin(), mend = observations.end(); mit != mend;
+                mit++)
             {
                 KeyFrame* pKFi = mit->first;
 
@@ -2746,11 +2741,10 @@ namespace ORB_SLAM3
             vPoint->setId(id);
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+            const MapPoint::ObservationMap observations = pMP->GetObservations();
 
             // Create visual constraints
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin(),
-                                                                          mend = observations.end();
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(), mend = observations.end();
                 mit != mend; mit++)
             {
                 KeyFrame* pKFi = mit->first;
@@ -3657,11 +3651,10 @@ namespace ORB_SLAM3
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMPi->GetObservations();
+            const MapPoint::ObservationMap observations = pMPi->GetObservations();
             int nEdges = 0;
             //SET EDGES
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin();
-                mit != observations.end(); mit++)
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(); mit != observations.end(); mit++)
             {
                 KeyFrame* pKF = mit->first;
                 if(pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBALocalForMerge != pMainKF->mnId ||
@@ -3865,9 +3858,8 @@ namespace ORB_SLAM3
             if(pMPi->isBad())
                 continue;
 
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMPi->GetObservations();
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin();
-                mit != observations.end(); mit++)
+            const MapPoint::ObservationMap observations = pMPi->GetObservations();
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(); mit != observations.end(); mit++)
             {
                 KeyFrame* pKF = mit->first;
                 if(pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBALocalForKF != pMainKF->mnId ||
@@ -4095,12 +4087,11 @@ namespace ORB_SLAM3
         for(std::vector<std::pair<MapPoint*, int>>::iterator lit = pairs.begin(), lend = pairs.end(); lit != lend;
             lit++, i++)
         {
-            std::map<KeyFrame*, std::tuple<int, int>> observations = lit->first->GetObservations();
+            MapPoint::ObservationMap observations = lit->first->GetObservations();
             if(i >= maxCovKF)
                 break;
-            for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = observations.begin(),
-                                                                    mend = observations.end();
-                mit != mend; mit++)
+            for(MapPoint::ObservationMap::iterator mit = observations.begin(), mend = observations.end(); mit != mend;
+                mit++)
             {
                 KeyFrame* pKFi = mit->first;
 
@@ -4322,11 +4313,10 @@ namespace ORB_SLAM3
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+            const MapPoint::ObservationMap observations = pMP->GetObservations();
 
             // Create visual constraints
-            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin(),
-                                                                          mend = observations.end();
+            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(), mend = observations.end();
                 mit != mend; mit++)
             {
                 KeyFrame* pKFi = mit->first;

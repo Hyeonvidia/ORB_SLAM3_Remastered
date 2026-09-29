@@ -100,7 +100,7 @@ namespace ORB_SLAM3
     {
         std::map<std::string, std::size_t> f;
         f["object itself"] = MemoryAudit::Chunk(sizeof(MapPoint));
-        f["observations"] = MemoryAudit::Tree(mObservations);
+        f["observations"] = MemoryAudit::Chunk(mObservations.capacity() * sizeof(ObservationMap::value_type));
         f["descriptor"] = MemoryAudit::Mat(mDescriptor);
         f["backup ids"] = MemoryAudit::Tree(mBackupObservationsId1) + MemoryAudit::Tree(mBackupObservationsId2);
         return f;
@@ -288,7 +288,7 @@ namespace ORB_SLAM3
             SetBadFlag();
     }
 
-    std::map<KeyFrame*, std::tuple<int, int>> MapPoint::GetObservations()
+    MapPoint::ObservationMap MapPoint::GetObservations()
     {
         std::lock_guard<std::mutex> lock(mMutexFeatures);
         return mObservations;
@@ -302,14 +302,14 @@ namespace ORB_SLAM3
 
     void MapPoint::SetBadFlag()
     {
-        std::map<KeyFrame*, std::tuple<int, int>> obs;
+        MapPoint::ObservationMap obs;
         {
             std::scoped_lock lock(mMutexFeatures, mMutexPos);
             mbBad = true;
             obs = mObservations;
             mObservations.clear();
         }
-        for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = obs.begin(), mend = obs.end(); mit != mend; mit++)
+        for(MapPoint::ObservationMap::iterator mit = obs.begin(), mend = obs.end(); mit != mend; mit++)
         {
             KeyFrame* pKF = mit->first;
             int leftIndex = std::get<0>(mit->second), rightIndex = std::get<1>(mit->second);
@@ -338,7 +338,7 @@ namespace ORB_SLAM3
             return;
 
         int nvisible, nfound;
-        std::map<KeyFrame*, std::tuple<int, int>> obs;
+        MapPoint::ObservationMap obs;
         {
             std::scoped_lock lock(mMutexFeatures, mMutexPos);
             obs = mObservations;
@@ -349,7 +349,7 @@ namespace ORB_SLAM3
             mpReplaced = pMP;
         }
 
-        for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = obs.begin(), mend = obs.end(); mit != mend; mit++)
+        for(MapPoint::ObservationMap::iterator mit = obs.begin(), mend = obs.end(); mit != mend; mit++)
         {
             // Replace measurement in keyframe
             KeyFrame* pKF = mit->first;
@@ -419,7 +419,7 @@ namespace ORB_SLAM3
         // Retrieve all observed descriptors
         std::vector<cv::Mat> vDescriptors;
 
-        std::map<KeyFrame*, std::tuple<int, int>> observations;
+        MapPoint::ObservationMap observations;
 
         {
             std::lock_guard<std::mutex> lock1(mMutexFeatures);
@@ -433,8 +433,8 @@ namespace ORB_SLAM3
 
         vDescriptors.reserve(observations.size());
 
-        for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
-            mit != mend; mit++)
+        for(MapPoint::ObservationMap::iterator mit = observations.begin(), mend = observations.end(); mit != mend;
+            mit++)
         {
             KeyFrame* pKF = mit->first;
 
@@ -528,7 +528,7 @@ namespace ORB_SLAM3
 
     void MapPoint::UpdateNormalAndDepth()
     {
-        std::map<KeyFrame*, std::tuple<int, int>> observations;
+        MapPoint::ObservationMap observations;
         KeyFrame* pRefKF;
         Eigen::Vector3f Pos;
         {
@@ -546,8 +546,8 @@ namespace ORB_SLAM3
         Eigen::Vector3f normal;
         normal.setZero();
         int n = 0;
-        for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
-            mit != mend; mit++)
+        for(MapPoint::ObservationMap::iterator mit = observations.begin(), mend = observations.end(); mit != mend;
+            mit++)
         {
             KeyFrame* pKF = mit->first;
 
@@ -656,8 +656,8 @@ namespace ORB_SLAM3
     void MapPoint::PrintObservations()
     {
         std::cout << "MP_OBS: MP " << mnId << std::endl;
-        for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = mObservations.begin(), mend = mObservations.end();
-            mit != mend; mit++)
+        for(MapPoint::ObservationMap::iterator mit = mObservations.begin(), mend = mObservations.end(); mit != mend;
+            mit++)
         {
             KeyFrame* pKFi = mit->first;
             std::tuple<int, int> indexes = mit->second;
@@ -687,9 +687,8 @@ namespace ORB_SLAM3
         mBackupObservationsId1.clear();
         mBackupObservationsId2.clear();
         // Save the id and position in each KF who view it
-        for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator it = mObservations.begin(),
-                                                                      end = mObservations.end();
-            it != end; ++it)
+        for(MapPoint::ObservationMap::const_iterator it = mObservations.begin(), end = mObservations.end(); it != end;
+            ++it)
         {
             KeyFrame* pKFi = it->first;
             if(spKF.find(pKFi) != spKF.end())

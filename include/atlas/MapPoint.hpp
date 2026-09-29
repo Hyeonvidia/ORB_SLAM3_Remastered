@@ -19,6 +19,7 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
+#include "common/FlatMap.hpp"
 #include "features/ORBdescriptor.hpp"
 #include "common/Converter.hpp"
 #include "atlas/SlotPool.hpp"
@@ -107,6 +108,10 @@ namespace ORB_SLAM3
         }
 
     public:
+        // The keyframes that observe the point, and where in each: the index
+        // of the feature in the left image and in the right, or -1.
+        typedef FlatMap<KeyFrame*, std::tuple<int, int>> ObservationMap;
+
         // From a pool of MapPoints' own (atlas/SlotPool.hpp), so that a frame's
         // new points sit together whatever has been freed, and freeing them
         // never reaches glibc. 16-byte aligned, as Eigen's operator new was.
@@ -133,7 +138,7 @@ namespace ORB_SLAM3
 
         KeyFrame* GetReferenceKeyFrame();
 
-        std::map<KeyFrame*, std::tuple<int, int>> GetObservations();
+        ObservationMap GetObservations();
         int Observations();
 
         void AddObservation(KeyFrame* pKF, int idx);
@@ -224,7 +229,7 @@ namespace ORB_SLAM3
         Eigen::Vector3f mWorldPos;
 
         // Keyframes observing the point and associated index in keyframe
-        std::map<KeyFrame*, std::tuple<int, int>> mObservations;
+        ObservationMap mObservations;
         // For save relation without pointer, this is necessary for save/load function
         std::map<long unsigned int, int> mBackupObservationsId1;
         std::map<long unsigned int, int> mBackupObservationsId2;

@@ -2265,7 +2265,7 @@ namespace ORB_SLAM3
                     continue;
                 }
 
-                std::map<KeyFrame*, std::tuple<int, int>> mMPijObs = pMPij->GetObservations();
+                MapPoint::ObservationMap mMPijObs = pMPij->GetObservations();
                 for(KeyFrame* pKFi2 : spKFsMap2)
                 {
                     if(mMPijObs.find(pKFi2) != mMPijObs.end())

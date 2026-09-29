@@ -1175,10 +1175,10 @@ namespace ORB_SLAM3
                             const int &scaleLevel = (pKF->NLeft == -1) ? pKF->mvKeysUn[i].octave
                                                     : (i < pKF->NLeft) ? pKF->mvKeys[i].octave
                                                                        : pKF->mvKeysRight[i].octave;
-                            const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+                            const MapPoint::ObservationMap observations = pMP->GetObservations();
                             int nObs = 0;
-                            for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator mit = observations.begin(),
-                                                                                          mend = observations.end();
+                            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(),
+                                                                         mend = observations.end();
                                 mit != mend; mit++)
                             {
                                 KeyFrame* pKFi = mit->first;

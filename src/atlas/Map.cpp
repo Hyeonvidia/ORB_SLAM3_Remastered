@@ -403,9 +403,8 @@ namespace ORB_SLAM3
             {
                 nMPWithoutObs++;
             }
-            std::map<KeyFrame*, std::tuple<int, int>> mpObs = pMPi->GetObservations();
-            for(std::map<KeyFrame*, std::tuple<int, int>>::iterator it = mpObs.begin(), end = mpObs.end(); it != end;
-                ++it)
+            MapPoint::ObservationMap mpObs = pMPi->GetObservations();
+            for(MapPoint::ObservationMap::iterator it = mpObs.begin(), end = mpObs.end(); it != end; ++it)
             {
                 if(it->first->GetMap() != this || it->first->isBad())
                 {

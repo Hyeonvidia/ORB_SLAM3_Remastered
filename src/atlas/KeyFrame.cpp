@@ -468,11 +468,10 @@ namespace ORB_SLAM3
             if(pMP->isBad())
                 continue;
 
-            std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
+            MapPoint::ObservationMap observations = pMP->GetObservations();
 
-            for(std::map<KeyFrame*, std::tuple<int, int>>::iterator mit = observations.begin(),
-                                                                    mend = observations.end();
-                mit != mend; mit++)
+            for(MapPoint::ObservationMap::iterator mit = observations.begin(), mend = observations.end(); mit != mend;
+                mit++)
             {
                 if(mit->first->mnId == mnId || mit->first->isBad() || mit->first->GetMap() != mpMap)
                     continue;

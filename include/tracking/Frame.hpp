@@ -63,6 +63,14 @@ namespace ORB_SLAM3
         // Copy constructor.
         Frame(const Frame &frame);
 
+        // Tracking assigns a Frame it has just made -- "mCurrentFrame =
+        // Frame(...)", "mLastFrame = Frame(mCurrentFrame)" -- and with a copy
+        // constructor declared and nothing else, each of those copied every
+        // vector of the temporary once more. Moved, they copy none.
+        Frame(Frame &&frame) = default;
+        Frame &operator=(const Frame &frame) = default;
+        Frame &operator=(Frame &&frame) = default;
+
         // Constructor for stereo cameras.
         Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, ORBextractor* extractorLeft,
               ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf,

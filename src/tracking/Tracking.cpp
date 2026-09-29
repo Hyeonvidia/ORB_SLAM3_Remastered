@@ -3262,9 +3262,9 @@ namespace ORB_SLAM3
                 {
                     if(!pMP->isBad())
                     {
-                        const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
-                        for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator it = observations.begin(),
-                                                                                      itend = observations.end();
+                        const MapPoint::ObservationMap observations = pMP->GetObservations();
+                        for(MapPoint::ObservationMap::const_iterator it = observations.begin(),
+                                                                     itend = observations.end();
                             it != itend; it++)
                             keyframeCounter[it->first]++;
                     }
@@ -3287,9 +3287,9 @@ namespace ORB_SLAM3
                         continue;
                     if(!pMP->isBad())
                     {
-                        const std::map<KeyFrame*, std::tuple<int, int>> observations = pMP->GetObservations();
-                        for(std::map<KeyFrame*, std::tuple<int, int>>::const_iterator it = observations.begin(),
-                                                                                      itend = observations.end();
+                        const MapPoint::ObservationMap observations = pMP->GetObservations();
+                        for(MapPoint::ObservationMap::const_iterator it = observations.begin(),
+                                                                     itend = observations.end();
                             it != itend; it++)
                             keyframeCounter[it->first]++;
                     }
