@@ -48,17 +48,18 @@ second) and compares with what was last accepted:
 
 **Faster**
 
-Per stage, KITTI 07, before this work and now (`tools/ab_stages.sh`):
+Per stage, KITTI 07, before this work and now, measured side by side
+(`tools/ab_stages.sh`):
 
 | Stage, ms | Stereo | Monocular |
 |---|---:|---:|
-| ORB extraction | 12.5 → **6.2** | 10.8 → **5.4** |
-| Stereo matching | 2.9 → **1.0** | |
-| Tracking, all of it, per frame | 19.2 → **11.5** | 14.5 → **8.6** |
-| Creating map points, per keyframe | 7.7 → **5.7** | 23.1 → **15.8** |
-| Local bundle adjustment | 17.5 → **14.1** | 60.3 → 65.6 |
-| Culling keyframes | 0.8 → 0.8 | 8.7 → **4.8** |
-| Local Mapping, all of it, per keyframe | 28.7 → **23.4** | 95.2 → **89.3** |
+| ORB extraction | 12.7 → **6.3** | 10.9 → **5.7** |
+| Stereo matching | 2.8 → **0.9** | |
+| Tracking, all of it, per frame | 19.3 → **10.9** | 14.5 → **8.9** |
+| Creating map points, per keyframe | 7.6 → **5.4** | 23.0 → **15.3** |
+| Local bundle adjustment | 17.1 → **13.6** | 61.5 → 64.1 |
+| Culling keyframes | 0.8 → 0.7 | 8.6 → **5.0** |
+| Local Mapping, all of it, per keyframe | 28.1 → **22.4** | 96.2 → **87.5** |
 
 - **Extraction**: the levels of the image pyramid in parallel -- what is
   extracted does not depend on the number of threads
@@ -74,7 +75,7 @@ Per stage, KITTI 07, before this work and now (`tools/ab_stages.sh`):
   g2o's initial damping is sized by a keyframe's rotation and holds the points
   back for six or seven of them. Started small, two iterations reach what ten
   did. In stereo and RGB-D; in monocular it cost accuracy and is as it was.
-  KITTI 04 stereo: 48.5 → 36.7 ms.
+  KITTI 04 stereo: 47.5 → 36.4 ms.
 
 **Smaller**
 
