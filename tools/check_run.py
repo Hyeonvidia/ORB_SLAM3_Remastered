@@ -30,6 +30,8 @@ OUT = Path(sys.argv[1])
 JOBS = int(sys.argv[2])
 REPEATS = int(sys.argv[3])
 REFERENCE = Path(sys.argv[4]) if len(sys.argv) > 4 else None
+# Where the binaries are; another build's, to measure it the same way.
+BIN = os.environ.get("CHECK_BIN", "/workspace/build/bin")
 
 COUNTED = [("loops", "*Loop detected"), ("merges", "*Merge detected"), ("relocs", "Relocalized!!"),
            ("lost", "Fail to track local map!"), ("maps", "New Map created")]
@@ -41,7 +43,7 @@ def run(job):
     d.mkdir(parents=True, exist_ok=True)
     started = time.time()
     with open(d / "run.log", "w") as log:
-        p = subprocess.Popen([f"/workspace/build/bin/{binary}", *args.split()], cwd=d, stdout=log,
+        p = subprocess.Popen([f"{BIN}/{binary}", *args.split()], cwd=d, stdout=log,
                              stderr=subprocess.STDOUT, env=dict(os.environ, ORBSLAM3R_VIEWER="0"))
         _, status, usage = os.wait4(p.pid, 0)
     p.returncode = os.waitstatus_to_exitcode(status)
