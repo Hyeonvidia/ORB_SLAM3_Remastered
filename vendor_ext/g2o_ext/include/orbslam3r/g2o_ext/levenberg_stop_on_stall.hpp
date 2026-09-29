@@ -25,6 +25,14 @@
 // The chi2 at the start of an iteration is the accepted chi2 of the one before.
 // Only the first has to be computed, which costs one pass over the active
 // edges per optimize(); upstream's solve() does not expose its own.
+//
+// Two things a caller may set, which the fork had no means to: after how many
+// bad iterations in a row to stop, and how large the damping starts. g2o
+// starts it at 1e-5 of the largest diagonal entry of the Hessian, which in a
+// bundle adjustment is a keyframe's rotation, thousands of times larger than
+// a point's: measured on local bundle adjustments, that damping is as large
+// as the points' own entries and takes six or seven iterations, shrinking by
+// three each time, to get out of their way.
 // =============================================================================
 #pragma once
 
@@ -63,11 +71,21 @@ namespace orbslam3r::g2o_ext
             else
                 mnBad = 0;
 
-            return mnBad >= 3 ? Terminate : OK;
+            return mnBad >= mnStall ? Terminate : OK;
         }
+
+        // Stop after n iterations in a row that each improved the robust chi2
+        // by less than a thousandth. Three unless set.
+        void setStallIterations(int n) { mnStall = n; }
+
+        // The damping of the first iteration, as a fraction of the largest
+        // diagonal entry of the Hessian. g2o's 1e-5 unless set; a user lambda
+        // (setUserLambdaInit) takes precedence, as it does in g2o.
+        void setInitialDamping(double tau) { _tau = tau; }
 
     private:
         int mnBad = 0;
+        int mnStall = 3;
         double mChi = 0.0;
     };
 

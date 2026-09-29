@@ -80,7 +80,7 @@ namespace orbslam3r::g2o_ext
     // that stops once it has stalled, because that is what ORB-SLAM3's g2o ran;
     // see levenberg_stop_on_stall.hpp.
     template<typename BlockSolverT, LinearSolver kind = LinearSolver::kEigen>
-    g2o::OptimizationAlgorithmLevenberg* MakeLevenberg()
+    LevenbergStopOnStall* MakeLevenberg()
     {
         return new LevenbergStopOnStall(detail::MakeBlockSolver<BlockSolverT, kind>());
     }

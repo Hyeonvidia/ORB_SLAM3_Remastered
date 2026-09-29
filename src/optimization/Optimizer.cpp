@@ -1420,6 +1420,23 @@ namespace ORB_SLAM3
             if(*pbStopFlag)
                 return;
 
+        // Where depth is measured -- stereo, RGB-D -- the damping starts small
+        // and the adjustment stops at the first iteration that gains less than
+        // a thousandth. With g2o's initial damping it ran its ten iterations
+        // and, on KITTI stereo, ended where it is after two with this one;
+        // with this one it has converged after four, and the iterations after
+        // the first small gain gained less still.
+        //
+        // Not in monocular, where it was measured to cost accuracy (KITTI 07:
+        // an ATE of 3.0 to 4.0 m where it had been 2.0 to 3.0): nothing but
+        // the fixed keyframes holds the scale of a monocular window, and the
+        // damping is what keeps an iteration from moving far along it.
+        if(!pMap->IsInertial() && (!vpEdgesStereo.empty() || !vpEdgesBody.empty()))
+        {
+            solver->setInitialDamping(1e-9);
+            solver->setStallIterations(1);
+        }
+
         optimizer.initializeOptimization();
         optimizer.optimize(10);
 
