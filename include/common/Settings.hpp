@@ -114,6 +114,7 @@ namespace ORB_SLAM3
         float depthMapFactor() { return depthMapFactor_; }
 
         int nFeatures() { return nFeatures_; }
+        int nThreadsORB() { return nThreadsORB_; }
         int nLevels() { return nLevels_; }
         float initThFAST() { return initThFAST_; }
         float minThFAST() { return minThFAST_; }
@@ -225,6 +226,7 @@ namespace ORB_SLAM3
          * ORB stuff
          */
         int nFeatures_;
+        int nThreadsORB_ = 0;
         float scaleFactor_;
         int nLevels_;
         int initThFAST_, minThFAST_;

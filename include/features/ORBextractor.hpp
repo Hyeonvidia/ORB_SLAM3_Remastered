@@ -19,12 +19,37 @@
 #ifndef ORBEXTRACTOR_H
 #define ORBEXTRACTOR_H
 
-#include <vector>
+#include <atomic>
 #include <list>
+#include <memory>
+#include <vector>
 #include <opencv2/opencv.hpp>
+
+#include "common/WorkerPool.hpp"
 
 namespace ORB_SLAM3
 {
+
+#ifdef ORBSLAM3R_ORB_PROFILE
+    // Where an extraction's time goes, summed over the calls and over the
+    // threads, in nanoseconds. tests/bench_orb compiles the extractor with
+    // this; the library does not.
+    struct ORBprofile
+    {
+        enum Phase
+        {
+            PYRAMID,
+            FAST,
+            DISTRIBUTE,
+            ORIENTATION,
+            BLUR,
+            DESCRIPTORS,
+            GATHER,
+            N_PHASES
+        };
+        static std::atomic<long long> ns[N_PHASES];
+    };
+#endif
 
     class ExtractorNode
     {
@@ -48,7 +73,13 @@ namespace ORB_SLAM3
             FAST_SCORE = 1
         };
 
-        ORBextractor(int nfeatures, float scaleFactor, int nlevels, int iniThFAST, int minThFAST);
+        // nThreads: how many threads share the levels of the pyramid, the
+        // caller among them; 0 for DefaultThreads(). What is extracted does not
+        // depend on it.
+        ORBextractor(int nfeatures, float scaleFactor, int nlevels, int iniThFAST, int minThFAST, int nThreads = 0);
+
+        // ORBSLAM3R_ORB_THREADS if it is set, or two where there are two.
+        static int DefaultThreads();
 
         ~ORBextractor() {}
 
@@ -74,12 +105,15 @@ namespace ORB_SLAM3
 
     protected:
         void ComputePyramid(cv::Mat image);
-        void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint>> &allKeypoints);
+        void ComputeKeyPointsOctTree(int level, std::vector<cv::KeyPoint> &keypoints);
         std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint> &vToDistributeKeys, const int &minX,
                                                     const int &maxX, const int &minY, const int &maxY,
                                                     const int &nFeatures, const int &level);
 
-        std::vector<cv::Point> pattern;
+        // The sampling pattern, as floats: they are multiplied by a sine and a
+        // cosine for every descriptor.
+        std::vector<float> mvPatternX;
+        std::vector<float> mvPatternY;
 
         int nfeatures;
         double scaleFactor;
@@ -95,6 +129,13 @@ namespace ORB_SLAM3
         std::vector<float> mvInvScaleFactor;
         std::vector<float> mvLevelSigma2;
         std::vector<float> mvInvLevelSigma2;
+
+        // Each level with its border, which mvImagePyramid is a window onto,
+        // and each level blurred: kept, so that a frame allocates neither.
+        std::vector<cv::Mat> mvBordered;
+        std::vector<cv::Mat> mvBlurred;
+
+        std::unique_ptr<WorkerPool> mpPool;
     };
 
 } // namespace ORB_SLAM3

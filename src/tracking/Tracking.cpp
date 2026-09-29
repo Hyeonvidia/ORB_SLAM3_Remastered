@@ -340,15 +340,18 @@ namespace ORB_SLAM3
         int fMinThFAST = settings->minThFAST();
         float fScaleFactor = settings->scaleFactor();
 
-        mpORBextractorLeft = std::make_unique<ORBextractor>(nFeatures, fScaleFactor, nLevels, fIniThFAST, fMinThFAST);
+        const int nThreadsORB = settings->nThreadsORB();
+
+        mpORBextractorLeft = std::make_unique<ORBextractor>(nFeatures, fScaleFactor, nLevels, fIniThFAST, fMinThFAST,
+                                                            nThreadsORB);
 
         if(mSensor == System::STEREO || mSensor == System::IMU_STEREO)
             mpORBextractorRight = std::make_unique<ORBextractor>(nFeatures, fScaleFactor, nLevels, fIniThFAST,
-                                                                 fMinThFAST);
+                                                                 fMinThFAST, nThreadsORB);
 
         if(mSensor == System::MONOCULAR || mSensor == System::IMU_MONOCULAR)
             mpIniORBextractor = std::make_unique<ORBextractor>(5 * nFeatures, fScaleFactor, nLevels, fIniThFAST,
-                                                               fMinThFAST);
+                                                               fMinThFAST, nThreadsORB);
 
         //IMU parameters
         Sophus::SE3f Tbc = settings->Tbc();
@@ -1025,15 +1028,22 @@ namespace ORB_SLAM3
             return false;
         }
 
-        mpORBextractorLeft = std::make_unique<ORBextractor>(nFeatures, fScaleFactor, nLevels, fIniThFAST, fMinThFAST);
+        // Optional, as in Settings::readORB.
+        int nThreadsORB = 0;
+        node = fSettings["ORBextractor.nThreads"];
+        if(!node.empty() && node.isInt())
+            nThreadsORB = node.operator int();
+
+        mpORBextractorLeft = std::make_unique<ORBextractor>(nFeatures, fScaleFactor, nLevels, fIniThFAST, fMinThFAST,
+                                                            nThreadsORB);
 
         if(mSensor == System::STEREO || mSensor == System::IMU_STEREO)
             mpORBextractorRight = std::make_unique<ORBextractor>(nFeatures, fScaleFactor, nLevels, fIniThFAST,
-                                                                 fMinThFAST);
+                                                                 fMinThFAST, nThreadsORB);
 
         if(mSensor == System::MONOCULAR || mSensor == System::IMU_MONOCULAR)
             mpIniORBextractor = std::make_unique<ORBextractor>(5 * nFeatures, fScaleFactor, nLevels, fIniThFAST,
-                                                               fMinThFAST);
+                                                               fMinThFAST, nThreadsORB);
 
         std::cout << std::endl << "ORB Extractor Parameters: " << std::endl;
         std::cout << "- Number of Features: " << nFeatures << std::endl;

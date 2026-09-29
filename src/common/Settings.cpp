@@ -512,6 +512,11 @@ namespace ORB_SLAM3
         nLevels_ = readParameter<int>(fSettings, "ORBextractor.nLevels", found);
         initThFAST_ = readParameter<int>(fSettings, "ORBextractor.iniThFAST", found);
         minThFAST_ = readParameter<int>(fSettings, "ORBextractor.minThFAST", found);
+        // Optional: how many threads an extractor shares the pyramid's levels
+        // among. Absent or 0, ORBextractor::DefaultThreads().
+        nThreadsORB_ = readParameter<int>(fSettings, "ORBextractor.nThreads", found, false);
+        if(!found)
+            nThreadsORB_ = 0;
     }
 
     void Settings::readViewer(cv::FileStorage &fSettings)

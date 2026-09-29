@@ -52,9 +52,13 @@
 */
 
 #include <opencv2/core/core.hpp>
+#include <opencv2/core/hal/intrin.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <chrono>
+#include <cstdlib>
+#include <thread>
 #include <vector>
 #include <iostream>
 
@@ -91,6 +95,17 @@
 namespace ORB_SLAM3
 {
 
+#ifdef ORBSLAM3R_ORB_PROFILE
+    std::atomic<long long> ORBprofile::ns[ORBprofile::N_PHASES] = {};
+#define ORB_PHASE_BEGIN(p) const std::chrono::steady_clock::time_point tBegin##p = std::chrono::steady_clock::now()
+#define ORB_PHASE_END(p)             \
+    ORBprofile::ns[ORBprofile::p] += \
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tBegin##p).count()
+#else
+#define ORB_PHASE_BEGIN(p)
+#define ORB_PHASE_END(p)
+#endif
+
     const int PATCH_SIZE = 31;
     const int HALF_PATCH_SIZE = 15;
     const int EDGE_THRESHOLD = 19;
@@ -125,7 +140,9 @@ namespace ORB_SLAM3
     }
 
     const float factorPI = (float)(CV_PI / 180.f);
-    static void computeOrbDescriptor(const cv::KeyPoint &kpt, const cv::Mat &img, const cv::Point* pattern, uchar* desc)
+    // patternX and patternY: the 512 points of the pattern, two to a bit.
+    static void computeOrbDescriptor(const cv::KeyPoint &kpt, const cv::Mat &img, const float* patternX,
+                                     const float* patternY, uchar* desc)
     {
         float angle = (float)kpt.angle * factorPI;
         float a = (float)cos(angle), b = (float)sin(angle);
@@ -133,45 +150,31 @@ namespace ORB_SLAM3
         const uchar* center = &img.at<uchar>(cvRound(kpt.pt.y), cvRound(kpt.pt.x));
         const int step = (int)img.step;
 
-#define GET_VALUE(idx) \
-    center[cvRound(pattern[idx].x * b + pattern[idx].y * a) * step + cvRound(pattern[idx].x * a - pattern[idx].y * b)]
-
-        // clang-format off -- each line loads the pair of pixels that the line
-        // below compares. Splitting the loads onto separate lines is correct but
-        // loses the load/use rhythm that makes the unrolled loop readable.
-        for(int i = 0; i < 32; ++i, pattern += 16)
+        // Where each point falls once the pattern is turned by the keypoint's
+        // angle, four at a time: turning them is two thirds of what a
+        // descriptor costs when it is done one by one between the comparisons.
+        int offset[512];
+#if CV_SIMD128 && !defined(ORBSLAM3R_ORB_NO_SIMD)
+        const cv::v_float32x4 va = cv::v_setall_f32(a), vb = cv::v_setall_f32(b);
+        const cv::v_int32x4 vstep = cv::v_setall_s32(step);
+        for(int i = 0; i < 512; i += 4)
         {
-            int t0, t1, val;
-            t0 = GET_VALUE(0);
-            t1 = GET_VALUE(1);
-            val = t0 < t1;
-            t0 = GET_VALUE(2);
-            t1 = GET_VALUE(3);
-            val |= (t0 < t1) << 1;
-            t0 = GET_VALUE(4);
-            t1 = GET_VALUE(5);
-            val |= (t0 < t1) << 2;
-            t0 = GET_VALUE(6);
-            t1 = GET_VALUE(7);
-            val |= (t0 < t1) << 3;
-            t0 = GET_VALUE(8);
-            t1 = GET_VALUE(9);
-            val |= (t0 < t1) << 4;
-            t0 = GET_VALUE(10);
-            t1 = GET_VALUE(11);
-            val |= (t0 < t1) << 5;
-            t0 = GET_VALUE(12);
-            t1 = GET_VALUE(13);
-            val |= (t0 < t1) << 6;
-            t0 = GET_VALUE(14);
-            t1 = GET_VALUE(15);
-            val |= (t0 < t1) << 7;
+            const cv::v_float32x4 x = cv::v_load(patternX + i), y = cv::v_load(patternY + i);
+            cv::v_store(offset + i, cv::v_round(x * vb + y * va) * vstep + cv::v_round(x * va - y * vb));
+        }
+#else
+        for(int i = 0; i < 512; ++i)
+            offset[i] = cvRound(patternX[i] * b + patternY[i] * a) * step + cvRound(patternX[i] * a - patternY[i] * b);
+#endif
 
+        const int* pair = offset;
+        for(int i = 0; i < 32; ++i, pair += 16)
+        {
+            int val = 0;
+            for(int bit = 0; bit < 8; ++bit)
+                val |= (center[pair[2 * bit]] < center[pair[2 * bit + 1]]) << bit;
             desc[i] = (uchar)val;
         }
-        // clang-format on
-
-#undef GET_VALUE
     }
 
     static int bit_pattern_31_[256 * 4] = {
@@ -433,9 +436,17 @@ namespace ORB_SLAM3
         -1,  -6,  0,   -11 /*mean (0.127148), correlation (0.547401)*/
     };
 
-    ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _iniThFAST, int _minThFAST)
+    int ORBextractor::DefaultThreads()
+    {
+        if(const char* env = std::getenv("ORBSLAM3R_ORB_THREADS"))
+            return std::max(1, std::atoi(env));
+        return std::thread::hardware_concurrency() >= 2 ? 2 : 1;
+    }
+
+    ORBextractor::ORBextractor(int _nfeatures, float _scaleFactor, int _nlevels, int _iniThFAST, int _minThFAST,
+                               int nThreads)
         : nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels), iniThFAST(_iniThFAST),
-          minThFAST(_minThFAST)
+          minThFAST(_minThFAST), mpPool(std::make_unique<WorkerPool>(nThreads > 0 ? nThreads : DefaultThreads()))
     {
         mvScaleFactor.resize(nlevels);
         mvLevelSigma2.resize(nlevels);
@@ -456,6 +467,8 @@ namespace ORB_SLAM3
         }
 
         mvImagePyramid.resize(nlevels);
+        mvBordered.resize(nlevels);
+        mvBlurred.resize(nlevels);
 
         mnFeaturesPerLevel.resize(nlevels);
         float factor = 1.0f / scaleFactor;
@@ -473,7 +486,13 @@ namespace ORB_SLAM3
 
         const int npoints = 512;
         const cv::Point* pattern0 = (const cv::Point*)bit_pattern_31_;
-        std::copy(pattern0, pattern0 + npoints, std::back_inserter(pattern));
+        mvPatternX.resize(npoints);
+        mvPatternY.resize(npoints);
+        for(int i = 0; i < npoints; ++i)
+        {
+            mvPatternX[i] = static_cast<float>(pattern0[i].x);
+            mvPatternY[i] = static_cast<float>(pattern0[i].y);
+        }
 
         //This is for orientation
         // pre-compute the end of a row in a circular patch
@@ -809,13 +828,10 @@ namespace ORB_SLAM3
         return vResultKeys;
     }
 
-    void ORBextractor::ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint>> &allKeypoints)
+    void ORBextractor::ComputeKeyPointsOctTree(int level, std::vector<cv::KeyPoint> &keypoints)
     {
-        allKeypoints.resize(nlevels);
-
         const float W = 35;
 
-        for(int level = 0; level < nlevels; ++level)
         {
             const int minBorderX = EDGE_THRESHOLD - 3;
             const int minBorderY = minBorderX;
@@ -833,6 +849,7 @@ namespace ORB_SLAM3
             const int wCell = std::ceil(width / nCols);
             const int hCell = std::ceil(height / nRows);
 
+            ORB_PHASE_BEGIN(FAST);
             for(int i = 0; i < nRows; i++)
             {
                 const float iniY = minBorderY + i * hCell;
@@ -899,11 +916,14 @@ namespace ORB_SLAM3
                 }
             }
 
-            std::vector<cv::KeyPoint> &keypoints = allKeypoints[level];
+            ORB_PHASE_END(FAST);
+
             keypoints.reserve(nfeatures);
 
+            ORB_PHASE_BEGIN(DISTRIBUTE);
             keypoints = DistributeOctTree(vToDistributeKeys, minBorderX, maxBorderX, minBorderY, maxBorderY,
                                           mnFeaturesPerLevel[level], level);
+            ORB_PHASE_END(DISTRIBUTE);
 
             const int scaledPatchSize = PATCH_SIZE * mvScaleFactor[level];
 
@@ -919,17 +939,18 @@ namespace ORB_SLAM3
         }
 
         // compute orientations
-        for(int level = 0; level < nlevels; ++level)
-            computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
+        ORB_PHASE_BEGIN(ORIENTATION);
+        computeOrientation(mvImagePyramid[level], keypoints, umax);
+        ORB_PHASE_END(ORIENTATION);
     }
 
     static void computeDescriptors(const cv::Mat &image, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors,
-                                   const std::vector<cv::Point> &pattern)
+                                   const std::vector<float> &patternX, const std::vector<float> &patternY)
     {
-        descriptors = cv::Mat::zeros((int)keypoints.size(), 32, CV_8UC1);
+        descriptors.create((int)keypoints.size(), 32, CV_8UC1);
 
         for(size_t i = 0; i < keypoints.size(); i++)
-            computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
+            computeOrbDescriptor(keypoints[i], image, patternX.data(), patternY.data(), descriptors.ptr((int)i));
     }
 
     int ORBextractor::operator()(cv::InputArray _image, cv::InputArray _mask, std::vector<cv::KeyPoint> &_keypoints,
@@ -943,10 +964,37 @@ namespace ORB_SLAM3
         assert(image.type() == CV_8UC1);
 
         // Pre-compute the scale pyramid
+        ORB_PHASE_BEGIN(PYRAMID);
         ComputePyramid(image);
+        ORB_PHASE_END(PYRAMID);
 
-        std::vector<std::vector<cv::KeyPoint>> allKeypoints;
-        ComputeKeyPointsOctTree(allKeypoints);
+        // The levels are independent of each other from here to their
+        // descriptors, and the largest is first.
+        std::vector<std::vector<cv::KeyPoint>> allKeypoints(nlevels);
+        std::vector<cv::Mat> allDescriptors(nlevels);
+        mpPool->Run(nlevels,
+                    [this, &allKeypoints, &allDescriptors](int level)
+                    {
+                        std::vector<cv::KeyPoint> &keypoints = allKeypoints[level];
+                        ComputeKeyPointsOctTree(level, keypoints);
+                        if(keypoints.empty())
+                            return;
+
+                        // preprocess the resized image
+                        // Into a buffer kept from frame to frame. The level is
+                        // a window onto an image with a border; ISOLATED, so
+                        // that the blur reflects at the window's edge as it
+                        // did when it was given a copy.
+                        ORB_PHASE_BEGIN(BLUR);
+                        cv::Mat &workingMat = mvBlurred[level];
+                        GaussianBlur(mvImagePyramid[level], workingMat, cv::Size(7, 7), 2, 2,
+                                     cv::BORDER_REFLECT_101 | cv::BORDER_ISOLATED);
+                        ORB_PHASE_END(BLUR);
+
+                        ORB_PHASE_BEGIN(DESCRIPTORS);
+                        computeDescriptors(workingMat, keypoints, allDescriptors[level], mvPatternX, mvPatternY);
+                        ORB_PHASE_END(DESCRIPTORS);
+                    });
 
         cv::Mat descriptors;
 
@@ -976,16 +1024,11 @@ namespace ORB_SLAM3
             if(nkeypointsLevel == 0)
                 continue;
 
-            // preprocess the resized image
-            cv::Mat workingMat = mvImagePyramid[level].clone();
-            GaussianBlur(workingMat, workingMat, cv::Size(7, 7), 2, 2, cv::BORDER_REFLECT_101);
-
-            // Compute the descriptors
-            //cv::Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-            cv::Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
-            computeDescriptors(workingMat, keypoints, desc, pattern);
+            const cv::Mat &desc = allDescriptors[level];
 
             offset += nkeypointsLevel;
+
+            ORB_PHASE_BEGIN(GATHER);
 
             float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
             int i = 0;
@@ -1012,6 +1055,7 @@ namespace ORB_SLAM3
                 }
                 i++;
             }
+            ORB_PHASE_END(GATHER);
         }
         //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
         return monoIndex;
@@ -1024,7 +1068,10 @@ namespace ORB_SLAM3
             float scale = mvInvScaleFactor[level];
             cv::Size sz(cvRound((float)image.cols * scale), cvRound((float)image.rows * scale));
             cv::Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
-            cv::Mat temp(wholeSize, image.type()), masktemp;
+            // The same memory for every frame of one size: nothing reads a
+            // pyramid after the frame it was made for.
+            cv::Mat &temp = mvBordered[level];
+            temp.create(wholeSize, image.type());
             mvImagePyramid[level] = temp(cv::Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, sz.width, sz.height));
 
             // Compute the resized image

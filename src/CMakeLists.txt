@@ -20,6 +20,13 @@ file(GLOB_RECURSE ORBSLAM3_SOURCES CONFIGURE_DEPENDS
 add_library(ORB_SLAM3 SHARED ${ORBSLAM3_SOURCES})
 add_library(orbslam3r::ORB_SLAM3 ALIAS ORB_SLAM3)
 
+# A descriptor's bits are comparisons of pixels whose coordinates are rounded
+# sums of products. Where the compiler may fuse a product into the sum, as it
+# does by default on ARM, some of them round the other way, and the same image
+# gives other descriptors than on x86. Not in this file.
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/features/ORBextractor.cpp
+                            PROPERTIES COMPILE_OPTIONS -ffp-contract=off)
+
 # Sophus's checks abort the process with their message on stdout, which a file
 # swallows; src/common/SophusEnsure.cpp puts it on stderr. PUBLIC, because the
 # check is inline in Sophus's headers and every user must see the same one.

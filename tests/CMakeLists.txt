@@ -46,3 +46,15 @@ foreach(variant "" "_tsan")
   endif()
   add_test(NAME slotpool${variant} COMMAND ${t})
 endforeach()
+
+# What ORB extraction costs and where, on its own: a tool, not a test. The
+# extractor is compiled into it with its phase timers, which the library's
+# copy does not have.
+find_package(OpenCV REQUIRED)
+add_executable(bench_orb bench_orb.cpp ${PROJECT_SOURCE_DIR}/src/features/ORBextractor.cpp
+               ${PROJECT_SOURCE_DIR}/src/common/WorkerPool.cpp)
+target_include_directories(bench_orb PRIVATE ${PROJECT_SOURCE_DIR}/include ${OpenCV_INCLUDE_DIRS})
+target_compile_definitions(bench_orb PRIVATE ORBSLAM3R_ORB_PROFILE)
+target_compile_options(bench_orb PRIVATE -ffp-contract=off) # as the library compiles the extractor
+target_compile_features(bench_orb PRIVATE cxx_std_17)
+target_link_libraries(bench_orb PRIVATE ${OpenCV_LIBS} Threads::Threads)
