@@ -2803,7 +2803,6 @@ namespace ORB_SLAM3
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
-        mpLocalMapper->mnMatchesInliers = mnMatchesInliers;
         if(mCurrentFrame.mnId < mnLastRelocFrameId + mMaxFrames && mnMatchesInliers < 50)
             return false;
 
@@ -3203,8 +3202,7 @@ namespace ORB_SLAM3
             if(mState == LOST || mState == RECENTLY_LOST) // Lost for less than 1 second
                 th = 15;                                  // 15
 
-            int matches = matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints, th, mpLocalMapper->mbFarPoints,
-                                                     mpLocalMapper->mThFarPoints);
+            int matches = matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints, th, mbFarPoints, mThFarPoints);
         }
     }
 

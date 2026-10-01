@@ -163,6 +163,9 @@ namespace ORB_SLAM3
 
         Atlas* mpAtlas;
         Tracking* mpTracker;
+        // The sensor configuration, which Tracking was asked for 25 times
+        // from this thread: it is set once, before any thread runs.
+        int mSensor = -1;
 
         KeyFrameDatabase* mpKeyFrameDB;
         ORBVocabulary* mpORBVocabulary;

@@ -96,7 +96,6 @@ namespace ORB_SLAM3
         unsigned int mIdxInit;
         unsigned int mnKFs;
         double mFirstTs;
-        int mnMatchesInliers;
 
         // For debugging (erase in normal mode)
         int mInitFr;

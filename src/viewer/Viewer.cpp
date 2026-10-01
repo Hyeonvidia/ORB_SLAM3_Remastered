@@ -127,7 +127,8 @@ namespace ORB_SLAM3
     Viewer::Viewer(System* pSystem, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Tracking* pTracking,
                    const std::string &strSettingPath, Settings* settings)
         : both(false), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpTracker(pTracking),
-          mbFinishRequested(false), mbFinished(true), mbStopped(true), mbStopRequested(false)
+          mSensor(pTracking->mSensor), mbFinishRequested(false), mbFinished(true), mbStopped(true),
+          mbStopRequested(false)
     {
         if(settings)
         {
@@ -542,8 +543,7 @@ namespace ORB_SLAM3
             }
         };
 
-        if(mpTracker->mSensor == mpSystem->MONOCULAR || mpTracker->mSensor == mpSystem->STEREO ||
-           mpTracker->mSensor == mpSystem->RGBD)
+        if(mSensor == mpSystem->MONOCULAR || mSensor == mpSystem->STEREO || mSensor == mpSystem->RGBD)
         {
             menuShowGraph = true;
         }
@@ -674,7 +674,7 @@ namespace ORB_SLAM3
 
             if(menuStep)
             {
-                mpTracker->mbStep = true;
+                mpTracker->Step();
                 menuStep = false;
             }
 

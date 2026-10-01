@@ -217,7 +217,6 @@ namespace ORB_SLAM3
         mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor == MONOCULAR || mSensor == IMU_MONOCULAR,
                                          mSensor == IMU_MONOCULAR || mSensor == IMU_STEREO || mSensor == IMU_RGBD,
                                          strSequence);
-        mtLocalMapping = std::thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
         mpLocalMapper->mInitFr = initFr;
         if(settings_)
             mpLocalMapper->mThFarPoints = settings_->thFarPoints();
@@ -231,12 +230,13 @@ namespace ORB_SLAM3
         }
         else
             mpLocalMapper->mbFarPoints = false;
+        // Tracking asks the same of every point it projects; its own copy.
+        mpTracker->SetFarPoints(mpLocalMapper->mbFarPoints, mpLocalMapper->mThFarPoints);
 
         //Initialize the Loop Closing thread and launch
         // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
         mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor != MONOCULAR,
                                        activeLC); // mSensor!=MONOCULAR);
-        mtLoopClosing = std::thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         //Set pointers between threads
         mpTracker->SetLocalMapper(mpLocalMapper);
@@ -247,6 +247,11 @@ namespace ORB_SLAM3
 
         mpLoopCloser->SetTracker(mpTracker);
         mpLoopCloser->SetLocalMapper(mpLocalMapper);
+
+        // The threads, once everything they point to is set: v1.0 started each
+        // where it was made, before it had been told of the others.
+        mtLocalMapping = std::thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
+        mtLoopClosing = std::thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         //usleep(10*1000*1000);
 

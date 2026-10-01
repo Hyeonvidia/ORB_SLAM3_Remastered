@@ -72,6 +72,7 @@ namespace ORB_SLAM3
         FrameDrawer* mpFrameDrawer;
         MapDrawer* mpMapDrawer;
         Tracking* mpTracker;
+        int mSensor;
 
         // 1/fps in ms
         double mT;

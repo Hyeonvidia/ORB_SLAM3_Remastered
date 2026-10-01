@@ -56,8 +56,6 @@ namespace ORB_SLAM3
           mbAcceptKeyFrames(true), mIdxInit(0), mScale(1.0), mInitSect(0), mbNotBA1(true), mbNotBA2(true),
           mIdxIteration(0), infoInertial(Eigen::MatrixXd::Zero(9, 9))
     {
-        mnMatchesInliers = 0;
-
         mbBadImu = false;
 
         mTinit = 0.f;

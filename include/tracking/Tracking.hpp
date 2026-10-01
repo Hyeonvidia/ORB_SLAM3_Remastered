@@ -19,6 +19,7 @@
 #ifndef TRACKING_H
 #define TRACKING_H
 
+#include <atomic>
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
@@ -79,6 +80,13 @@ namespace ORB_SLAM3
         void SetLocalMapper(LocalMapping* pLocalMapper);
         void SetLoopClosing(LoopClosing* pLoopClosing);
         void SetStepByStep(bool bSet);
+        // One frame more, from the viewer, while stepping.
+        void Step() { mbStep = true; }
+        void SetFarPoints(bool bFarPoints, float thFarPoints)
+        {
+            mbFarPoints = bFarPoints;
+            mThFarPoints = thFarPoints;
+        }
         bool GetStepByStep();
 
         // Load new settings
@@ -152,7 +160,7 @@ namespace ORB_SLAM3
 
         // frames with estimated pose
         int mTrackedFr;
-        bool mbStep;
+        std::atomic<bool> mbStep;
 
         // True if local mapping is deactivated and we are performing only localization
         bool mbOnlyTracking;
@@ -282,7 +290,12 @@ namespace ORB_SLAM3
         //Drawers
         FrameDrawer* mpFrameDrawer;
         MapDrawer* mpMapDrawer;
-        bool bStepByStep;
+        std::atomic<bool> bStepByStep;
+
+        // Whether points beyond a distance are left out, and the distance:
+        // the settings Local Mapping has, set before any thread runs.
+        bool mbFarPoints = false;
+        float mThFarPoints = 0.f;
 
         //Atlas
         Atlas* mpAtlas;
