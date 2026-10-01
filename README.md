@@ -83,8 +83,8 @@ Per stage, KITTI 07, before this work and now, measured side by side
 - The vocabulary tree is six arrays, 55 MB, where DBoW2 keeps 1.1 million
   node objects, 106 MB; the same words, loaded in 0.4 s instead of 1.9.
 - A keyframe's words are one block of 32 KB instead of a std::map of 126 KB;
-  its feature grid is flat; no duplicate keypoints. A KeyFrame of 2000
-  features is 230 KB where it was 480.
+  its feature grid is flat; no duplicate keypoints. A keyframe of KITTI 07
+  mono is 236 KB; it was 472 as v1.0 keeps it.
 - MapPoints that were culled are freed once no thread can still be using them
   ([docs/OWNERSHIP.md](docs/OWNERSHIP.md)); v1.0 never frees one. A map
   point's observations are one block, not a node per observation.
