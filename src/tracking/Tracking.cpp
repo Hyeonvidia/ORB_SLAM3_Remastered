@@ -48,8 +48,6 @@
 #include <tuple>
 #include <utility>
 #include <vector>
-#include "local_mapping/LocalMapping.hpp"
-#include "loop_closing/LoopClosing.hpp"
 #include "System.hpp"
 #include "common/Verbose.hpp"
 
@@ -1178,12 +1176,12 @@ namespace ORB_SLAM3
         return true;
     }
 
-    void Tracking::SetLocalMapper(LocalMapping* pLocalMapper)
+    void Tracking::SetLocalMapper(MapperPort* pLocalMapper)
     {
         mpLocalMapper = pLocalMapper;
     }
 
-    void Tracking::SetLoopClosing(LoopClosing* pLoopClosing)
+    void Tracking::SetLoopClosing(LoopCloserPort* pLoopClosing)
     {
         mpLoopClosing = pLoopClosing;
     }
@@ -1574,6 +1572,9 @@ namespace ORB_SLAM3
 
     void Tracking::Track()
     {
+        mCurrentFrameTime = mCurrentFrame.mTimeStamp;
+        mLastFrameTime = mLastFrame.mTimeStamp;
+
         if(bStepByStep)
         {
             std::cout << "Tracking: Waiting to the next step" << std::endl;
@@ -1582,7 +1583,7 @@ namespace ORB_SLAM3
             mbStep = false;
         }
 
-        if(mpLocalMapper->mbBadImu)
+        if(mpLocalMapper->BadImu())
         {
             std::cout << "TRACK: Reset map because local mapper set the bad imu flag " << std::endl;
             mpSystem->ResetActiveMap();
@@ -2394,7 +2395,7 @@ namespace ORB_SLAM3
 
         mpLocalMapper->InsertKeyFrame(pKFini);
         mpLocalMapper->InsertKeyFrame(pKFcur);
-        mpLocalMapper->mFirstTs = pKFcur->mTimeStamp;
+        mpLocalMapper->SetFirstTimestamp(pKFcur->mTimeStamp);
 
         mCurrentFrame.SetPose(pKFcur->GetPose());
         mnLastKeyFrameId = mCurrentFrame.mnId;

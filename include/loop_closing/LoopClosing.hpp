@@ -19,6 +19,7 @@
 #ifndef LOOPCLOSING_H
 #define LOOPCLOSING_H
 
+#include "common/ThreadPorts.hpp"
 #include "atlas/KeyFrame.hpp"
 #include "atlas/Atlas.hpp"
 #include "atlas/ORBVocabulary.hpp"
@@ -40,12 +41,10 @@
 namespace ORB_SLAM3
 {
 
-    class Tracking;
-    class LocalMapping;
     class KeyFrameDatabase;
     class Map;
 
-    class LoopClosing
+    class LoopClosing : public LoopCloserPort
     {
     public:
         typedef std::pair<std::set<KeyFrame*>, int> ConsistentGroup;
@@ -53,11 +52,11 @@ namespace ORB_SLAM3
 
     public:
         LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc, const bool bFixScale,
-                    const bool bActiveLC);
+                    const bool bActiveLC, const int sensor);
 
-        void SetTracker(Tracking* pTracker);
+        void SetTracker(TrackerPort* pTracker);
 
-        void SetLocalMapper(LocalMapping* pLocalMapper);
+        void SetLocalMapper(MapperPort* pLocalMapper);
 
         // Main function
         void Run();
@@ -162,15 +161,15 @@ namespace ORB_SLAM3
         std::mutex mMutexFinish;
 
         Atlas* mpAtlas;
-        Tracking* mpTracker;
+        TrackerPort* mpTracker;
         // The sensor configuration, which Tracking was asked for 25 times
-        // from this thread: it is set once, before any thread runs.
-        int mSensor = -1;
+        // from this thread; given at construction.
+        const int mSensor;
 
         KeyFrameDatabase* mpKeyFrameDB;
         ORBVocabulary* mpORBVocabulary;
 
-        LocalMapping* mpLocalMapper;
+        MapperPort* mpLocalMapper;
 
         std::list<KeyFrame*> mlpLoopKeyFrameQueue;
 

@@ -40,21 +40,19 @@
 #include <utility>
 #include <vector>
 #include "atlas/KeyFrameDatabase.hpp"
-#include "local_mapping/LocalMapping.hpp"
 #include "common/Sensor.hpp"
-#include "tracking/Tracking.hpp"
 #include "common/Verbose.hpp"
 
 namespace ORB_SLAM3
 {
 
     LoopClosing::LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc, const bool bFixScale,
-                             const bool bActiveLC)
-        : mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false), mbFinished(true),
-          mpAtlas(pAtlas), mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0),
-          mbRunningGBA(false), mbFinishedGBA(true), mbStopGBA(false), mbFixScale(bFixScale), mnFullBAIdx(0),
-          mnLoopNumCoincidences(0), mnMergeNumCoincidences(0), mbLoopDetected(false), mbMergeDetected(false),
-          mnLoopNumNotFound(0), mnMergeNumNotFound(0), mbActiveLC(bActiveLC)
+                             const bool bActiveLC, const int sensor)
+        : mSensor(sensor), mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false),
+          mbFinished(true), mpAtlas(pAtlas), mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL),
+          mLastLoopKFid(0), mbRunningGBA(false), mbFinishedGBA(true), mbStopGBA(false), mbFixScale(bFixScale),
+          mnFullBAIdx(0), mnLoopNumCoincidences(0), mnMergeNumCoincidences(0), mbLoopDetected(false),
+          mbMergeDetected(false), mnLoopNumNotFound(0), mnMergeNumNotFound(0), mbActiveLC(bActiveLC)
     {
         mnCovisibilityConsistencyTh = 3;
         mpLastCurrentKF = static_cast<KeyFrame*>(NULL);
@@ -197,13 +195,12 @@ namespace ORB_SLAM3
     }
 #endif
 
-    void LoopClosing::SetTracker(Tracking* pTracker)
+    void LoopClosing::SetTracker(TrackerPort* pTracker)
     {
         mpTracker = pTracker;
-        mSensor = pTracker->mSensor;
     }
 
-    void LoopClosing::SetLocalMapper(LocalMapping* pLocalMapper)
+    void LoopClosing::SetLocalMapper(MapperPort* pLocalMapper)
     {
         mpLocalMapper = pLocalMapper;
     }

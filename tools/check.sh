@@ -9,6 +9,10 @@
 #   ./tools/check.sh robust       loops and merges: KITTI 05 mono and stereo
 #                                 (three loops), EuRoC V101+V102 in one
 #                                 session, mono and stereo (one merge); 5 min
+#   ./tools/check.sh inertial     the inertial configurations, which the
+#                                 system is not for but must not break: EuRoC
+#                                 MH01 stereo-inertial, V101 mono-inertial;
+#                                 3 min
 #   ./tools/check.sh accept [set] what the last run of the set measured is
 #                                 what the next ones are compared with
 #   REPEATS=3 ./tools/check.sh    medians of three; one run of a monocular
@@ -47,7 +51,9 @@ case "$SET" in
     { dataset_plan kitti all 07; dataset_plan tum rgbd; dataset_plan euroc stereo V101; } > "$OUT/plan.txt" ;;
   robust)
     { dataset_plan kitti all 05; together stereo V101 V102; together mono V101 V102; } > "$OUT/plan.txt" ;;
-  *) echo "usage: $0 [quick|robust|accept [set]]" >&2; exit 2 ;;
+  inertial)
+    { dataset_plan euroc stereo_inertial MH01; dataset_plan euroc mono_inertial V101; } > "$OUT/plan.txt" ;;
+  *) echo "usage: $0 [quick|robust|inertial|accept [set]]" >&2; exit 2 ;;
 esac
 [ -x build/bin/Stereo/stereo_kitti ] || { echo "no build: run ./tools/build.sh first" >&2; exit 1; }
 git describe --always --dirty > "$OUT/commit.txt"

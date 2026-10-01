@@ -214,7 +214,7 @@ namespace ORB_SLAM3
                                  strSettingsFile, mSensor, settings_, strSequence);
 
         //Initialize the Local Mapping thread and launch
-        mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor == MONOCULAR || mSensor == IMU_MONOCULAR,
+        mpLocalMapper = new LocalMapping(mpAtlas, mSensor == MONOCULAR || mSensor == IMU_MONOCULAR,
                                          mSensor == IMU_MONOCULAR || mSensor == IMU_STEREO || mSensor == IMU_RGBD,
                                          strSequence);
         mpLocalMapper->mInitFr = initFr;
@@ -235,8 +235,8 @@ namespace ORB_SLAM3
 
         //Initialize the Loop Closing thread and launch
         // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
-        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor != MONOCULAR,
-                                       activeLC); // mSensor!=MONOCULAR);
+        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor != MONOCULAR, activeLC,
+                                       mSensor);
 
         //Set pointers between threads
         mpTracker->SetLocalMapper(mpLocalMapper);

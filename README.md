@@ -110,8 +110,11 @@ Per stage, KITTI 07, before this work and now, measured side by side
 - Dependencies are pinned upstream releases, untouched, in `thirdparty/`;
   ORB-SLAM3's changes to them are separate code in `vendor_ext/`
   ([docs/WRAPPERS.md](docs/WRAPPERS.md)).
-- The threads start once they are wired to each other; in the monocular,
-  stereo and RGB-D paths no thread reads another's members.
+- The three threads know each other through three interfaces
+  (`common/ThreadPorts.hpp`): what Tracking asks of Local Mapping, what Local
+  Mapping and Loop Closing ask of Tracking, what both ask of Loop Closing --
+  not each other's classes. They start once they are wired; no thread reads
+  another's members.
 - Built and run in Docker only. `std::` written out, no `using namespace`.
 - Tests in seven seconds (`ctest`), a benchmark of the extractor on its own
   (`tests/bench_orb`), and the two checks above.
@@ -156,8 +159,9 @@ odometry and TUM RGB-D.
 - Tracking the local map takes 0.1 to 0.4 ms longer per frame in stereo than
   before extraction was made parallel; not looked into.
 - Culled KeyFrames are not freed (9.6 MB on KITTI 07 mono; worth it in the
-  inertial configurations, which cull hundreds). The inertial paths still read
-  across threads, and the three threads' classes still know each other.
+  inertial configurations, which cull hundreds).
+- Tracking and the viewer still call back into `System` (resets, saving a
+  trajectory, localisation mode), which keeps the two in one cycle with it.
 
 ## License
 

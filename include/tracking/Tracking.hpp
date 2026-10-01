@@ -23,6 +23,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
 
+#include "common/ThreadPorts.hpp"
 #include "tracking/Frame.hpp"
 #include "atlas/ORBVocabulary.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
@@ -48,12 +49,10 @@ namespace ORB_SLAM3
     // in front of every file that includes the tracker.
     class MapDrawer;
     class Atlas;
-    class LocalMapping;
-    class LoopClosing;
     class System;
     class Settings;
 
-    class Tracking
+    class Tracking : public TrackerPort
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -77,8 +76,8 @@ namespace ORB_SLAM3
 
         void GrabImuData(const IMU::Point &imuMeasurement);
 
-        void SetLocalMapper(LocalMapping* pLocalMapper);
-        void SetLoopClosing(LoopClosing* pLoopClosing);
+        void SetLocalMapper(MapperPort* pLocalMapper);
+        void SetLoopClosing(LoopCloserPort* pLoopClosing);
         void SetStepByStep(bool bSet);
         // One frame more, from the viewer, while stepping.
         void Step() { mbStep = true; }
@@ -95,8 +94,14 @@ namespace ORB_SLAM3
         // Use this function if you have deactivated local mapping and you only want to localize the camera.
         void InformOnlyTracking(const bool &flag);
 
-        void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame);
-        KeyFrame* GetLastKeyFrame() { return mpLastKeyFrame; }
+        void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame) override;
+        KeyFrame* GetLastKeyFrame() override { return mpLastKeyFrame; }
+
+        // TrackerPort
+        eTrackingState State() const override { return mState; }
+        void SetState(eTrackingState state) override { mState = state; }
+        double CurrentFrameTime() const override { return mCurrentFrameTime; }
+        double LastFrameTime() const override { return mLastFrameTime; }
 
         void CreateMapInAtlas();
         //std::mutex mMutexTracks;
@@ -104,7 +109,7 @@ namespace ORB_SLAM3
         //--
         void NewDataset();
         int GetNumberDataset();
-        int GetMatchesInliers();
+        int GetMatchesInliers() override;
 
         //DEBUG
         void SaveSubTrajectory(std::string strNameFile_frames, std::string strNameFile_kf, std::string strFolder = "");
@@ -121,18 +126,10 @@ namespace ORB_SLAM3
 
     public:
         // Tracking states
-        enum eTrackingState
-        {
-            SYSTEM_NOT_READY = -1,
-            NO_IMAGES_YET = 0,
-            NOT_INITIALIZED = 1,
-            OK = 2,
-            RECENTLY_LOST = 3,
-            LOST = 4,
-            OK_KLT = 5
-        };
+        // eTrackingState and its values come from TrackingStates, through
+        // TrackerPort.
 
-        eTrackingState mState;
+        std::atomic<eTrackingState> mState;
         eTrackingState mLastProcessedState;
 
         // Input sensor
@@ -172,7 +169,6 @@ namespace ORB_SLAM3
         bool mbInitWith3KFs;
         double t0;    // time-stamp of first read frame
         double t0vis; // time-stamp of first inserted keyframe
-        double t0IMU; // time-stamp of IMU initialization
         bool mFastInit = false;
 
         std::vector<MapPoint*> GetLocalMapMPS();
@@ -262,8 +258,12 @@ namespace ORB_SLAM3
         bool mbVO;
 
         //Other Thread Pointers
-        LocalMapping* mpLocalMapper;
-        LoopClosing* mpLoopClosing;
+        MapperPort* mpLocalMapper;
+        LoopCloserPort* mpLoopClosing;
+
+        // For the other threads: set when tracking a frame begins.
+        std::atomic<double> mCurrentFrameTime{0.0};
+        std::atomic<double> mLastFrameTime{0.0};
 
         //ORB
         // Tracking owns the extractors; Frame only borrows them, and a Frame
@@ -330,7 +330,7 @@ namespace ORB_SLAM3
         int mnMatchesInliers;
 
         //Last Frame, KeyFrame and Relocalisation Info
-        KeyFrame* mpLastKeyFrame;
+        SharedPointer<KeyFrame> mpLastKeyFrame;
         unsigned int mnLastKeyFrameId;
         unsigned int mnLastRelocFrameId;
         double mTimeStampLost;

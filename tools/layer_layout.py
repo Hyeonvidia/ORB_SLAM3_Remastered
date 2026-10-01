@@ -55,7 +55,8 @@ LAYERS = {
     "features": ["ORBextractor", "ORBdescriptor"],
     "common": ["Converter", "GeometricTools", "Settings", "Verbose",
                "SerializationUtils", "ImuTypes", "TwoViewReconstruction",
-               "NavState", "Sensor", "TimeStats", "SophusEnsure", "WorkerPool"],
+               "NavState", "Sensor", "TimeStats", "SophusEnsure", "WorkerPool",
+               "ThreadPorts", "FlatMap"],
     "viewer": ["Viewer", "FrameDrawer", "MapDrawer"],
 }
 # System sits above the layers and stays at the root of each tree.

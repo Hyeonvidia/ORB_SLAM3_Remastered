@@ -19,6 +19,8 @@
 #ifndef LOCALMAPPING_H
 #define LOCALMAPPING_H
 
+#include <atomic>
+#include "common/ThreadPorts.hpp"
 #include "atlas/KeyFrame.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
 #include "common/Settings.hpp"
@@ -33,21 +35,22 @@
 namespace ORB_SLAM3
 {
 
-    class System;
-    class Tracking;
-    class LoopClosing;
     class Atlas;
 
-    class LocalMapping
+    class LocalMapping : public MapperPort
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bInertial,
+        LocalMapping(Atlas* pAtlas, const float bMonocular, bool bInertial,
                      const std::string &_strSeqName = std::string());
 
-        void SetLoopCloser(LoopClosing* pLoopCloser);
+        void SetLoopCloser(LoopCloserPort* pLoopCloser);
 
-        void SetTracker(Tracking* pTracker);
+        void SetTracker(TrackerPort* pTracker);
+
+        // MapperPort
+        bool BadImu() override { return mbBadImu; }
+        void SetFirstTimestamp(double ts) override { mFirstTs = ts; }
 
         // Main function
         void Run();
@@ -95,7 +98,7 @@ namespace ORB_SLAM3
         unsigned int mInitSect;
         unsigned int mIdxInit;
         unsigned int mnKFs;
-        double mFirstTs;
+        std::atomic<double> mFirstTs;
 
         // For debugging (erase in normal mode)
         int mInitFr;
@@ -104,7 +107,7 @@ namespace ORB_SLAM3
 
         bool mbNotBA1;
         bool mbNotBA2;
-        bool mbBadImu;
+        std::atomic<bool> mbBadImu;
 
         bool mbWriteStats;
 
@@ -144,8 +147,6 @@ namespace ORB_SLAM3
         void SearchInNeighbors();
         void KeyFrameCulling();
 
-        System* mpSystem;
-
         bool mbMonocular;
         bool mbInertial;
 
@@ -163,8 +164,8 @@ namespace ORB_SLAM3
 
         Atlas* mpAtlas;
 
-        LoopClosing* mpLoopCloser;
-        Tracking* mpTracker;
+        LoopCloserPort* mpLoopCloser;
+        TrackerPort* mpTracker;
 
         std::list<KeyFrame*> mlNewKeyFrames;
 
