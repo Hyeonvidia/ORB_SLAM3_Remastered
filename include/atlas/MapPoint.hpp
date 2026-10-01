@@ -19,6 +19,7 @@
 #ifndef MAPPOINT_H
 #define MAPPOINT_H
 
+#include "common/ThreadPorts.hpp"
 #include "common/FlatMap.hpp"
 #include "features/ORBdescriptor.hpp"
 #include "common/Converter.hpp"
@@ -26,6 +27,9 @@
 
 #include "common/SerializationUtils.hpp"
 
+#include <memory>
+#include <cstring>
+#include <atomic>
 #include <opencv2/core/core.hpp>
 #include <cstdint>
 #include <mutex>
@@ -91,15 +95,22 @@ namespace ORB_SLAM3
             ar & boost::serialization::make_array(mNormalVector.data(), mNormalVector.size());
             //ar & BOOST_SERIALIZATION_NVP(mBackupObservationsId);
             //ar & mObservations;
-            ar & mBackupObservationsId1;
-            ar & mBackupObservationsId2;
-            serializeMatrix(ar,mDescriptor,version);
-            ar & mBackupRefKFId;
+            if(!mpBackup)
+                mpBackup = std::make_unique<Backup>();
+            ar & mpBackup->mObservationsId1;
+            ar & mpBackup->mObservationsId2;
+            {
+                cv::Mat descriptor(1, 32, CV_8U, mDescriptorData);
+                serializeMatrix(ar, descriptor, version);
+                if(descriptor.data != mDescriptorData && descriptor.total() == 32)
+                    std::memcpy(mDescriptorData, descriptor.data, 32);
+            }
+            ar & mpBackup->mRefKFId;
             //ar & mnVisible;
             //ar & mnFound;
 
             ar & mbBad;
-            ar & mBackupReplacedId;
+            ar & mpBackup->mReplacedId;
 
             ar & mfMinDistance;
             ar & mfMaxDistance;
@@ -127,7 +138,6 @@ namespace ORB_SLAM3
         std::map<std::string, std::size_t> MemoryFootprint() const;
 
         MapPoint(const Eigen::Vector3f &Pos, KeyFrame* pRefKF, Map* pMap);
-        MapPoint(const double invDepth, cv::Point2f uv_init, KeyFrame* pRefKF, KeyFrame* pHostKF, Map* pMap);
         MapPoint(const Eigen::Vector3f &Pos, Map* pMap, Frame* pFrame, const int &idxF);
 
         void SetWorldPos(const Eigen::Vector3f &Pos);
@@ -215,10 +225,6 @@ namespace ORB_SLAM3
         Eigen::Vector3f mNormalVectorMerge;
 
         // Fopr inverse depth optimization
-        double mInvDepth;
-        double mInitU;
-        double mInitV;
-        KeyFrame* mpHostKF;
 
         static std::mutex mGlobalMutex;
 
@@ -231,8 +237,16 @@ namespace ORB_SLAM3
         // Keyframes observing the point and associated index in keyframe
         ObservationMap mObservations;
         // For save relation without pointer, this is necessary for save/load function
-        std::map<long unsigned int, int> mBackupObservationsId1;
-        std::map<long unsigned int, int> mBackupObservationsId2;
+        // What a saved atlas holds instead of pointers; made for saving and
+        // loading, and nothing between, so that a point does not carry it.
+        struct Backup
+        {
+            std::map<long unsigned int, int> mObservationsId1;
+            std::map<long unsigned int, int> mObservationsId2;
+            long unsigned int mRefKFId = 0;
+            long long int mReplacedId = -1;
+        };
+        std::unique_ptr<Backup> mpBackup;
 
         // Mean viewing direction
         Eigen::Vector3f mNormalVector;
@@ -241,12 +255,12 @@ namespace ORB_SLAM3
         // mDescriptor is a header over them, so a point is one allocation, its
         // descriptor sits next to its position, and freeing a point frees nothing
         // else. copyTo() into a header of the same shape reuses the buffer.
-        alignas(16) std::uint8_t mDescriptorData[32];
-        cv::Mat mDescriptor;
+        // The 32 bytes themselves: a cv::Mat around them is 96 bytes of header
+        // for every point, and nothing reads one.
+        alignas(16) std::uint8_t mDescriptorData[32] = {};
 
         // Reference KeyFrame
         KeyFrame* mpRefKF;
-        long unsigned int mBackupRefKFId;
 
         // Tracking counters
         int mnVisible;
@@ -256,18 +270,17 @@ namespace ORB_SLAM3
         bool mbBad;
         MapPoint* mpReplaced;
         // For save relation without pointer, this is necessary for save/load function
-        long long int mBackupReplacedId;
 
         // Scale invariance distances
         float mfMinDistance;
         float mfMaxDistance;
 
-        Map* mpMap;
+        // Which map the point is in: moved by merges, read by every thread.
+        SharedPointer<Map> mpMap;
 
         // Mutex
         std::mutex mMutexPos;
         std::mutex mMutexFeatures;
-        std::mutex mMutexMap;
     };
 
 } // namespace ORB_SLAM3

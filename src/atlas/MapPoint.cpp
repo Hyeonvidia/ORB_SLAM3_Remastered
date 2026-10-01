@@ -45,7 +45,6 @@ namespace ORB_SLAM3
           mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0), mnCorrectedReference(0), mnBAGlobalForKF(0),
           mnVisible(1), mnFound(1), mbBad(false), mpReplaced(static_cast<MapPoint*>(NULL))
     {
-        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         mpReplaced = static_cast<MapPoint*>(NULL);
@@ -101,8 +100,9 @@ namespace ORB_SLAM3
         std::map<std::string, std::size_t> f;
         f["object itself"] = MemoryAudit::Chunk(sizeof(MapPoint));
         f["observations"] = MemoryAudit::Chunk(mObservations.capacity() * sizeof(ObservationMap::value_type));
-        f["descriptor"] = MemoryAudit::Mat(mDescriptor);
-        f["backup ids"] = MemoryAudit::Tree(mBackupObservationsId1) + MemoryAudit::Tree(mBackupObservationsId2);
+        f["backup ids"] = mpBackup ? MemoryAudit::Tree(mpBackup->mObservationsId1) +
+                                         MemoryAudit::Tree(mpBackup->mObservationsId2)
+                                   : 0;
         return f;
     }
 
@@ -113,7 +113,6 @@ namespace ORB_SLAM3
           mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
           mnOriginMapId(pMap->GetId())
     {
-        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         SetWorldPos(Pos);
@@ -128,36 +127,12 @@ namespace ORB_SLAM3
         mnId = nNextId++;
     }
 
-    MapPoint::MapPoint(const double invDepth, cv::Point2f uv_init, KeyFrame* pRefKF, KeyFrame* pHostKF, Map* pMap)
-        : mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nObs(0), mnTrackReferenceForFrame(0),
-          mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
-          mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
-          mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
-          mnOriginMapId(pMap->GetId())
-    {
-        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
-        if(MemoryAudit::Enabled())
-            MemoryAudit::Register(this);
-        mInvDepth = invDepth;
-        mInitU = (double)uv_init.x;
-        mInitV = (double)uv_init.y;
-        mpHostKF = pHostKF;
-
-        mNormalVector.setZero();
-
-        // Worldpos is not set
-        // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-        std::lock_guard<std::mutex> lock(mpMap->mMutexPointCreation);
-        mnId = nNextId++;
-    }
-
     MapPoint::MapPoint(const Eigen::Vector3f &Pos, Map* pMap, Frame* pFrame, const int &idxF)
         : mnFirstKFid(-1), mnFirstFrame(pFrame->mnId), nObs(0), mnTrackReferenceForFrame(0), mnLastFrameSeen(0),
           mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0), mnCorrectedReference(0),
           mnBAGlobalForKF(0), mpRefKF(static_cast<KeyFrame*>(NULL)), mnVisible(1), mnFound(1), mbBad(false),
           mpReplaced(NULL), mpMap(pMap), mnOriginMapId(pMap->GetId())
     {
-        mDescriptor = cv::Mat(1, 32, CV_8U, mDescriptorData);
         if(MemoryAudit::Enabled())
             MemoryAudit::Register(this);
         SetWorldPos(Pos);
@@ -189,7 +164,7 @@ namespace ORB_SLAM3
         mfMaxDistance = dist * levelScaleFactor;
         mfMinDistance = mfMaxDistance / pFrame->mvScaleFactors[nLevels - 1];
 
-        pFrame->mDescriptors.row(idxF).copyTo(mDescriptor);
+        std::memcpy(mDescriptorData, pFrame->mDescriptors.ptr(idxF), sizeof(mDescriptorData));
 
         // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
         std::lock_guard<std::mutex> lock(mpMap->mMutexPointCreation);
@@ -490,24 +465,21 @@ namespace ORB_SLAM3
 
         {
             std::lock_guard<std::mutex> lock(mMutexFeatures);
-            vDescriptors[BestIdx].copyTo(mDescriptor);
+            std::memcpy(mDescriptorData, vDescriptors[BestIdx].data, sizeof(mDescriptorData));
         }
     }
 
     cv::Mat MapPoint::GetDescriptor()
     {
         std::lock_guard<std::mutex> lock(mMutexFeatures);
-        return mDescriptor.clone();
+        return cv::Mat(1, 32, CV_8U, mDescriptorData).clone();
     }
 
     ORBdescriptor::Bytes MapPoint::GetDescriptorBytes()
     {
         std::lock_guard<std::mutex> lock(mMutexFeatures);
-        // Through mDescriptor, which is where a loaded atlas puts it; zeros
-        // for a point that has none yet.
-        ORBdescriptor::Bytes d = {};
-        if(mDescriptor.data && mDescriptor.total() == sizeof(d.b))
-            std::memcpy(d.b, mDescriptor.data, sizeof(d.b));
+        ORBdescriptor::Bytes d;
+        std::memcpy(d.b, mDescriptorData, sizeof(d.b));
         return d;
     }
 
@@ -668,24 +640,24 @@ namespace ORB_SLAM3
 
     Map* MapPoint::GetMap()
     {
-        std::lock_guard<std::mutex> lock(mMutexMap);
         return mpMap;
     }
 
     void MapPoint::UpdateMap(Map* pMap)
     {
-        std::lock_guard<std::mutex> lock(mMutexMap);
         mpMap = pMap;
     }
 
     void MapPoint::PreSave(std::set<KeyFrame*> &spKF, std::set<MapPoint*> &spMP)
     {
-        mBackupReplacedId = -1;
+        if(!mpBackup)
+            mpBackup = std::make_unique<Backup>();
+        mpBackup->mReplacedId = -1;
         if(mpReplaced && spMP.find(mpReplaced) != spMP.end())
-            mBackupReplacedId = mpReplaced->mnId;
+            mpBackup->mReplacedId = mpReplaced->mnId;
 
-        mBackupObservationsId1.clear();
-        mBackupObservationsId2.clear();
+        mpBackup->mObservationsId1.clear();
+        mpBackup->mObservationsId2.clear();
         // Save the id and position in each KF who view it
         for(MapPoint::ObservationMap::const_iterator it = mObservations.begin(), end = mObservations.end(); it != end;
             ++it)
@@ -693,8 +665,8 @@ namespace ORB_SLAM3
             KeyFrame* pKFi = it->first;
             if(spKF.find(pKFi) != spKF.end())
             {
-                mBackupObservationsId1[it->first->mnId] = std::get<0>(it->second);
-                mBackupObservationsId2[it->first->mnId] = std::get<1>(it->second);
+                mpBackup->mObservationsId1[it->first->mnId] = std::get<0>(it->second);
+                mpBackup->mObservationsId2[it->first->mnId] = std::get<1>(it->second);
             }
             else
             {
@@ -705,34 +677,34 @@ namespace ORB_SLAM3
         // Save the id of the reference KF
         if(spKF.find(mpRefKF) != spKF.end())
         {
-            mBackupRefKFId = mpRefKF->mnId;
+            mpBackup->mRefKFId = mpRefKF->mnId;
         }
     }
 
     void MapPoint::PostLoad(std::map<long unsigned int, KeyFrame*> &mpKFid,
                             std::map<long unsigned int, MapPoint*> &mpMPid)
     {
-        mpRefKF = mpKFid[mBackupRefKFId];
+        mpRefKF = mpKFid[mpBackup->mRefKFId];
         if(!mpRefKF)
         {
-            std::cout << "ERROR: MP without KF reference " << mBackupRefKFId << "; Num obs: " << nObs << std::endl;
+            std::cout << "ERROR: MP without KF reference " << mpBackup->mRefKFId << "; Num obs: " << nObs << std::endl;
         }
         mpReplaced = static_cast<MapPoint*>(NULL);
-        if(mBackupReplacedId >= 0)
+        if(mpBackup->mReplacedId >= 0)
         {
-            std::map<long unsigned int, MapPoint*>::iterator it = mpMPid.find(mBackupReplacedId);
+            std::map<long unsigned int, MapPoint*>::iterator it = mpMPid.find(mpBackup->mReplacedId);
             if(it != mpMPid.end())
                 mpReplaced = it->second;
         }
 
         mObservations.clear();
 
-        for(std::map<long unsigned int, int>::const_iterator it = mBackupObservationsId1.begin(),
-                                                             end = mBackupObservationsId1.end();
+        for(std::map<long unsigned int, int>::const_iterator it = mpBackup->mObservationsId1.begin(),
+                                                             end = mpBackup->mObservationsId1.end();
             it != end; ++it)
         {
             KeyFrame* pKFi = mpKFid[it->first];
-            std::map<long unsigned int, int>::const_iterator it2 = mBackupObservationsId2.find(it->first);
+            std::map<long unsigned int, int>::const_iterator it2 = mpBackup->mObservationsId2.find(it->first);
             std::tuple<int, int> indexes = std::tuple<int, int>(it->second, it2->second);
             if(pKFi)
             {
@@ -740,8 +712,7 @@ namespace ORB_SLAM3
             }
         }
 
-        mBackupObservationsId1.clear();
-        mBackupObservationsId2.clear();
+        mpBackup.reset();
     }
 
 } // namespace ORB_SLAM3
