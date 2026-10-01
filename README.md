@@ -1,10 +1,10 @@
 # ORB_SLAM3_Remastered
 
 ORB-SLAM3 rebuilt for a robot's onboard computer: monocular, stereo and RGB-D
-SLAM that tracks a frame in a little over half the time of ORB-SLAM3 v1.0 and
-runs in half the memory or less -- a third less in monocular -- at the same
-accuracy, with the defects found on the way fixed and the code laid out along
-the architecture of the paper.
+SLAM that tracks a frame in half the time of ORB-SLAM3 v1.0 and runs in a
+third of the memory -- 60 % in monocular -- at the same accuracy, with the
+defects found on the way fixed and the code laid out along the architecture
+of the paper.
 
 ![KITTI 07, stereo: the frame with its features, and the map being built](docs/media/kitti07_stereo.gif)
 
@@ -14,24 +14,25 @@ the architecture of the paper.
 
 | Run | Tracking per frame, ms | Peak memory, MB | ATE, m |
 |---|---:|---:|---:|
-| KITTI 07 monocular | 13.3 → **7.0** (-47 %) | 1545 → **1059** (-31 %) | 2.13 → 2.51 |
-| KITTI 07 stereo | 17.1 → **9.0** (-47 %) | 896 → **447** (-50 %) | 0.408 → 0.443 |
-| TUM fr1_desk RGB-D | 12.5 → **7.5** (-40 %) | 808 → **299** (-63 %) | 0.018 → 0.017 |
-| EuRoC V101 stereo | – → 7.0 | 752 → **278** (-63 %) | 0.037 → 0.037 |
+| KITTI 07 monocular | 13.3 → **6.7** (-50 %) | 1545 → **950** (-39 %) | 2.13 → 3.17 |
+| KITTI 07 stereo | 17.1 → **8.7** (-49 %) | 896 → **374** (-58 %) | 0.408 → 0.449 |
+| TUM fr1_desk RGB-D | 12.5 → **7.2** (-42 %) | 808 → **255** (-68 %) | 0.018 → 0.018 |
+| EuRoC V101 stereo | – → 6.7 | 752 → **220** (-71 %) | 0.037 → 0.037 |
 
 v1.0 → now, medians of three runs of each, four runs sharing the machine
 (linux/arm64 in Docker, Apple M-series). Accuracy moves from one run to the
 next of the same binary by more than the two columns differ: KITTI 07 stereo
-between 0.40 and 0.48 m, monocular between 2.0 and 3.0.
+between 0.40 and 0.48 m, monocular between 2.0 and 4.5 (v1.0 between 2.1 and
+4.5 as well).
 
 **Place recognition** finds what is there to be found:
 
 | Run | Loops closed | Maps merged | Tracking per frame, ms | ATE, m |
 |---|---:|---:|---:|---:|
-| KITTI 05 stereo (three loops) | 3 | – | 10.2 | 0.98 |
-| KITTI 05 monocular | 3 | – | 7.5 | 7.41 |
-| EuRoC V101 + V102 in one session, stereo | 2 | 1 | 7.2 | 0.035 |
-| EuRoC V101 + V102 in one session, monocular | 1 | 1 | 6.8 | 0.030 |
+| KITTI 05 stereo (three loops) | 3 | – | 10.0 | 1.00 |
+| KITTI 05 monocular | 3 | – | 7.3 | 6.72 |
+| EuRoC V101 + V102 in one session, stereo | 2 | 1 | 7.6 | 0.037 |
+| EuRoC V101 + V102 in one session, monocular | 1 | 1 | 6.6 | 0.037 |
 
 One run of each. KITTI 05 monocular has ended between 4.3 and 7.4 m in the
 runs of this tree, and between 5.6 and 7.8 in those of v1.0.
@@ -79,10 +80,14 @@ Per stage, KITTI 07, before this work and now, measured side by side
 
 **Smaller**
 
+- The vocabulary tree is six arrays, 55 MB, where DBoW2 keeps 1.1 million
+  node objects, 106 MB; the same words, loaded in 0.4 s instead of 1.9.
+- A keyframe's words are one block of 32 KB instead of a std::map of 126 KB;
+  its feature grid is flat; no duplicate keypoints. A KeyFrame of 2000
+  features is 230 KB where it was 480.
 - MapPoints that were culled are freed once no thread can still be using them
-  ([docs/OWNERSHIP.md](docs/OWNERSHIP.md)); v1.0 never frees one.
-- A KeyFrame is a third smaller: flat feature grid, no duplicate keypoints.
-- The vocabulary holds its descriptors as 32 bytes each, not as a matrix each.
+  ([docs/OWNERSHIP.md](docs/OWNERSHIP.md)); v1.0 never frees one. A map
+  point's observations are one block, not a node per observation.
 
 **Defects of v1.0 that were fixed**
 
@@ -105,6 +110,8 @@ Per stage, KITTI 07, before this work and now, measured side by side
 - Dependencies are pinned upstream releases, untouched, in `thirdparty/`;
   ORB-SLAM3's changes to them are separate code in `vendor_ext/`
   ([docs/WRAPPERS.md](docs/WRAPPERS.md)).
+- The threads start once they are wired to each other; in the monocular,
+  stereo and RGB-D paths no thread reads another's members.
 - Built and run in Docker only. `std::` written out, no `using namespace`.
 - Tests in seven seconds (`ctest`), a benchmark of the extractor on its own
   (`tests/bench_orb`), and the two checks above.
@@ -148,8 +155,9 @@ odometry and TUM RGB-D.
   what an adjustment costs besides is building the graph for g2o.
 - Tracking the local map takes 0.1 to 0.4 ms longer per frame in stereo than
   before extraction was made parallel; not looked into.
-- Culled KeyFrames are not freed yet; cross-thread reads of public members and
-  the cycle between the three threads' classes remain.
+- Culled KeyFrames are not freed (9.6 MB on KITTI 07 mono; worth it in the
+  inertial configurations, which cull hundreds). The inertial paths still read
+  across threads, and the three threads' classes still know each other.
 
 ## License
 
