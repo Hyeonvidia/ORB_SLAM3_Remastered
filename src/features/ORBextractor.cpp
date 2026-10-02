@@ -57,6 +57,7 @@
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <thread>
 #include <vector>
@@ -850,6 +851,34 @@ namespace ORB_SLAM3
             const int hCell = std::ceil(height / nRows);
 
             ORB_PHASE_BEGIN(FAST);
+            // Once over the level at the first threshold, and the corners
+            // sorted into their cells. v1.0 ran FAST on each cell of 35 x 35
+            // with a margin of 3 -- some 900 calls an image, each with its
+            // buffers and its threshold table -- which cost half as much
+            // again as one call on the level does; and a corner at the edge
+            // of a cell was kept though a stronger one stood just across it,
+            // which one call does not do. Cells that got no corner are
+            // searched again at the second threshold, each on its own, as
+            // before.
+            const cv::Mat level_ =
+                mvImagePyramid[level].rowRange(minBorderY, maxBorderY).colRange(minBorderX, maxBorderX);
+            std::vector<cv::KeyPoint> vLevelKeys;
+            FAST(level_, vLevelKeys, iniThFAST, true);
+            std::vector<std::uint8_t> vCellHasKeys(static_cast<std::size_t>(nRows) * nCols, 0);
+            for(const cv::KeyPoint &kp : vLevelKeys)
+            {
+                // The cell whose margin-less window the corner is in; a window
+                // v1.0 did not search (the strip at the far edge) is skipped
+                // as v1.0 skipped it.
+                const int j = static_cast<int>(kp.pt.x - 3) / wCell;
+                const int i = static_cast<int>(kp.pt.y - 3) / hCell;
+                if(j >= nCols || i >= nRows || minBorderX + j * wCell >= maxBorderX - 6 ||
+                   minBorderY + i * hCell >= maxBorderY - 3)
+                    continue;
+                vCellHasKeys[static_cast<std::size_t>(i) * nCols + j] = 1;
+                vToDistributeKeys.push_back(kp);
+            }
+
             for(int i = 0; i < nRows; i++)
             {
                 const float iniY = minBorderY + i * hCell;
@@ -868,54 +897,20 @@ namespace ORB_SLAM3
                         continue;
                     if(maxX > maxBorderX)
                         maxX = maxBorderX;
+                    if(vCellHasKeys[static_cast<std::size_t>(i) * nCols + j])
+                        continue;
 
                     std::vector<cv::KeyPoint> vKeysCell;
+                    FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX), vKeysCell, minThFAST, true);
 
-                    FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX), vKeysCell, iniThFAST, true);
-
-                    /*if(bRight && j <= 13){
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,10,true);
-                    }
-                    else if(!bRight && j >= 16){
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,10,true);
-                    }
-                    else{
-                        FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                             vKeysCell,iniThFAST,true);
-                    }*/
-
-                    if(vKeysCell.empty())
+                    for(std::vector<cv::KeyPoint>::iterator vit = vKeysCell.begin(); vit != vKeysCell.end(); vit++)
                     {
-                        FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX), vKeysCell, minThFAST,
-                             true);
-                        /*if(bRight && j <= 13){
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,5,true);
-                        }
-                        else if(!bRight && j >= 16){
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,5,true);
-                        }
-                        else{
-                            FAST(mvImagePyramid[level].rowRange(iniY,maxY).colRange(iniX,maxX),
-                                 vKeysCell,minThFAST,true);
-                        }*/
-                    }
-
-                    if(!vKeysCell.empty())
-                    {
-                        for(std::vector<cv::KeyPoint>::iterator vit = vKeysCell.begin(); vit != vKeysCell.end(); vit++)
-                        {
-                            (*vit).pt.x += j * wCell;
-                            (*vit).pt.y += i * hCell;
-                            vToDistributeKeys.push_back(*vit);
-                        }
+                        (*vit).pt.x += j * wCell;
+                        (*vit).pt.y += i * hCell;
+                        vToDistributeKeys.push_back(*vit);
                     }
                 }
             }
-
             ORB_PHASE_END(FAST);
 
             keypoints.reserve(nfeatures);
