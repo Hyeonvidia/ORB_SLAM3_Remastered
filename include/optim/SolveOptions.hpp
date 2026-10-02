@@ -30,6 +30,15 @@ namespace ORB_SLAM3
         {
             int nIterations = 10;
 
+            // Where a problem may be solved by either. Levenberg-Marquardt
+            // unless said.
+            enum Algorithm
+            {
+                kLevenbergMarquardt,
+                kGaussNewton,
+            };
+            Algorithm algorithm = kLevenbergMarquardt;
+
             // Read by the solver between its steps; when it becomes true the
             // solve ends where it is. Written by another thread.
             bool* pbStop = nullptr;

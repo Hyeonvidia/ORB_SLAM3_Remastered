@@ -17,6 +17,9 @@
 */
 
 #include "optimization/Optimizer.hpp"
+#include "optimization/BodyPoseOf.hpp"
+#include "optimization/InertialAlignmentTask.hpp"
+#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
 
 #include <complex>
@@ -43,9 +46,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <tuple>
@@ -56,95 +61,42 @@
 
 namespace ORB_SLAM3
 {
-    void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg,
-                                         Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd &covInertial, bool bFixedVel,
-                                         bool bGauss, float priorG, float priorA)
+    void InertialAlignmentTask::Read(Map* pMap, const bool bSetBias)
     {
-        Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
-        int its = 200;
         long unsigned int maxKFid = pMap->GetMaxKFid();
-        const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+        mvpKFs = pMap->GetAllKeyFrames();
+        const std::vector<KeyFrame*> &vpKFs = mvpKFs;
 
-        // Setup optimizer
-        g2o::SparseOptimizer optimizer;
-
-        auto* solver = orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolverX, orbslam3r::g2o_ext::LinearSolver::kEigen>();
-
-        if(priorG != 0.f)
-            solver->setUserLambdaInit(1e3);
-
-        optimizer.setAlgorithm(solver);
-
-        // Set KeyFrame vertices (fixed poses and optimizable velocities)
+        // Set KeyFrame vertices (fixed poses and optimizable velocities), in
+        // the order of the keyframes' ids: the order v1.0's graph had them in.
+        std::vector<std::size_t> vnOrder;
         for(size_t i = 0; i < vpKFs.size(); i++)
         {
             KeyFrame* pKFi = vpKFs[i];
             if(pKFi->mnId > maxKFid)
                 continue;
-            VertexPose* VP = new VertexPose(pKFi);
-            VP->setId(pKFi->mnId);
-            VP->setFixed(true);
-            optimizer.addVertex(VP);
-
-            VertexVelocity* VV = new VertexVelocity(pKFi);
-            VV->setId(maxKFid + (pKFi->mnId) + 1);
-            if(bFixedVel)
-                VV->setFixed(true);
-            else
-                VV->setFixed(false);
-
-            optimizer.addVertex(VV);
+            vnOrder.push_back(i);
+        }
+        std::stable_sort(vnOrder.begin(), vnOrder.end(),
+                         [&vpKFs](std::size_t a, std::size_t b) { return vpKFs[a]->mnId < vpKFs[b]->mnId; });
+        mvnPose.assign(vpKFs.size(), -1);
+        std::map<long unsigned int, int> mnPoseOfId;
+        for(const std::size_t i : vnOrder)
+        {
+            KeyFrame* pKFi = vpKFs[i];
+            if(mnPoseOfId.count(pKFi->mnId))
+                continue;
+            mvnPose[i] = mProblem.addPose(BodyPoseOf(pKFi), pKFi->GetVelocity().cast<double>());
+            mnPoseOfId[pKFi->mnId] = mvnPose[i];
+            mvpPoseKF.push_back(pKFi);
         }
 
         // Biases
-        VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
-        VG->setId(maxKFid * 2 + 2);
-        if(bFixedVel)
-            VG->setFixed(true);
-        else
-            VG->setFixed(false);
-        optimizer.addVertex(VG);
-        VertexAccBias* VA = new VertexAccBias(vpKFs.front());
-        VA->setId(maxKFid * 2 + 3);
-        if(bFixedVel)
-            VA->setFixed(true);
-        else
-            VA->setFixed(false);
-
-        optimizer.addVertex(VA);
-        // prior acc bias
-        Eigen::Vector3f bprior;
-        bprior.setZero();
-
-        EdgePriorAcc* epa = new EdgePriorAcc(bprior);
-        epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-        double infoPriorA = priorA;
-        epa->setInformation(infoPriorA * Eigen::Matrix3d::Identity());
-        optimizer.addEdge(epa);
-        EdgePriorGyro* epg = new EdgePriorGyro(bprior);
-        epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-        double infoPriorG = priorG;
-        epg->setInformation(infoPriorG * Eigen::Matrix3d::Identity());
-        optimizer.addEdge(epg);
-
-        // Gravity and scale
-        VertexGDir* VGDir = new VertexGDir(Rwg);
-        VGDir->setId(maxKFid * 2 + 4);
-        VGDir->setFixed(false);
-        optimizer.addVertex(VGDir);
-        VertexScale* VS = new VertexScale(scale);
-        VS->setId(maxKFid * 2 + 5);
-        VS->setFixed(!bMono); // Fixed for stereo case
-        optimizer.addVertex(VS);
+        mProblem.gyroBias = vpKFs.front()->GetGyroBias().cast<double>();
+        mProblem.accBias = vpKFs.front()->GetAccBias().cast<double>();
 
         // Graph edges
         // IMU links with gravity and scale
-        std::vector<EdgeInertialGS*> vpei;
-        vpei.reserve(vpKFs.size());
-        std::vector<std::pair<KeyFrame*, KeyFrame*>> vppUsedKF;
-        vppUsedKF.reserve(vpKFs.size());
-        //std::cout << "build optimization graph" << std::endl;
-
         for(size_t i = 0; i < vpKFs.size(); i++)
         {
             KeyFrame* pKFi = vpKFs[i];
@@ -156,71 +108,49 @@ namespace ORB_SLAM3
                 if(!pKFi->mpImuPreintegrated)
                     std::cout << "Not preintegrated measurement" << std::endl;
 
-                pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-                g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid + (pKFi->mPrevKF->mnId) + 1);
-                g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-                g2o::HyperGraph::Vertex* VV2 = optimizer.vertex(maxKFid + (pKFi->mnId) + 1);
-                g2o::HyperGraph::Vertex* VG = optimizer.vertex(maxKFid * 2 + 2);
-                g2o::HyperGraph::Vertex* VA = optimizer.vertex(maxKFid * 2 + 3);
-                g2o::HyperGraph::Vertex* VGDir = optimizer.vertex(maxKFid * 2 + 4);
-                g2o::HyperGraph::Vertex* VS = optimizer.vertex(maxKFid * 2 + 5);
-                if(!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
+                if(bSetBias)
+                    pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
+
+                const std::map<long unsigned int, int>::const_iterator it1 = mnPoseOfId.find(pKFi->mPrevKF->mnId);
+                const std::map<long unsigned int, int>::const_iterator it2 = mnPoseOfId.find(pKFi->mnId);
+                if(it1 == mnPoseOfId.end() || it2 == mnPoseOfId.end())
                 {
-                    std::cout << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2
-                              << ", " << VGDir << ", " << VS << std::endl;
+                    std::cout << "Error: an inertial term between keyframes " << pKFi->mPrevKF->mnId << " and "
+                              << pKFi->mnId << ", one of which is not in the map" << std::endl;
 
                     continue;
                 }
-                EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-                ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-                ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-                ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-                ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-                ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-                ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-                ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir));
-                ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS));
-
-                vpei.push_back(ei);
-
-                vppUsedKF.push_back(std::make_pair(pKFi->mPrevKF, pKFi));
-                optimizer.addEdge(ei);
+                mPreintegrations.emplace_back(pKFi->mpImuPreintegrated);
+                mProblem.addConstraint(it1->second, it2->second, &mPreintegrations.back());
             }
         }
+    }
 
-        // Compute error for different scales
-        std::set<g2o::HyperGraph::Edge*> setEdges = optimizer.edges();
+    void InertialAlignmentTask::Solve(optim::InertialAlignmentSolver &solver)
+    {
+        solver.Solve(mProblem, mOptions);
+    }
 
-        optimizer.setVerbose(false);
-        optimizer.initializeOptimization();
-        optimizer.optimize(its);
-
-        scale = VS->estimate();
-
+    void InertialAlignmentTask::Apply() const
+    {
         // Recover optimized data
         // Biases
-        VG = static_cast<VertexGyroBias*>(optimizer.vertex(maxKFid * 2 + 2));
-        VA = static_cast<VertexAccBias*>(optimizer.vertex(maxKFid * 2 + 3));
         Vector6d vb;
-        vb << VG->estimate(), VA->estimate();
-        bg << VG->estimate();
-        ba << VA->estimate();
-        scale = VS->estimate();
+        vb << mProblem.gyroBias, mProblem.accBias;
+        const Eigen::Vector3d &bg = mProblem.gyroBias;
 
         IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
-        Rwg = VGDir->estimate().Rwg;
 
         //Keyframes velocities and biases
-        const int N = vpKFs.size();
+        const std::vector<KeyFrame*> &vpKFs = mvpKFs;
+        const size_t N = vpKFs.size();
         for(size_t i = 0; i < N; i++)
         {
             KeyFrame* pKFi = vpKFs[i];
-            if(pKFi->mnId > maxKFid)
+            if(mvnPose[i] < 0)
                 continue;
 
-            VertexVelocity* VV = static_cast<VertexVelocity*>(optimizer.vertex(maxKFid + (pKFi->mnId) + 1));
-            Eigen::Vector3d Vw = VV->estimate(); // Velocity is scaled after
+            Eigen::Vector3d Vw = mProblem.velocity[mvnPose[i]]; // Velocity is scaled after
             pKFi->SetVelocity(Vw.cast<float>());
 
             if((pKFi->GetGyroBias() - bg.cast<float>()).norm() > 0.01)
@@ -232,272 +162,157 @@ namespace ORB_SLAM3
             else
                 pKFi->SetNewBias(b);
         }
+    }
+
+    Digest InertialAlignmentTask::Input() const
+    {
+        Digest digest;
+        for(std::size_t i = 0; i < mProblem.poses.size(); i++)
+            digest.Add('P', mvpPoseKF[i]->mnId, mProblem.poses[i].Rwb, mProblem.poses[i].twb, mProblem.velocity[i]);
+        for(std::size_t k = 0; k < mProblem.constraints(); k++)
+        {
+            const IMU::Preintegrated* pInt = mProblem.preintegration[k];
+            digest.Add('E', mvpPoseKF[mProblem.from[k]]->mnId, mvpPoseKF[mProblem.to[k]]->mnId, pInt->dT, pInt->dR,
+                       pInt->dV, pInt->dP);
+        }
+        return digest;
+    }
+
+    bool InertialAlignmentTask::Holds() const
+    {
+        Vector6d vb;
+        vb << mProblem.gyroBias, mProblem.accBias;
+        const IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
+        for(size_t i = 0; i < mvpKFs.size(); i++)
+        {
+            if(mvnPose[i] < 0)
+                continue;
+            const Eigen::Vector3f v = mProblem.velocity[mvnPose[i]].cast<float>();
+            const Eigen::Vector3f vMap = mvpKFs[i]->GetVelocity();
+            if(std::memcmp(v.data(), vMap.data(), 3 * sizeof(float)) != 0)
+                return false;
+            const IMU::Bias bMap = mvpKFs[i]->GetImuBias();
+            if(bMap.bax != b.bax || bMap.bay != b.bay || bMap.baz != b.baz || bMap.bwx != b.bwx || bMap.bwy != b.bwy ||
+               bMap.bwz != b.bwz)
+                return false;
+        }
+        return true;
+    }
+
+    // What each of the three holds and how it is solved.
+    void InertialAlignmentTask::Build(Map* pMap, const Eigen::Matrix3d &Rwg, const double scale, const bool bMono,
+                                      const bool bFixedVel, const float priorG, const float priorA)
+    {
+        Read(pMap, true);
+        optim::InertialAlignmentProblem &problem = mProblem;
+        optim::SolveOptions &options = mOptions;
+        problem.Rwg = Rwg;
+        problem.scale = scale;
+        problem.velocitiesFixed = bFixedVel;
+        problem.biasesFixed = bFixedVel;
+        problem.gravityFixed = false;
+        problem.scaleFixed = !bMono; // Fixed for stereo case
+        problem.biasPriors = true;
+        problem.accPriorInformation = priorA;
+        problem.gyroPriorInformation = priorG;
+
+        options.nIterations = 200;
+        if(priorG != 0.f)
+        {
+            options.damping = optim::SolveOptions::kValue;
+            options.dampingValue = 1e3;
+        }
+    }
+
+    void InertialAlignmentTask::Build(Map* pMap, const float priorG, const float priorA)
+    {
+        Read(pMap, true);
+        optim::InertialAlignmentProblem &problem = mProblem;
+        optim::SolveOptions &options = mOptions;
+        problem.Rwg = Eigen::Matrix3d::Identity();
+        problem.scale = 1.0;
+        problem.gravityFixed = true;
+        problem.scaleFixed = true; // Fixed since scale is obtained from already well initialized map
+        problem.biasPriors = true;
+        problem.accPriorInformation = priorA;
+        problem.gyroPriorInformation = priorG;
+
+        options.nIterations = 200; // Check number of iterations
+        options.damping = optim::SolveOptions::kValue;
+        options.dampingValue = 1e3;
+    }
+
+    void InertialAlignmentTask::Build(Map* pMap, const Eigen::Matrix3d &Rwg, const double scale)
+    {
+        Read(pMap, false);
+        optim::InertialAlignmentProblem &problem = mProblem;
+        optim::SolveOptions &options = mOptions;
+        problem.Rwg = Rwg;
+        problem.scale = scale;
+        // all variables are fixed but gravity and scale
+        problem.velocitiesFixed = true;
+        problem.biasesFixed = true;
+        problem.huber = 1.f;
+
+        options.nIterations = 10;
+        options.algorithm = optim::SolveOptions::kGaussNewton;
+    }
+
+    void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg,
+                                         Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd &covInertial, bool bFixedVel,
+                                         bool bGauss, float priorG, float priorA)
+    {
+        Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
+#ifdef ORBSLAM3R_OPT_SHADOW
+        shadow::InertialOptimization(pMap, Rwg, scale, bg, ba, bMono, covInertial, bFixedVel, bGauss, priorG, priorA);
+#else
+        InertialAlignmentTask task;
+        task.Build(pMap, Rwg, scale, bMono, bFixedVel, priorG, priorA);
+        const std::unique_ptr<optim::InertialAlignmentSolver> pSolver = optim::MakeInertialAlignmentSolver();
+        task.Solve(*pSolver);
+
+        const optim::InertialAlignmentProblem &found = task.Problem();
+        bg = found.gyroBias;
+        ba = found.accBias;
+        scale = found.scale;
+        Rwg = found.Rwg;
+        task.Apply();
+#endif
     }
 
     void Optimizer::InertialOptimization(Map* pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG,
                                          float priorA)
     {
-        int its = 200; // Check number of iterations
-        long unsigned int maxKFid = pMap->GetMaxKFid();
-        const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+#ifdef ORBSLAM3R_OPT_SHADOW
+        shadow::InertialOptimization(pMap, bg, ba, priorG, priorA);
+#else
+        InertialAlignmentTask task;
+        task.Build(pMap, priorG, priorA);
+        const std::unique_ptr<optim::InertialAlignmentSolver> pSolver = optim::MakeInertialAlignmentSolver();
+        task.Solve(*pSolver);
 
-        // Setup optimizer
-        g2o::SparseOptimizer optimizer;
-
-        auto* solver = orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolverX, orbslam3r::g2o_ext::LinearSolver::kEigen>();
-        solver->setUserLambdaInit(1e3);
-
-        optimizer.setAlgorithm(solver);
-
-        // Set KeyFrame vertices (fixed poses and optimizable velocities)
-        for(size_t i = 0; i < vpKFs.size(); i++)
-        {
-            KeyFrame* pKFi = vpKFs[i];
-            if(pKFi->mnId > maxKFid)
-                continue;
-            VertexPose* VP = new VertexPose(pKFi);
-            VP->setId(pKFi->mnId);
-            VP->setFixed(true);
-            optimizer.addVertex(VP);
-
-            VertexVelocity* VV = new VertexVelocity(pKFi);
-            VV->setId(maxKFid + (pKFi->mnId) + 1);
-            VV->setFixed(false);
-
-            optimizer.addVertex(VV);
-        }
-
-        // Biases
-        VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
-        VG->setId(maxKFid * 2 + 2);
-        VG->setFixed(false);
-        optimizer.addVertex(VG);
-
-        VertexAccBias* VA = new VertexAccBias(vpKFs.front());
-        VA->setId(maxKFid * 2 + 3);
-        VA->setFixed(false);
-
-        optimizer.addVertex(VA);
-        // prior acc bias
-        Eigen::Vector3f bprior;
-        bprior.setZero();
-
-        EdgePriorAcc* epa = new EdgePriorAcc(bprior);
-        epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-        double infoPriorA = priorA;
-        epa->setInformation(infoPriorA * Eigen::Matrix3d::Identity());
-        optimizer.addEdge(epa);
-        EdgePriorGyro* epg = new EdgePriorGyro(bprior);
-        epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-        double infoPriorG = priorG;
-        epg->setInformation(infoPriorG * Eigen::Matrix3d::Identity());
-        optimizer.addEdge(epg);
-
-        // Gravity and scale
-        VertexGDir* VGDir = new VertexGDir(Eigen::Matrix3d::Identity());
-        VGDir->setId(maxKFid * 2 + 4);
-        VGDir->setFixed(true);
-        optimizer.addVertex(VGDir);
-        VertexScale* VS = new VertexScale(1.0);
-        VS->setId(maxKFid * 2 + 5);
-        VS->setFixed(true); // Fixed since scale is obtained from already well initialized map
-        optimizer.addVertex(VS);
-
-        // Graph edges
-        // IMU links with gravity and scale
-        std::vector<EdgeInertialGS*> vpei;
-        vpei.reserve(vpKFs.size());
-        std::vector<std::pair<KeyFrame*, KeyFrame*>> vppUsedKF;
-        vppUsedKF.reserve(vpKFs.size());
-
-        for(size_t i = 0; i < vpKFs.size(); i++)
-        {
-            KeyFrame* pKFi = vpKFs[i];
-
-            if(pKFi->mPrevKF && pKFi->mnId <= maxKFid)
-            {
-                if(pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
-                    continue;
-
-                pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-                g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VV1 = optimizer.vertex(maxKFid + (pKFi->mPrevKF->mnId) + 1);
-                g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-                g2o::HyperGraph::Vertex* VV2 = optimizer.vertex(maxKFid + (pKFi->mnId) + 1);
-                g2o::HyperGraph::Vertex* VG = optimizer.vertex(maxKFid * 2 + 2);
-                g2o::HyperGraph::Vertex* VA = optimizer.vertex(maxKFid * 2 + 3);
-                g2o::HyperGraph::Vertex* VGDir = optimizer.vertex(maxKFid * 2 + 4);
-                g2o::HyperGraph::Vertex* VS = optimizer.vertex(maxKFid * 2 + 5);
-                if(!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
-                {
-                    std::cout << "Error" << VP1 << ", " << VV1 << ", " << VG << ", " << VA << ", " << VP2 << ", " << VV2
-                              << ", " << VGDir << ", " << VS << std::endl;
-
-                    continue;
-                }
-                EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-                ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-                ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-                ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-                ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-                ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-                ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-                ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir));
-                ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS));
-
-                vpei.push_back(ei);
-
-                vppUsedKF.push_back(std::make_pair(pKFi->mPrevKF, pKFi));
-                optimizer.addEdge(ei);
-            }
-        }
-
-        // Compute error for different scales
-        optimizer.setVerbose(false);
-        optimizer.initializeOptimization();
-        optimizer.optimize(its);
-
-        // Recover optimized data
-        // Biases
-        VG = static_cast<VertexGyroBias*>(optimizer.vertex(maxKFid * 2 + 2));
-        VA = static_cast<VertexAccBias*>(optimizer.vertex(maxKFid * 2 + 3));
-        Vector6d vb;
-        vb << VG->estimate(), VA->estimate();
-        bg << VG->estimate();
-        ba << VA->estimate();
-
-        IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
-
-        //Keyframes velocities and biases
-        const int N = vpKFs.size();
-        for(size_t i = 0; i < N; i++)
-        {
-            KeyFrame* pKFi = vpKFs[i];
-            if(pKFi->mnId > maxKFid)
-                continue;
-
-            VertexVelocity* VV = static_cast<VertexVelocity*>(optimizer.vertex(maxKFid + (pKFi->mnId) + 1));
-            Eigen::Vector3d Vw = VV->estimate();
-            pKFi->SetVelocity(Vw.cast<float>());
-
-            if((pKFi->GetGyroBias() - bg.cast<float>()).norm() > 0.01)
-            {
-                pKFi->SetNewBias(b);
-                if(pKFi->mpImuPreintegrated)
-                    pKFi->mpImuPreintegrated->Reintegrate();
-            }
-            else
-                pKFi->SetNewBias(b);
-        }
+        const optim::InertialAlignmentProblem &found = task.Problem();
+        bg = found.gyroBias;
+        ba = found.accBias;
+        task.Apply();
+#endif
     }
 
     void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale)
     {
-        int its = 10;
-        long unsigned int maxKFid = pMap->GetMaxKFid();
-        const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+#ifdef ORBSLAM3R_OPT_SHADOW
+        shadow::InertialOptimization(pMap, Rwg, scale);
+#else
+        InertialAlignmentTask task;
+        task.Build(pMap, Rwg, scale);
+        const std::unique_ptr<optim::InertialAlignmentSolver> pSolver = optim::MakeInertialAlignmentSolver();
+        task.Solve(*pSolver);
 
-        // Setup optimizer
-        g2o::SparseOptimizer optimizer;
-
-        auto* solver =
-            orbslam3r::g2o_ext::MakeGaussNewton<g2o::BlockSolverX, orbslam3r::g2o_ext::LinearSolver::kEigen>();
-        optimizer.setAlgorithm(solver);
-
-        // Set KeyFrame vertices (all variables are fixed)
-        for(size_t i = 0; i < vpKFs.size(); i++)
-        {
-            KeyFrame* pKFi = vpKFs[i];
-            if(pKFi->mnId > maxKFid)
-                continue;
-            VertexPose* VP = new VertexPose(pKFi);
-            VP->setId(pKFi->mnId);
-            VP->setFixed(true);
-            optimizer.addVertex(VP);
-
-            VertexVelocity* VV = new VertexVelocity(pKFi);
-            VV->setId(maxKFid + 1 + (pKFi->mnId));
-            VV->setFixed(true);
-            optimizer.addVertex(VV);
-
-            // Vertex of fixed biases
-            VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
-            VG->setId(2 * (maxKFid + 1) + (pKFi->mnId));
-            VG->setFixed(true);
-            optimizer.addVertex(VG);
-            VertexAccBias* VA = new VertexAccBias(vpKFs.front());
-            VA->setId(3 * (maxKFid + 1) + (pKFi->mnId));
-            VA->setFixed(true);
-            optimizer.addVertex(VA);
-        }
-
-        // Gravity and scale
-        VertexGDir* VGDir = new VertexGDir(Rwg);
-        VGDir->setId(4 * (maxKFid + 1));
-        VGDir->setFixed(false);
-        optimizer.addVertex(VGDir);
-        VertexScale* VS = new VertexScale(scale);
-        VS->setId(4 * (maxKFid + 1) + 1);
-        VS->setFixed(false);
-        optimizer.addVertex(VS);
-
-        // Graph edges
-        int count_edges = 0;
-        for(size_t i = 0; i < vpKFs.size(); i++)
-        {
-            KeyFrame* pKFi = vpKFs[i];
-
-            if(pKFi->mPrevKF && pKFi->mnId <= maxKFid)
-            {
-                if(pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
-                    continue;
-
-                g2o::HyperGraph::Vertex* VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VV1 = optimizer.vertex((maxKFid + 1) + pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VP2 = optimizer.vertex(pKFi->mnId);
-                g2o::HyperGraph::Vertex* VV2 = optimizer.vertex((maxKFid + 1) + pKFi->mnId);
-                g2o::HyperGraph::Vertex* VG = optimizer.vertex(2 * (maxKFid + 1) + pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VA = optimizer.vertex(3 * (maxKFid + 1) + pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex* VGDir = optimizer.vertex(4 * (maxKFid + 1));
-                g2o::HyperGraph::Vertex* VS = optimizer.vertex(4 * (maxKFid + 1) + 1);
-                if(!VP1 || !VV1 || !VG || !VA || !VP2 || !VV2 || !VGDir || !VS)
-                {
-                    Verbose::PrintMess("Error" + std::to_string(VP1->id()) + ", " + std::to_string(VV1->id()) + ", " +
-                                           std::to_string(VG->id()) + ", " + std::to_string(VA->id()) + ", " +
-                                           std::to_string(VP2->id()) + ", " + std::to_string(VV2->id()) + ", " +
-                                           std::to_string(VGDir->id()) + ", " + std::to_string(VS->id()),
-                                       Verbose::VERBOSITY_NORMAL);
-
-                    continue;
-                }
-                count_edges++;
-                EdgeInertialGS* ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
-                ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP1));
-                ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV1));
-                ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VG));
-                ei->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VA));
-                ei->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VP2));
-                ei->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VV2));
-                ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VGDir));
-                ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex*>(VS));
-                g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                ei->setRobustKernel(rk);
-                rk->setDelta(1.f);
-                optimizer.addEdge(ei);
-            }
-        }
-
-        // Compute error for different scales
-        optimizer.setVerbose(false);
-        optimizer.initializeOptimization();
-        optimizer.computeActiveErrors();
-        float err = optimizer.activeRobustChi2();
-        optimizer.optimize(its);
-        optimizer.computeActiveErrors();
-        float err_end = optimizer.activeRobustChi2();
         // Recover optimized data
-        scale = VS->estimate();
-        Rwg = VGDir->estimate().Rwg;
+        const optim::InertialAlignmentProblem &found = task.Problem();
+        scale = found.scale;
+        Rwg = found.Rwg;
+#endif
     }
 
 } // namespace ORB_SLAM3

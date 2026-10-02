@@ -73,6 +73,12 @@ namespace ORB_SLAM3
                                         const KeyFrameAndPose &NonCorrectedSim3, const KeyFrameAndPose &CorrectedSim3,
                                         const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections);
 
+        void InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg,
+                                  Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd &covInertial, bool bFixedVel,
+                                  bool bGauss, float priorG, float priorA);
+        void InertialOptimization(Map* pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG, float priorA);
+        void InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale);
+
         // One line per task at exit: calls, and calls that differed. Moved
         // counts a call that could not be compared: a global adjustment runs
         // while the other threads go on changing the map, and when the two
