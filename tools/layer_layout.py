@@ -52,10 +52,10 @@ LAYERS = {
     "loop_closing": ["LoopClosing", "Sim3Solver"],
     # Optimizer is the header; its functions are in one source per task.
     "optim": ["Rig", "SolveOptions", "PoseProblem", "PoseSolver", "BaProblem", "BundleAdjuster", "Sim3Problem",
-              "Sim3Solver"],
-    "optim_g2o": ["OptimizableTypes", "G2oPoseSolver", "G2oBundleAdjuster", "G2oSim3Solver"],
+              "Sim3Solver", "Sim3GraphProblem", "Sim3GraphSolver"],
+    "optim_g2o": ["OptimizableTypes", "G2oPoseSolver", "G2oBundleAdjuster", "G2oSim3Solver", "G2oSim3GraphSolver"],
     "optimization": ["Optimizer", "G2oTypes", "KeyFrameAndPose", "PoseTask", "LocalBaTask", "WeldingBaTask", "GlobalBaTask", "Digest",
-                     "Sim3Task", "Shadow", "ShadowGlobalBundleAdjustment", "ShadowSim3Optimization",
+                     "Sim3Task", "EssentialGraphTask", "ShadowEssentialGraph", "Shadow", "ShadowGlobalBundleAdjustment", "ShadowSim3Optimization",
                      "ShadowPoseOptimization", "ShadowLocalBundleAdjustment",
                      "PoseOptimization", "InertialPoseOptimization", "LocalBundleAdjustment",
                      "GlobalBundleAdjustment", "InertialBundleAdjustment", "InertialInitialization",

@@ -30,6 +30,10 @@
 #include <Eigen/Core>
 #include <g2o/types/sim3/sim3.h>
 
+#include "optimization/KeyFrameAndPose.hpp"
+
+#include <map>
+#include <set>
 #include <vector>
 
 namespace ORB_SLAM3
@@ -55,6 +59,14 @@ namespace ORB_SLAM3
         int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
                          const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
                          const bool bAllPoints);
+
+        void OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+                                    const KeyFrameAndPose &NonCorrectedSim3, const KeyFrameAndPose &CorrectedSim3,
+                                    const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections,
+                                    const bool &bFixScale);
+        void OptimizeEssentialGraph(KeyFrame* pCurKF, std::vector<KeyFrame*> &vpFixedKFs,
+                                    std::vector<KeyFrame*> &vpFixedCorrectedKFs, std::vector<KeyFrame*> &vpNonFixedKFs,
+                                    std::vector<MapPoint*> &vpNonCorrectedMPs);
 
         // One line per task at exit: calls, and calls that differed. Moved
         // counts a call that could not be compared: a global adjustment runs

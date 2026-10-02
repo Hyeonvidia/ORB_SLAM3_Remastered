@@ -17,6 +17,8 @@
 */
 
 #include "optimization/Optimizer.hpp"
+#include "optimization/EssentialGraphTask.hpp"
+#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
 
 #include <complex>
@@ -42,6 +44,8 @@
 #include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
+#include <cstring>
+#include <memory>
 #include <cmath>
 #include <iostream>
 #include <list>
@@ -56,43 +60,119 @@
 
 namespace ORB_SLAM3
 {
-    void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
-                                           const KeyFrameAndPose &NonCorrectedSim3,
-                                           const KeyFrameAndPose &CorrectedSim3,
-                                           const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections,
-                                           const bool &bFixScale)
+    namespace
     {
-        // Setup optimizer
-        g2o::SparseOptimizer optimizer;
-        optimizer.setVerbose(false);
-        auto* solver =
-            orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolver_7_3, orbslam3r::g2o_ext::LinearSolver::kEigen>();
+        // Member by member: the constructor from the three would normalise a
+        // rotation that already is.
+        g2o::Sim3 MakeSim3(const Eigen::Quaterniond &R, const Eigen::Vector3d &t, double s)
+        {
+            g2o::Sim3 S;
+            S.rotation() = R;
+            S.translation() = t;
+            S.scale() = s;
+            return S;
+        }
 
-        solver->setUserLambdaInit(1e-16);
-        optimizer.setAlgorithm(solver);
+        // The poses of an essential graph as they are gathered, and then laid
+        // out in the order of the keyframes' ids -- the order v1.0's graph had
+        // them in, the id of a vertex being the keyframe's. A keyframe given
+        // twice is the one given first, as it was there.
+        struct GraphPoses
+        {
+            struct Pose
+            {
+                KeyFrame* pKF;
+                g2o::Sim3 Siw;
+                bool bFixed;
+                bool bFixScale;
+                EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+            };
+            std::vector<Pose, Eigen::aligned_allocator<Pose>> vPoses;
 
-        const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
-        const std::vector<MapPoint*> vpMPs = pMap->GetAllMapPoints();
+            void Add(KeyFrame* pKF, const g2o::Sim3 &Siw, bool bFixed, bool bFixScale)
+            {
+                vPoses.push_back({pKF, Siw, bFixed, bFixScale});
+            }
+
+            void LayOut(optim::Sim3GraphProblem &problem, std::vector<KeyFrame*> &vpPoseKF,
+                        std::vector<int> &vnPoseOfId)
+            {
+                std::stable_sort(vPoses.begin(), vPoses.end(),
+                                 [](const Pose &a, const Pose &b) { return a.pKF->mnId < b.pKF->mnId; });
+                for(const Pose &pose : vPoses)
+                {
+                    if(vnPoseOfId[pose.pKF->mnId] != -1)
+                        continue;
+                    vnPoseOfId[pose.pKF->mnId] = problem.addPose(pose.Siw.rotation(), pose.Siw.translation(),
+                                                                 pose.Siw.scale(), pose.bFixed, pose.bFixScale);
+                    vpPoseKF.push_back(pose.pKF);
+                }
+            }
+        };
+
+        // A constraint between two keyframes by id; none if either has no
+        // pose in the problem, or they are the same keyframe -- v1.0's graph
+        // refused those edges.
+        void Constrain(optim::Sim3GraphProblem &problem, const std::vector<int> &vnPoseOfId, long unsigned int nIDi,
+                       long unsigned int nIDj, const g2o::Sim3 &Sji)
+        {
+            if(nIDi >= vnPoseOfId.size() || nIDj >= vnPoseOfId.size())
+                return;
+            const int i = vnPoseOfId[nIDi];
+            const int j = vnPoseOfId[nIDj];
+            if(i < 0 || j < 0 || i == j)
+                return;
+            problem.addConstraint(i, j, Sji.rotation(), Sji.translation(), Sji.scale());
+        }
+
+        Digest GraphDigest(const optim::Sim3GraphProblem &problem, const std::vector<KeyFrame*> &vpPoseKF)
+        {
+            Digest digest;
+            for(std::size_t i = 0; i < problem.poses(); i++)
+                digest.Add('V', vpPoseKF[i]->mnId, problem.R[i].x(), problem.R[i].y(), problem.R[i].z(),
+                           problem.R[i].w(), problem.t[i].x(), problem.t[i].y(), problem.t[i].z(), problem.s[i],
+                           problem.fixed[i] != 0, problem.fixScale[i] != 0);
+            for(std::size_t k = 0; k < problem.constraints(); k++)
+                digest.Add('E', k, vpPoseKF[problem.from[k]]->mnId, vpPoseKF[problem.to[k]]->mnId, problem.Rji[k].x(),
+                           problem.Rji[k].y(), problem.Rji[k].z(), problem.Rji[k].w(), problem.tji[k].x(),
+                           problem.tji[k].y(), problem.tji[k].z(), problem.sji[k]);
+            return digest;
+        }
+
+        void SolveGraph(optim::Sim3GraphProblem &problem, optim::Sim3GraphSolver &solver)
+        {
+            optim::SolveOptions options;
+            options.nIterations = 20;
+            options.damping = optim::SolveOptions::kValue;
+            options.dampingValue = 1e-16;
+            solver.Solve(problem, options);
+        }
+    } // namespace
+
+    void EssentialGraphTask::Build(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+                                   const KeyFrameAndPose &NonCorrectedSim3, const KeyFrameAndPose &CorrectedSim3,
+                                   const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections,
+                                   const bool bFixScale)
+    {
+        mvpKFs = pMap->GetAllKeyFrames();
+        mvpMPs = pMap->GetAllMapPoints();
+        const std::vector<KeyFrame*> &vpKFs = mvpKFs;
 
         const unsigned int nMaxKFid = pMap->GetMaxKFid();
 
-        std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> vScw(nMaxKFid + 1);
-        std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> vCorrectedSwc(nMaxKFid + 1);
-        std::vector<g2o::VertexSim3Expmap*> vpVertices(nMaxKFid + 1);
-
-        std::vector<Eigen::Vector3d> vZvectors(nMaxKFid + 1); // For debugging
-        Eigen::Vector3d z_vec;
-        z_vec << 0.0, 0.0, 1.0;
+        mvScw.resize(nMaxKFid + 1);
+        mvnPoseOfId.assign(nMaxKFid + 1, -1);
+        Sim3Vector &vScw = mvScw;
 
         const int minFeat = 100;
 
         // Set KeyFrame vertices
+        GraphPoses poses;
         for(size_t i = 0, iend = vpKFs.size(); i < iend; i++)
         {
             KeyFrame* pKF = vpKFs[i];
             if(pKF->isBad())
                 continue;
-            g2o::VertexSim3Expmap* VSim3 = new g2o::VertexSim3Expmap();
 
             const int nIDi = pKF->mnId;
 
@@ -101,35 +181,21 @@ namespace ORB_SLAM3
             if(it != CorrectedSim3.end())
             {
                 vScw[nIDi] = it->second;
-                VSim3->setEstimate(it->second);
             }
             else
             {
                 Sophus::SE3d Tcw = pKF->GetPose().cast<double>();
                 g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
                 vScw[nIDi] = Siw;
-                VSim3->setEstimate(Siw);
             }
 
-            if(pKF->mnId == pMap->GetInitKFid())
-                VSim3->setFixed(true);
-
-            VSim3->setId(nIDi);
-            VSim3->setMarginalized(false);
-            VSim3->_fix_scale = bFixScale;
-
-            optimizer.addVertex(VSim3);
-            vZvectors[nIDi] = vScw[nIDi].rotation() * z_vec; // For debugging
-
-            vpVertices[nIDi] = VSim3;
+            poses.Add(pKF, vScw[nIDi], pKF->mnId == pMap->GetInitKFid(), bFixScale);
         }
+        poses.LayOut(mProblem, mvpPoseKF, mvnPoseOfId);
 
         std::set<std::pair<long unsigned int, long unsigned int>> sInsertedEdges;
 
-        const Eigen::Matrix<double, 7, 7> matLambda = Eigen::Matrix<double, 7, 7>::Identity();
-
         // Set Loop edges
-        int count_loop = 0;
         for(std::map<KeyFrame*, std::set<KeyFrame*>>::const_iterator mit = LoopConnections.begin(),
                                                                      mend = LoopConnections.end();
             mit != mend; mit++)
@@ -150,15 +216,7 @@ namespace ORB_SLAM3
                 const g2o::Sim3 Sjw = vScw[nIDj];
                 const g2o::Sim3 Sji = Sjw * Swi;
 
-                g2o::EdgeSim3* e = new g2o::EdgeSim3();
-                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
-                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                e->setMeasurement(Sji);
-
-                e->information() = matLambda;
-
-                optimizer.addEdge(e);
-                count_loop++;
+                Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sji);
                 sInsertedEdges.insert(std::make_pair(std::min(nIDi, nIDj), std::max(nIDi, nIDj)));
             }
         }
@@ -197,12 +255,7 @@ namespace ORB_SLAM3
 
                 g2o::Sim3 Sji = Sjw * Swi;
 
-                g2o::EdgeSim3* e = new g2o::EdgeSim3();
-                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
-                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                e->setMeasurement(Sji);
-                e->information() = matLambda;
-                optimizer.addEdge(e);
+                Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sji);
             }
 
             // Loop edges
@@ -223,12 +276,7 @@ namespace ORB_SLAM3
                         Slw = vScw[pLKF->mnId];
 
                     g2o::Sim3 Sli = Slw * Swi;
-                    g2o::EdgeSim3* el = new g2o::EdgeSim3();
-                    el->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pLKF->mnId)));
-                    el->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                    el->setMeasurement(Sli);
-                    el->information() = matLambda;
-                    optimizer.addEdge(el);
+                    Constrain(mProblem, mvnPoseOfId, nIDi, pLKF->mnId, Sli);
                 }
             }
 
@@ -256,12 +304,7 @@ namespace ORB_SLAM3
 
                         g2o::Sim3 Sni = Snw * Swi;
 
-                        g2o::EdgeSim3* en = new g2o::EdgeSim3();
-                        en->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFn->mnId)));
-                        en->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                        en->setMeasurement(Sni);
-                        en->information() = matLambda;
-                        optimizer.addEdge(en);
+                        Constrain(mProblem, mvnPoseOfId, nIDi, pKFn->mnId, Sni);
                     }
                 }
             }
@@ -277,20 +320,33 @@ namespace ORB_SLAM3
                     Spw = vScw[pKF->mPrevKF->mnId];
 
                 g2o::Sim3 Spi = Spw * Swi;
-                g2o::EdgeSim3* ep = new g2o::EdgeSim3();
-                ep->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKF->mPrevKF->mnId)));
-                ep->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                ep->setMeasurement(Spi);
-                ep->information() = matLambda;
-                optimizer.addEdge(ep);
+                Constrain(mProblem, mvnPoseOfId, nIDi, pKF->mPrevKF->mnId, Spi);
             }
         }
+    }
 
-        optimizer.initializeOptimization();
-        optimizer.computeActiveErrors();
-        optimizer.optimize(20);
-        optimizer.computeActiveErrors();
-        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
+    void EssentialGraphTask::Solve(optim::Sim3GraphSolver &solver)
+    {
+        SolveGraph(mProblem, solver);
+    }
+
+    Digest EssentialGraphTask::Input() const
+    {
+        return GraphDigest(mProblem, mvpPoseKF);
+    }
+
+    void EssentialGraphTask::Write(KeyFrame* pCurKF, Written* pPreview) const
+    {
+        const std::vector<KeyFrame*> &vpKFs = mvpKFs;
+        const std::vector<MapPoint*> &vpMPs = mvpMPs;
+        const Sim3Vector &vScw = mvScw;
+        Sim3Vector vCorrectedSwc(vScw.size());
+        if(pPreview)
+        {
+            pPreview->vTiw.resize(vpKFs.size());
+            pPreview->vXw.resize(vpMPs.size());
+            pPreview->vbPoint.assign(vpMPs.size(), 0);
+        }
 
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
         for(size_t i = 0; i < vpKFs.size(); i++)
@@ -298,14 +354,19 @@ namespace ORB_SLAM3
             KeyFrame* pKFi = vpKFs[i];
 
             const int nIDi = pKFi->mnId;
+            const int n = mvnPoseOfId[nIDi];
+            if(n < 0)
+                continue;
 
-            g2o::VertexSim3Expmap* VSim3 = static_cast<g2o::VertexSim3Expmap*>(optimizer.vertex(nIDi));
-            g2o::Sim3 CorrectedSiw = VSim3->estimate();
+            g2o::Sim3 CorrectedSiw = MakeSim3(mProblem.R[n], mProblem.t[n], mProblem.s[n]);
             vCorrectedSwc[nIDi] = CorrectedSiw.inverse();
             double s = CorrectedSiw.scale();
 
             Sophus::SE3f Tiw(CorrectedSiw.rotation().cast<float>(), CorrectedSiw.translation().cast<float>() / s);
-            pKFi->SetPose(Tiw);
+            if(pPreview)
+                pPreview->vTiw[i] = Tiw;
+            else
+                pKFi->SetPose(Tiw);
         }
 
         // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose
@@ -332,59 +393,96 @@ namespace ORB_SLAM3
 
             Eigen::Matrix<double, 3, 1> eigP3Dw = pMP->GetWorldPos().cast<double>();
             Eigen::Matrix<double, 3, 1> eigCorrectedP3Dw = correctedSwr.map(Srw.map(eigP3Dw));
+            if(pPreview)
+            {
+                pPreview->vXw[i] = eigCorrectedP3Dw.cast<float>();
+                pPreview->vbPoint[i] = 1;
+                continue;
+            }
             pMP->SetWorldPos(eigCorrectedP3Dw.cast<float>());
 
             pMP->UpdateNormalAndDepth();
         }
+    }
+
+    void EssentialGraphTask::Apply(Map* pMap, KeyFrame* pCurKF) const
+    {
+        std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
+
+        Write(pCurKF, nullptr);
 
         // TODO Check this changeindex
         pMap->IncreaseChangeIndex();
     }
 
-    void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, std::vector<KeyFrame*> &vpFixedKFs,
-                                           std::vector<KeyFrame*> &vpFixedCorrectedKFs,
-                                           std::vector<KeyFrame*> &vpNonFixedKFs,
-                                           std::vector<MapPoint*> &vpNonCorrectedMPs)
+    EssentialGraphTask::Written EssentialGraphTask::Preview(KeyFrame* pCurKF) const
     {
-        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpFixedKFs.size()) +
-                               " KFs fixed in the merged map",
-                           Verbose::VERBOSITY_DEBUG);
-        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpFixedCorrectedKFs.size()) +
-                               " KFs fixed in the old map",
-                           Verbose::VERBOSITY_DEBUG);
-        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpNonFixedKFs.size()) +
-                               " KFs non-fixed in the merged map",
-                           Verbose::VERBOSITY_DEBUG);
-        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpNonCorrectedMPs.size()) +
-                               " MPs non-corrected in the merged map",
-                           Verbose::VERBOSITY_DEBUG);
+        Written written;
+        Write(pCurKF, &written);
+        return written;
+    }
 
-        g2o::SparseOptimizer optimizer;
-        optimizer.setVerbose(false);
-        auto* solver =
-            orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolver_7_3, orbslam3r::g2o_ext::LinearSolver::kEigen>();
+    bool EssentialGraphTask::Matches(const Written &written) const
+    {
+        for(size_t i = 0; i < mvpKFs.size(); i++)
+        {
+            if(mvnPoseOfId[mvpKFs[i]->mnId] < 0)
+                continue;
+            const Sophus::SE3f Tmap = mvpKFs[i]->GetPose();
+            if(std::memcmp(written.vTiw[i].data(), Tmap.data(), 7 * sizeof(float)) != 0)
+                return false;
+        }
+        for(size_t i = 0; i < mvpMPs.size(); i++)
+        {
+            if(!written.vbPoint[i])
+                continue;
+            const Eigen::Vector3f Xmap = mvpMPs[i]->GetWorldPos();
+            if(std::memcmp(written.vXw[i].data(), Xmap.data(), 3 * sizeof(float)) != 0)
+                return false;
+        }
+        return true;
+    }
 
-        solver->setUserLambdaInit(1e-16);
-        optimizer.setAlgorithm(solver);
+    void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+                                           const KeyFrameAndPose &NonCorrectedSim3,
+                                           const KeyFrameAndPose &CorrectedSim3,
+                                           const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections,
+                                           const bool &bFixScale)
+    {
+#ifdef ORBSLAM3R_OPT_SHADOW
+        shadow::OptimizeEssentialGraph(pMap, pLoopKF, pCurKF, NonCorrectedSim3, CorrectedSim3, LoopConnections,
+                                       bFixScale);
+#else
+        EssentialGraphTask task;
+        task.Build(pMap, pLoopKF, pCurKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, bFixScale);
+        const std::unique_ptr<optim::Sim3GraphSolver> pSolver = optim::MakeSim3GraphSolver();
+        task.Solve(*pSolver);
+        task.Apply(pMap, pCurKF);
+#endif
+    }
 
+    void MergeGraphTask::Build(KeyFrame* pCurKF, const std::vector<KeyFrame*> &vpFixedKFs,
+                               const std::vector<KeyFrame*> &vpFixedCorrectedKFs,
+                               const std::vector<KeyFrame*> &vpNonFixedKFs)
+    {
         Map* pMap = pCurKF->GetMap();
         const unsigned int nMaxKFid = pMap->GetMaxKFid();
 
-        std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> vScw(nMaxKFid + 1);
-        std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> vCorrectedSwc(nMaxKFid + 1);
-        std::vector<g2o::VertexSim3Expmap*> vpVertices(nMaxKFid + 1);
+        Sim3Vector vScw(nMaxKFid + 1);
+        Sim3Vector vCorrectedSwc(nMaxKFid + 1);
+        mvnPoseOfId.assign(nMaxKFid + 1, -1);
 
         std::vector<bool> vpGoodPose(nMaxKFid + 1);
-        std::vector<bool> vpBadPose(nMaxKFid + 1);
+        mvbBadPose.assign(nMaxKFid + 1, false);
+        std::vector<bool> &vpBadPose = mvbBadPose;
 
         const int minFeat = 100;
 
+        GraphPoses poses;
         for(KeyFrame* pKFi : vpFixedKFs)
         {
             if(pKFi->isBad())
                 continue;
-
-            g2o::VertexSim3Expmap* VSim3 = new g2o::VertexSim3Expmap();
 
             const int nIDi = pKFi->mnId;
 
@@ -392,22 +490,11 @@ namespace ORB_SLAM3
             g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
             vCorrectedSwc[nIDi] = Siw.inverse();
-            VSim3->setEstimate(Siw);
-
-            VSim3->setFixed(true);
-
-            VSim3->setId(nIDi);
-            VSim3->setMarginalized(false);
-            VSim3->_fix_scale = true;
-
-            optimizer.addVertex(VSim3);
-
-            vpVertices[nIDi] = VSim3;
+            poses.Add(pKFi, Siw, true, true);
 
             vpGoodPose[nIDi] = true;
             vpBadPose[nIDi] = false;
         }
-        Verbose::PrintMess("Opt_Essential: vpFixedKFs loaded", Verbose::VERBOSITY_DEBUG);
 
         std::set<unsigned long> sIdKF;
         for(KeyFrame* pKFi : vpFixedCorrectedKFs)
@@ -415,27 +502,16 @@ namespace ORB_SLAM3
             if(pKFi->isBad())
                 continue;
 
-            g2o::VertexSim3Expmap* VSim3 = new g2o::VertexSim3Expmap();
-
             const int nIDi = pKFi->mnId;
 
             Sophus::SE3d Tcw = pKFi->GetPose().cast<double>();
             g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
             vCorrectedSwc[nIDi] = Siw.inverse();
-            VSim3->setEstimate(Siw);
+            poses.Add(pKFi, Siw, true, false);
 
             Sophus::SE3d Tcw_bef = pKFi->mTcwBefMerge.cast<double>();
             vScw[nIDi] = g2o::Sim3(Tcw_bef.unit_quaternion(), Tcw_bef.translation(), 1.0);
-
-            VSim3->setFixed(true);
-
-            VSim3->setId(nIDi);
-            VSim3->setMarginalized(false);
-
-            optimizer.addVertex(VSim3);
-
-            vpVertices[nIDi] = VSim3;
 
             sIdKF.insert(nIDi);
 
@@ -453,28 +529,18 @@ namespace ORB_SLAM3
             if(sIdKF.count(nIDi)) // It has already added in the corrected merge KFs
                 continue;
 
-            g2o::VertexSim3Expmap* VSim3 = new g2o::VertexSim3Expmap();
-
             Sophus::SE3d Tcw = pKFi->GetPose().cast<double>();
             g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
             vScw[nIDi] = Siw;
-            VSim3->setEstimate(Siw);
-
-            VSim3->setFixed(false);
-
-            VSim3->setId(nIDi);
-            VSim3->setMarginalized(false);
-
-            optimizer.addVertex(VSim3);
-
-            vpVertices[nIDi] = VSim3;
+            poses.Add(pKFi, Siw, false, false);
 
             sIdKF.insert(nIDi);
 
             vpGoodPose[nIDi] = false;
             vpBadPose[nIDi] = true;
         }
+        poses.LayOut(mProblem, mvpPoseKF, mvnPoseOfId);
 
         std::vector<KeyFrame*> vpKFs;
         vpKFs.reserve(vpFixedKFs.size() + vpFixedCorrectedKFs.size() + vpNonFixedKFs.size());
@@ -482,8 +548,6 @@ namespace ORB_SLAM3
         vpKFs.insert(vpKFs.end(), vpFixedCorrectedKFs.begin(), vpFixedCorrectedKFs.end());
         vpKFs.insert(vpKFs.end(), vpNonFixedKFs.begin(), vpNonFixedKFs.end());
         std::set<KeyFrame*> spKFs(vpKFs.begin(), vpKFs.end());
-
-        const Eigen::Matrix<double, 7, 7> matLambda = Eigen::Matrix<double, 7, 7>::Identity();
 
         for(KeyFrame* pKFi : vpKFs)
         {
@@ -523,13 +587,7 @@ namespace ORB_SLAM3
                 {
                     g2o::Sim3 Sji = Sjw * Swi;
 
-                    g2o::EdgeSim3* e = new g2o::EdgeSim3();
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                    e->setMeasurement(Sji);
-
-                    e->information() = matLambda;
-                    optimizer.addEdge(e);
+                    Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sji);
                     num_connections++;
                 }
             }
@@ -559,12 +617,7 @@ namespace ORB_SLAM3
                     if(bHasRelation)
                     {
                         g2o::Sim3 Sli = Slw * Swi;
-                        g2o::EdgeSim3* el = new g2o::EdgeSim3();
-                        el->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pLKF->mnId)));
-                        el->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                        el->setMeasurement(Sli);
-                        el->information() = matLambda;
-                        optimizer.addEdge(el);
+                        Constrain(mProblem, mvnPoseOfId, nIDi, pLKF->mnId, Sli);
                         num_connections++;
                     }
                 }
@@ -598,13 +651,7 @@ namespace ORB_SLAM3
                         {
                             g2o::Sim3 Sni = Snw * Swi;
 
-                            g2o::EdgeSim3* en = new g2o::EdgeSim3();
-                            en->setVertex(1,
-                                          dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFn->mnId)));
-                            en->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
-                            en->setMeasurement(Sni);
-                            en->information() = matLambda;
-                            optimizer.addEdge(en);
+                            Constrain(mProblem, mvnPoseOfId, nIDi, pKFn->mnId, Sni);
                             num_connections++;
                         }
                     }
@@ -617,30 +664,73 @@ namespace ORB_SLAM3
                                    Verbose::VERBOSITY_DEBUG);
             }
         }
+    }
 
-        // Optimize!
-        optimizer.initializeOptimization();
-        optimizer.optimize(20);
+    void MergeGraphTask::Solve(optim::Sim3GraphSolver &solver)
+    {
+        SolveGraph(mProblem, solver);
+    }
+
+    Digest MergeGraphTask::Input() const
+    {
+        return GraphDigest(mProblem, mvpPoseKF);
+    }
+
+    std::vector<Sophus::SE3f> MergeGraphTask::Preview(const std::vector<KeyFrame*> &vpNonFixedKFs) const
+    {
+        std::vector<Sophus::SE3f> vTiw(vpNonFixedKFs.size());
+        for(std::size_t i = 0; i < vpNonFixedKFs.size(); i++)
+        {
+            KeyFrame* pKFi = vpNonFixedKFs[i];
+            if(pKFi->mnId >= mvnPoseOfId.size())
+                continue;
+            const int n = mvnPoseOfId[pKFi->mnId];
+            if(n < 0)
+                continue;
+            g2o::Sim3 CorrectedSiw = MakeSim3(mProblem.R[n], mProblem.t[n], mProblem.s[n]);
+            double s = CorrectedSiw.scale();
+            Sophus::SE3d Tiw(CorrectedSiw.rotation(), CorrectedSiw.translation() / s);
+            vTiw[i] = Tiw.cast<float>();
+        }
+        return vTiw;
+    }
+
+    bool MergeGraphTask::Matches(const std::vector<KeyFrame*> &vpNonFixedKFs,
+                                 const std::vector<Sophus::SE3f> &vTiw) const
+    {
+        for(std::size_t i = 0; i < vpNonFixedKFs.size(); i++)
+        {
+            KeyFrame* pKFi = vpNonFixedKFs[i];
+            if(pKFi->isBad() || pKFi->mnId >= mvnPoseOfId.size() || mvnPoseOfId[pKFi->mnId] < 0)
+                continue;
+            const Sophus::SE3f Tmap = pKFi->GetPose();
+            if(std::memcmp(vTiw[i].data(), Tmap.data(), 7 * sizeof(float)) != 0)
+                return false;
+        }
+        return true;
+    }
+
+    void MergeGraphTask::Apply(KeyFrame* pCurKF, const std::vector<KeyFrame*> &vpNonFixedKFs,
+                               const std::vector<MapPoint*> &vpNonCorrectedMPs) const
+    {
+        Map* pMap = pCurKF->GetMap();
+        const std::vector<bool> &vpBadPose = mvbBadPose;
 
         std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
 
         // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
-        for(KeyFrame* pKFi : vpNonFixedKFs)
+        const std::vector<Sophus::SE3f> vTiw = Preview(vpNonFixedKFs);
+        for(std::size_t i = 0; i < vpNonFixedKFs.size(); i++)
         {
+            KeyFrame* pKFi = vpNonFixedKFs[i];
             if(pKFi->isBad())
                 continue;
-
-            const int nIDi = pKFi->mnId;
-
-            g2o::VertexSim3Expmap* VSim3 = static_cast<g2o::VertexSim3Expmap*>(optimizer.vertex(nIDi));
-            g2o::Sim3 CorrectedSiw = VSim3->estimate();
-            vCorrectedSwc[nIDi] = CorrectedSiw.inverse();
-            double s = CorrectedSiw.scale();
-            Sophus::SE3d Tiw(CorrectedSiw.rotation(), CorrectedSiw.translation() / s);
+            if(pKFi->mnId >= mvnPoseOfId.size() || mvnPoseOfId[pKFi->mnId] < 0)
+                continue;
 
             pKFi->mTcwBefMerge = pKFi->GetPose();
             pKFi->mTwcBefMerge = pKFi->GetPoseInverse();
-            pKFi->SetPose(Tiw.cast<float>());
+            pKFi->SetPose(vTiw[i]);
         }
 
         // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose
@@ -678,6 +768,35 @@ namespace ORB_SLAM3
                 std::cout << "ERROR: MapPoint has a reference KF from another map" << std::endl;
             }
         }
+    }
+
+    void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, std::vector<KeyFrame*> &vpFixedKFs,
+                                           std::vector<KeyFrame*> &vpFixedCorrectedKFs,
+                                           std::vector<KeyFrame*> &vpNonFixedKFs,
+                                           std::vector<MapPoint*> &vpNonCorrectedMPs)
+    {
+        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpFixedKFs.size()) +
+                               " KFs fixed in the merged map",
+                           Verbose::VERBOSITY_DEBUG);
+        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpFixedCorrectedKFs.size()) +
+                               " KFs fixed in the old map",
+                           Verbose::VERBOSITY_DEBUG);
+        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpNonFixedKFs.size()) +
+                               " KFs non-fixed in the merged map",
+                           Verbose::VERBOSITY_DEBUG);
+        Verbose::PrintMess("Opt_Essential: There are " + std::to_string(vpNonCorrectedMPs.size()) +
+                               " MPs non-corrected in the merged map",
+                           Verbose::VERBOSITY_DEBUG);
+
+#ifdef ORBSLAM3R_OPT_SHADOW
+        shadow::OptimizeEssentialGraph(pCurKF, vpFixedKFs, vpFixedCorrectedKFs, vpNonFixedKFs, vpNonCorrectedMPs);
+#else
+        MergeGraphTask task;
+        task.Build(pCurKF, vpFixedKFs, vpFixedCorrectedKFs, vpNonFixedKFs);
+        const std::unique_ptr<optim::Sim3GraphSolver> pSolver = optim::MakeSim3GraphSolver();
+        task.Solve(*pSolver);
+        task.Apply(pCurKF, vpNonFixedKFs, vpNonCorrectedMPs);
+#endif
     }
 
     void Optimizer::OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
