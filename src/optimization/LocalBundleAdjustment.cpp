@@ -18,6 +18,7 @@
 
 #include "optimization/Optimizer.hpp"
 #include "optimization/LocalBaTask.hpp"
+#include "optimization/WeldingBaTask.hpp"
 #include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
 
@@ -411,31 +412,15 @@ namespace ORB_SLAM3
 #endif
     }
 
-    void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF, std::vector<KeyFrame*> vpAdjustKF,
-                                          std::vector<KeyFrame*> vpFixedKF, bool* pbStopFlag)
+    void WeldingBaTask::Build(KeyFrame* pMainKF, const std::vector<KeyFrame*> &vpAdjustKF,
+                              const std::vector<KeyFrame*> &vpFixedKF)
     {
-        bool bShowImages = false;
-
-        std::vector<MapPoint*> vpMPs;
-
-        g2o::SparseOptimizer optimizer;
-
-        auto* solver =
-            orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolver_6_3, orbslam3r::g2o_ext::LinearSolver::kEigen>();
-        optimizer.setAlgorithm(solver);
-
-        optimizer.setVerbose(false);
-
-        if(pbStopFlag)
-            optimizer.setForceStopFlag(pbStopFlag);
-
         long unsigned int maxKFid = 0;
-        std::set<KeyFrame*> spKeyFrameBA;
-
         Map* pCurrentMap = pMainKF->GetMap();
 
+        std::vector<std::pair<KeyFrame*, bool>> vPoses; // and whether the pose is held
+
         // Set fixed KeyFrame vertices
-        int numInsertedPoints = 0;
         for(KeyFrame* pKFi : vpFixedKF)
         {
             if(pKFi->isBad() || pKFi->GetMap() != pCurrentMap)
@@ -445,13 +430,8 @@ namespace ORB_SLAM3
             }
 
             pKFi->mnBALocalForMerge = pMainKF->mnId;
-
-            g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
-            Sophus::SE3<float> Tcw = pKFi->GetPose();
-            vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>()));
-            vSE3->setId(pKFi->mnId);
-            vSE3->setFixed(true);
-            optimizer.addVertex(vSE3);
+            mvpKF.push_back(pKFi);
+            vPoses.push_back(std::make_pair(pKFi, true));
             if(pKFi->mnId > maxKFid)
                 maxKFid = pKFi->mnId;
 
@@ -463,30 +443,22 @@ namespace ORB_SLAM3
 
                         if(pMPi->mnBALocalForMerge != pMainKF->mnId)
                         {
-                            vpMPs.push_back(pMPi);
+                            mvpMarked.push_back(pMPi);
                             pMPi->mnBALocalForMerge = pMainKF->mnId;
-                            numInsertedPoints++;
                         }
             }
-
-            spKeyFrameBA.insert(pKFi);
         }
 
         // Set non fixed Keyframe vertices
-        std::set<KeyFrame*> spAdjustKF(vpAdjustKF.begin(), vpAdjustKF.end());
-        numInsertedPoints = 0;
         for(KeyFrame* pKFi : vpAdjustKF)
         {
             if(pKFi->isBad() || pKFi->GetMap() != pCurrentMap)
                 continue;
 
             pKFi->mnBALocalForMerge = pMainKF->mnId;
-
-            g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
-            Sophus::SE3<float> Tcw = pKFi->GetPose();
-            vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>()));
-            vSE3->setId(pKFi->mnId);
-            optimizer.addVertex(vSE3);
+            mvpKF.push_back(pKFi);
+            mvpAdjustKF.push_back(pKFi);
+            vPoses.push_back(std::make_pair(pKFi, false));
             if(pKFi->mnId > maxKFid)
                 maxKFid = pKFi->mnId;
 
@@ -499,59 +471,64 @@ namespace ORB_SLAM3
                     {
                         if(pMPi->mnBALocalForMerge != pMainKF->mnId)
                         {
-                            vpMPs.push_back(pMPi);
+                            mvpMarked.push_back(pMPi);
                             pMPi->mnBALocalForMerge = pMainKF->mnId;
-                            numInsertedPoints++;
                         }
                     }
                 }
             }
-
-            spKeyFrameBA.insert(pKFi);
         }
 
-        const int nExpectedSize = (vpAdjustKF.size() + vpFixedKF.size()) * vpMPs.size();
+        // The poses in the order of the keyframes' ids, as v1.0's graph had
+        // them. A keyframe given twice is the one given first, as it was there.
+        std::stable_sort(vPoses.begin(), vPoses.end(),
+                         [](const std::pair<KeyFrame*, bool> &a, const std::pair<KeyFrame*, bool> &b)
+                         { return a.first->mnId < b.first->mnId; });
+        std::unordered_map<KeyFrame*, int> mPoseOf;
+        mPoseOf.reserve(vPoses.size());
+        for(const std::pair<KeyFrame*, bool> &pose : vPoses)
+        {
+            KeyFrame* pKFi = pose.first;
+            if(mPoseOf.count(pKFi))
+                continue;
+            optim::Rig rig;
+            rig.camera = pKFi->mpCamera;
+            rig.fx = pKFi->fx;
+            rig.fy = pKFi->fy;
+            rig.cx = pKFi->cx;
+            rig.cy = pKFi->cy;
+            rig.bf = pKFi->mbf;
 
-        std::vector<ORB_SLAM3::EdgeSE3ProjectXYZ*> vpEdgesMono;
-        vpEdgesMono.reserve(nExpectedSize);
+            Sophus::SE3<float> Tcw = pKFi->GetPose();
+            mPoseOf[pKFi] = mProblem.addPose(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>(),
+                                             pose.second, mProblem.addRig(rig));
+        }
+        mvnAdjustPose.reserve(mvpAdjustKF.size());
+        for(KeyFrame* pKFi : mvpAdjustKF)
+            mvnAdjustPose.push_back(mPoseOf[pKFi]);
 
-        std::vector<KeyFrame*> vpEdgeKFMono;
-        vpEdgeKFMono.reserve(nExpectedSize);
-
-        std::vector<MapPoint*> vpMapPointEdgeMono;
-        vpMapPointEdgeMono.reserve(nExpectedSize);
-
-        std::vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
-        vpEdgesStereo.reserve(nExpectedSize);
-
-        std::vector<KeyFrame*> vpEdgeKFStereo;
-        vpEdgeKFStereo.reserve(nExpectedSize);
-
-        std::vector<MapPoint*> vpMapPointEdgeStereo;
-        vpMapPointEdgeStereo.reserve(nExpectedSize);
+        // The points in the order of their ids.
+        mvpPoints.reserve(mvpMarked.size());
+        for(MapPoint* pMPi : mvpMarked)
+            if(!pMPi->isBad())
+                mvpPoints.push_back(pMPi);
+        std::vector<int> vOrder(mvpPoints.size());
+        for(std::size_t i = 0; i < vOrder.size(); i++)
+            vOrder[i] = i;
+        std::sort(vOrder.begin(), vOrder.end(),
+                  [this](int a, int b) { return mvpPoints[a]->mnId < mvpPoints[b]->mnId; });
+        mvnPoint.resize(mvpPoints.size());
+        for(int i : vOrder)
+            mvnPoint[i] = mProblem.addPoint(mvpPoints[i]->GetWorldPos().cast<double>());
 
         const float thHuber2D = std::sqrt(5.99);
         const float thHuber3D = std::sqrt(7.815);
 
-        // Set MapPoint vertices
-        std::map<KeyFrame*, int> mpObsKFs;
-        std::map<KeyFrame*, int> mpObsFinalKFs;
-        std::map<MapPoint*, int> mpObsMPs;
-        for(unsigned int i = 0; i < vpMPs.size(); ++i)
+        // The observations, point by point in the order the window was walked.
+        for(std::size_t i = 0; i < mvpPoints.size(); i++)
         {
-            MapPoint* pMPi = vpMPs[i];
-            if(pMPi->isBad())
-                continue;
-
-            g2o::VertexSBAPointXYZ* vPoint = new g2o::VertexSBAPointXYZ();
-            vPoint->setEstimate(pMPi->GetWorldPos().cast<double>());
-            const int id = pMPi->mnId + maxKFid + 1;
-            vPoint->setId(id);
-            vPoint->setMarginalized(true);
-            optimizer.addVertex(vPoint);
-
+            MapPoint* pMPi = mvpPoints[i];
             const MapPoint::ObservationMap observations = pMPi->GetObservations();
-            int nEdges = 0;
             //SET EDGES
             for(MapPoint::ObservationMap::const_iterator mit = observations.begin(); mit != observations.end(); mit++)
             {
@@ -559,82 +536,38 @@ namespace ORB_SLAM3
                 if(pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBALocalForMerge != pMainKF->mnId ||
                    !pKF->GetMapPoint(std::get<0>(mit->second)))
                     continue;
-
-                nEdges++;
+                const std::unordered_map<KeyFrame*, int>::const_iterator itPose = mPoseOf.find(pKF);
+                if(itPose == mPoseOf.end())
+                    continue;
 
                 const cv::KeyPoint &kpUn = pKF->mvKeysUn[std::get<0>(mit->second)];
+                const float &invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
 
                 if(pKF->mvuRight[std::get<0>(mit->second)] < 0) //Monocular
                 {
-                    mpObsMPs[pMPi]++;
-                    Eigen::Matrix<double, 2, 1> obs;
-                    obs << kpUn.pt.x, kpUn.pt.y;
-
-                    ORB_SLAM3::EdgeSE3ProjectXYZ* e = new ORB_SLAM3::EdgeSE3ProjectXYZ();
-
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKF->mnId)));
-                    e->setMeasurement(obs);
-                    const float &invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
-                    e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuber2D);
-
-                    e->pCamera = pKF->mpCamera;
-
-                    optimizer.addEdge(e);
-
-                    vpEdgesMono.push_back(e);
-                    vpEdgeKFMono.push_back(pKF);
-                    vpMapPointEdgeMono.push_back(pMPi);
-
-                    mpObsKFs[pKF]++;
+                    mProblem.addObservation(optim::kMono, itPose->second, mvnPoint[i],
+                                            Eigen::Vector3d(kpUn.pt.x, kpUn.pt.y, 0), invSigma2, thHuber2D);
                 }
                 else // RGBD or Stereo
                 {
-                    mpObsMPs[pMPi] += 2;
-                    Eigen::Matrix<double, 3, 1> obs;
                     const float kp_ur = pKF->mvuRight[std::get<0>(mit->second)];
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                    g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
-
-                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKF->mnId)));
-                    e->setMeasurement(obs);
-                    const float &invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
-                    Eigen::Matrix3d Info = Eigen::Matrix3d::Identity() * invSigma2;
-                    e->setInformation(Info);
-
-                    g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-                    e->setRobustKernel(rk);
-                    rk->setDelta(thHuber3D);
-
-                    e->fx = pKF->fx;
-                    e->fy = pKF->fy;
-                    e->cx = pKF->cx;
-                    e->cy = pKF->cy;
-                    e->bf = pKF->mbf;
-
-                    optimizer.addEdge(e);
-
-                    vpEdgesStereo.push_back(e);
-                    vpEdgeKFStereo.push_back(pKF);
-                    vpMapPointEdgeStereo.push_back(pMPi);
-
-                    mpObsKFs[pKF]++;
+                    mProblem.addObservation(optim::kStereo, itPose->second, mvnPoint[i],
+                                            Eigen::Vector3d(kpUn.pt.x, kpUn.pt.y, kp_ur), invSigma2, thHuber3D);
                 }
+                mvpObsKF.push_back(pKF);
+                mvpObsMP.push_back(pMPi);
             }
         }
+    }
 
-        if(pbStopFlag)
-            if(*pbStopFlag)
-                return;
+    void WeldingBaTask::Solve(optim::BundleAdjuster &solver, bool* pbStopFlag)
+    {
+        optim::SolveOptions options;
+        options.pbStop = pbStopFlag;
 
-        optimizer.initializeOptimization();
-        optimizer.optimize(5);
+        solver.Prepare(mProblem);
+        options.nIterations = 5;
+        solver.Solve(mProblem, options);
 
         bool bDoMore = true;
 
@@ -642,222 +575,148 @@ namespace ORB_SLAM3
             if(*pbStopFlag)
                 bDoMore = false;
 
-        std::map<unsigned long int, int> mWrongObsKF;
         if(bDoMore)
         {
             // Check inlier observations
-            int badMonoMP = 0, badStereoMP = 0;
-            for(size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++)
+            for(std::size_t i = 0, iend = mProblem.observations(); i < iend; i++)
             {
-                ORB_SLAM3::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];
-                MapPoint* pMP = vpMapPointEdgeMono[i];
+                if(mvpObsMP[i]->isBad())
+                    continue;
+
+                const double chi2Max = mProblem.kind[i] == optim::kStereo ? 7.815 : 5.991;
+                if(mProblem.chi2[i] > chi2Max || !mProblem.depthPositive[i])
+                    mProblem.active[i] = 0;
+
+                mProblem.robust[i] = 0;
+            }
+
+            options.nIterations = 10;
+            solver.Solve(mProblem, options);
+        }
+    }
+
+    const std::vector<std::pair<KeyFrame*, MapPoint*>> &WeldingBaTask::Classify()
+    {
+        mvToErase.clear();
+        mvToErase.reserve(mProblem.observations());
+
+        // Check inlier observations: the monocular ones, then the stereo ones,
+        // which is the order v1.0 erased them in.
+        for(const optim::ObservationKind kind : {optim::kMono, optim::kStereo})
+        {
+            const double chi2Max = kind == optim::kStereo ? 7.815 : 5.991;
+            for(std::size_t i = 0, iend = mProblem.observations(); i < iend; i++)
+            {
+                if(mProblem.kind[i] != kind)
+                    continue;
+                MapPoint* pMP = mvpObsMP[i];
 
                 if(pMP->isBad())
                     continue;
 
-                if(e->chi2() > 5.991 || !e->isDepthPositive())
-                {
-                    e->setLevel(1);
-                    badMonoMP++;
-                }
-                e->setRobustKernel(0);
-            }
-
-            for(size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++)
-            {
-                g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-                MapPoint* pMP = vpMapPointEdgeStereo[i];
-
-                if(pMP->isBad())
-                    continue;
-
-                if(e->chi2() > 7.815 || !e->isDepthPositive())
-                {
-                    e->setLevel(1);
-                    badStereoMP++;
-                }
-
-                e->setRobustKernel(0);
-            }
-            Verbose::PrintMess("[BA]: First optimization(Huber), there are " + std::to_string(badMonoMP) +
-                                   " monocular and " + std::to_string(badStereoMP) + " stereo bad edges",
-                               Verbose::VERBOSITY_DEBUG);
-
-            optimizer.initializeOptimization(0);
-            optimizer.optimize(10);
-        }
-
-        std::vector<std::pair<KeyFrame*, MapPoint*>> vToErase;
-        vToErase.reserve(vpEdgesMono.size() + vpEdgesStereo.size());
-        std::set<MapPoint*> spErasedMPs;
-        std::set<KeyFrame*> spErasedKFs;
-
-        // Check inlier observations
-        int badMonoMP = 0, badStereoMP = 0;
-        for(size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++)
-        {
-            ORB_SLAM3::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];
-            MapPoint* pMP = vpMapPointEdgeMono[i];
-
-            if(pMP->isBad())
-                continue;
-
-            if(e->chi2() > 5.991 || !e->isDepthPositive())
-            {
-                KeyFrame* pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(std::make_pair(pKFi, pMP));
-                mWrongObsKF[pKFi->mnId]++;
-                badMonoMP++;
-
-                spErasedMPs.insert(pMP);
-                spErasedKFs.insert(pKFi);
+                if(mProblem.chi2[i] > chi2Max || !mProblem.depthPositive[i])
+                    mvToErase.push_back(std::make_pair(mvpObsKF[i], pMP));
             }
         }
+        return mvToErase;
+    }
 
-        for(size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++)
-        {
-            g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-            MapPoint* pMP = vpMapPointEdgeStereo[i];
-
-            if(pMP->isBad())
-                continue;
-
-            if(e->chi2() > 7.815 || !e->isDepthPositive())
-            {
-                KeyFrame* pKFi = vpEdgeKFStereo[i];
-                vToErase.push_back(std::make_pair(pKFi, pMP));
-                mWrongObsKF[pKFi->mnId]++;
-                badStereoMP++;
-
-                spErasedMPs.insert(pMP);
-                spErasedKFs.insert(pKFi);
-            }
-        }
-
-        Verbose::PrintMess("[BA]: Second optimization, there are " + std::to_string(badMonoMP) + " monocular and " +
-                               std::to_string(badStereoMP) + " sterero bad edges",
-                           Verbose::VERBOSITY_DEBUG);
+    void WeldingBaTask::Apply(KeyFrame* pMainKF)
+    {
+        Classify();
 
         // Get Map Mutex
         std::lock_guard<std::mutex> lock(pMainKF->GetMap()->mMutexMapUpdate);
 
-        if(!vToErase.empty())
+        if(!mvToErase.empty())
         {
-            for(size_t i = 0; i < vToErase.size(); i++)
+            for(size_t i = 0; i < mvToErase.size(); i++)
             {
-                KeyFrame* pKFi = vToErase[i].first;
-                MapPoint* pMPi = vToErase[i].second;
+                KeyFrame* pKFi = mvToErase[i].first;
+                MapPoint* pMPi = mvToErase[i].second;
                 pKFi->EraseMapPointMatch(pMPi);
                 pMPi->EraseObservation(pKFi);
-            }
-        }
-        for(unsigned int i = 0; i < vpMPs.size(); ++i)
-        {
-            MapPoint* pMPi = vpMPs[i];
-            if(pMPi->isBad())
-                continue;
-
-            const MapPoint::ObservationMap observations = pMPi->GetObservations();
-            for(MapPoint::ObservationMap::const_iterator mit = observations.begin(); mit != observations.end(); mit++)
-            {
-                KeyFrame* pKF = mit->first;
-                if(pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBALocalForKF != pMainKF->mnId ||
-                   !pKF->GetMapPoint(std::get<0>(mit->second)))
-                    continue;
-
-                if(pKF->mvuRight[std::get<0>(mit->second)] < 0) //Monocular
-                {
-                    mpObsFinalKFs[pKF]++;
-                }
-                else // RGBD or Stereo
-                {
-                    mpObsFinalKFs[pKF]++;
-                }
             }
         }
 
         // Recover optimized data
         // Keyframes
-        for(KeyFrame* pKFi : vpAdjustKF)
+        for(std::size_t i = 0; i < mvpAdjustKF.size(); i++)
         {
+            KeyFrame* pKFi = mvpAdjustKF[i];
             if(pKFi->isBad())
                 continue;
 
-            g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKFi->mnId));
-            g2o::SE3Quat SE3quat = vSE3->estimate();
-            Sophus::SE3f Tiw(SE3quat.rotation().cast<float>(), SE3quat.translation().cast<float>());
-
-            int numMonoBadPoints = 0, numMonoOptPoints = 0;
-            int numStereoBadPoints = 0, numStereoOptPoints = 0;
-            std::vector<MapPoint*> vpMonoMPsOpt, vpStereoMPsOpt;
-            std::vector<MapPoint*> vpMonoMPsBad, vpStereoMPsBad;
-
-            for(size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++)
-            {
-                ORB_SLAM3::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];
-                MapPoint* pMP = vpMapPointEdgeMono[i];
-                KeyFrame* pKFedge = vpEdgeKFMono[i];
-
-                if(pKFi != pKFedge)
-                {
-                    continue;
-                }
-
-                if(pMP->isBad())
-                    continue;
-
-                if(e->chi2() > 5.991 || !e->isDepthPositive())
-                {
-                    numMonoBadPoints++;
-                    vpMonoMPsBad.push_back(pMP);
-                }
-                else
-                {
-                    numMonoOptPoints++;
-                    vpMonoMPsOpt.push_back(pMP);
-                }
-            }
-
-            for(size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++)
-            {
-                g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
-                MapPoint* pMP = vpMapPointEdgeStereo[i];
-                KeyFrame* pKFedge = vpEdgeKFMono[i];
-
-                if(pKFi != pKFedge)
-                {
-                    continue;
-                }
-
-                if(pMP->isBad())
-                    continue;
-
-                if(e->chi2() > 7.815 || !e->isDepthPositive())
-                {
-                    numStereoBadPoints++;
-                    vpStereoMPsBad.push_back(pMP);
-                }
-                else
-                {
-                    numStereoOptPoints++;
-                    vpStereoMPsOpt.push_back(pMP);
-                }
-            }
-
+            const int n = mvnAdjustPose[i];
+            Sophus::SE3f Tiw(mProblem.Rcw[n].cast<float>(), mProblem.tcw[n].cast<float>());
             pKFi->SetPose(Tiw);
         }
 
         //Points
-        for(MapPoint* pMPi : vpMPs)
+        for(std::size_t i = 0; i < mvpPoints.size(); i++)
         {
+            MapPoint* pMPi = mvpPoints[i];
             if(pMPi->isBad())
                 continue;
 
-            g2o::VertexSBAPointXYZ* vPoint = static_cast<g2o::VertexSBAPointXYZ*>(
-                optimizer.vertex(pMPi->mnId + maxKFid + 1));
-            pMPi->SetWorldPos(vPoint->estimate().cast<float>());
+            pMPi->SetWorldPos(mProblem.Xw[mvnPoint[i]].cast<float>());
             pMPi->UpdateNormalAndDepth();
         }
+    }
+
+    bool WeldingBaTask::Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased) const
+    {
+        if(erased != mvToErase)
+            return false;
+        for(std::size_t i = 0; i < mvpAdjustKF.size(); i++)
+        {
+            if(mvpAdjustKF[i]->isBad())
+                continue;
+            const int n = mvnAdjustPose[i];
+            const Sophus::SE3f Tiw(mProblem.Rcw[n].cast<float>(), mProblem.tcw[n].cast<float>());
+            const Sophus::SE3f Tmap = mvpAdjustKF[i]->GetPose();
+            if(std::memcmp(Tiw.data(), Tmap.data(), 7 * sizeof(float)) != 0)
+                return false;
+        }
+        for(std::size_t i = 0; i < mvpPoints.size(); i++)
+        {
+            if(mvpPoints[i]->isBad())
+                continue;
+            const Eigen::Vector3f X = mProblem.Xw[mvnPoint[i]].cast<float>();
+            const Eigen::Vector3f Xmap = mvpPoints[i]->GetWorldPos();
+            if(std::memcmp(X.data(), Xmap.data(), 3 * sizeof(float)) != 0)
+                return false;
+        }
+        return true;
+    }
+
+    void WeldingBaTask::ResetMarks()
+    {
+        // No keyframe has this id, so v1.0's body takes none of them as seen.
+        const long unsigned int none = ~0ul;
+        for(KeyFrame* pKFi : mvpKF)
+            pKFi->mnBALocalForMerge = none;
+        for(MapPoint* pMP : mvpMarked)
+            pMP->mnBALocalForMerge = none;
+    }
+
+    void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF, std::vector<KeyFrame*> vpAdjustKF,
+                                          std::vector<KeyFrame*> vpFixedKF, bool* pbStopFlag)
+    {
+#ifdef ORBSLAM3R_OPT_SHADOW
+        shadow::WeldingBundleAdjustment(pMainKF, vpAdjustKF, vpFixedKF, pbStopFlag);
+#else
+        WeldingBaTask task;
+        task.Build(pMainKF, vpAdjustKF, vpFixedKF);
+
+        if(pbStopFlag)
+            if(*pbStopFlag)
+                return;
+
+        const std::unique_ptr<optim::BundleAdjuster> pSolver = optim::MakeBundleAdjuster();
+        task.Solve(*pSolver, pbStopFlag);
+        task.Apply(pMainKF);
+#endif
     }
 
 } // namespace ORB_SLAM3
