@@ -53,7 +53,8 @@ LAYERS = {
     # Optimizer is the header; its functions are in one source per task.
     "optim": ["Rig", "SolveOptions", "PoseProblem", "PoseSolver", "BaProblem", "BundleAdjuster"],
     "optim_g2o": ["OptimizableTypes", "G2oPoseSolver", "G2oBundleAdjuster"],
-    "optimization": ["Optimizer", "G2oTypes", "KeyFrameAndPose", "PoseTask", "LocalBaTask", "WeldingBaTask", "Shadow",
+    "optimization": ["Optimizer", "G2oTypes", "KeyFrameAndPose", "PoseTask", "LocalBaTask", "WeldingBaTask", "GlobalBaTask", "Digest",
+                     "Shadow", "ShadowGlobalBundleAdjustment",
                      "ShadowPoseOptimization", "ShadowLocalBundleAdjustment",
                      "PoseOptimization", "InertialPoseOptimization", "LocalBundleAdjustment",
                      "GlobalBundleAdjustment", "InertialBundleAdjustment", "InertialInitialization",

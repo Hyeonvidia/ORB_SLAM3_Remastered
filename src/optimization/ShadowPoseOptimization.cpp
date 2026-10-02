@@ -70,57 +70,6 @@ namespace ORB_SLAM3
     namespace shadow
     {
 
-        namespace
-        {
-            struct Tally
-            {
-                const char* task = nullptr;
-                std::atomic<long> calls{0};
-                std::atomic<long> differ{0};
-            };
-
-            // A fixed table, written from several threads and printed once.
-            struct Tallies
-            {
-                Tally rows[32];
-                std::mutex mutex;
-
-                Tally &Row(const char* task)
-                {
-                    std::lock_guard<std::mutex> lock(mutex);
-                    for(Tally &row : rows)
-                    {
-                        if(!row.task)
-                            row.task = task;
-                        if(std::strcmp(row.task, task) == 0)
-                            return row;
-                    }
-                    return rows[31];
-                }
-
-                ~Tallies()
-                {
-                    for(const Tally &row : rows)
-                        if(row.task)
-                            std::fprintf(stderr, "OPT_SHADOW %s: %ld calls, %ld differ\n", row.task, row.calls.load(),
-                                         row.differ.load());
-                }
-            };
-
-            Tallies gTallies;
-        } // namespace
-
-        void Count(const char* task, bool same)
-        {
-            Tally &row = gTallies.Row(task);
-            row.calls++;
-            if(!same)
-            {
-                if(row.differ++ < 5)
-                    std::fprintf(stderr, "OPT_SHADOW %s: call %ld differs\n", task, row.calls.load());
-            }
-        }
-
         // v1.0's Optimizer::PoseOptimization as it was, but for the lock, which
         // the caller holds.
         int PoseOptimizationV1(Frame* pFrame)

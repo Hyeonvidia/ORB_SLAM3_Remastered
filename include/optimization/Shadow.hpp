@@ -35,6 +35,7 @@ namespace ORB_SLAM3
     class Frame;
     class KeyFrame;
     class Map;
+    class MapPoint;
 
     namespace shadow
     {
@@ -45,8 +46,16 @@ namespace ORB_SLAM3
         void WeldingBundleAdjustment(KeyFrame* pMainKF, std::vector<KeyFrame*> vpAdjustKF,
                                      std::vector<KeyFrame*> vpFixedKF, bool* pbStopFlag);
 
-        // One line per task at exit: calls, and calls that differed.
+        void BundleAdjustment(const std::vector<KeyFrame*> &vpKFs, const std::vector<MapPoint*> &vpMP, int nIterations,
+                              bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust);
+
+        // One line per task at exit: calls, and calls that differed. Moved
+        // counts a call that could not be compared: a global adjustment runs
+        // while the other threads go on changing the map, and when the two
+        // did not read the same (optimization/Digest.hpp) their results say
+        // nothing about each other.
         void Count(const char* task, bool same);
+        void Moved(const char* task);
 
     } // namespace shadow
 
