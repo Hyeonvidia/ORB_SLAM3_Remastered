@@ -240,3 +240,128 @@ of the 110 runs the first time, which left their trajectories intact and their
 timings useless -- a median tracking time of 28 ms where 18 is normal. Those
 30 were run again. Wall time far beyond a sequence's length is the symptom.
 
+## The matrix at d08b4c6 (2026-10-03)
+
+Every configuration once, four runs sharing the machine, after the work of
+September 30 to October 2 (parallel extraction, one-pass FAST, flat grids,
+observations and words, the compact vocabulary, the local bundle adjustment's
+damping in stereo and RGB-D, the thread ports). 69 runs, none failed.
+
+| Dataset | Runs | Median ATE | Median ATE / path |
+|---|---:|---:|---:|
+| EuRoC (11 seq x 4 configs) | 44 | **0.039 m** | 0.051 % |
+| KITTI odometry 00-10 (mono + stereo) | 22 | 3.93 m | 0.230 % |
+| TUM RGB-D fr1_desk | 3 | **0.017 m** | 0.184 % |
+
+Against the matrix of September 19, cell by cell, 23 cells moved by more than
+20 % either way: 13 better (MH05 stereo-inertial 0.387 -> 0.050, V201 stereo
+0.049 -> 0.030, TUM mono 0.035 -> 0.014 among them) and 10 worse, five of
+them stereo by 1.6 to 2.4 times: MH03 (0.026 -> 0.045), MH04 (0.043 ->
+0.072), V202 (0.042 -> 0.073), V203 (0.378 -> 0.900), KITTI 01 (15.1 ->
+27.6).
+
+Those five were run twice more with this build, with the local bundle
+adjustment change (421b038) reverted, and with the one-pass FAST (9affa4d)
+reverted -- the two changes that touch stereo and not monocular:
+
+| ATE, m, two runs | this build | without 421b038 | without 9affa4d |
+|---|---:|---:|---:|
+| MH03 stereo | 0.024 / 0.033 | 0.035 / 0.025 | 0.048 / 0.042 |
+| MH04 stereo | 0.069 / 0.057 | 0.098 / 0.088 | 0.080 / 0.085 |
+| V202 stereo | 0.056 / 0.096 | 0.043 / 0.057 | 0.072 / 0.076 |
+| V203 stereo | 0.465 / 0.313 | 0.804 / 0.288 | 0.583 / 0.863 |
+| KITTI 01 stereo | 20.3 / 12.8 | 15.8 / 14.8 | 16.6 / 13.2 |
+
+The ranges overlap in every row; V203 and KITTI 01 end anywhere between 0.29
+and 0.90 m and 12.8 and 27.6 m with any of the three. Neither change is what
+the matrix's worse cells came from; they are what one run of those sequences
+looks like next to another. The full scores:
+
+```
+EuRoC  (11 sequences x 4 configurations)
+RUN                       ATE RMSE      PATH  ATE/PATH   PAIRS  NOTE
+----------------------    --------  --------  --------   -----  ----------------------
+MH01 mono                   0.0180     80.6m    0.022%    3638  Sim(3)
+MH01 stereo                 0.0403     80.6m    0.050%    3638  SE(3), scale err +0.76%
+MH01 mono_inertial          0.0770     71.2m    0.108%    2644  SE(3), scale err +1.84%
+MH01 stereo_inertial        0.0339     80.5m    0.042%    3639  SE(3), scale err +0.58%
+MH02 mono                   0.0151     73.4m    0.021%    2998  Sim(3)
+MH02 stereo                 0.0244     73.4m    0.033%    2999  SE(3), scale err -0.09%
+MH02 mono_inertial          0.0603     62.0m    0.097%    2142  SE(3), scale err -1.04%
+MH02 stereo_inertial        0.0373     73.4m    0.051%    3000  SE(3), scale err -0.26%
+MH03 mono                   0.0284    130.8m    0.022%    2623  Sim(3)
+MH03 stereo                 0.0447    130.9m    0.034%    2631  SE(3), scale err -0.77%
+MH03 mono_inertial          0.0356    124.3m    0.029%    2147  SE(3), scale err -0.11%
+MH03 stereo_inertial        0.0352    130.7m    0.027%    2631  SE(3), scale err +0.38%
+MH04 mono                   0.0515     91.7m    0.056%    1960  Sim(3)
+MH04 stereo                 0.0716     91.7m    0.078%    1976  SE(3), scale err +0.69%
+MH04 mono_inertial          0.1501     91.4m    0.164%    1952  SE(3), scale err -2.05%
+MH04 stereo_inertial        0.0453     91.6m    0.049%    1976  SE(3), scale err +0.29%
+MH05 mono                   0.0656     97.4m    0.067%    2164  Sim(3)
+MH05 stereo                 0.0423     97.5m    0.043%    2221  SE(3), scale err -0.28%
+MH05 mono_inertial          0.1777     89.6m    0.198%    1697  SE(3), scale err -2.21%
+MH05 stereo_inertial        0.0500     97.5m    0.051%    2170  SE(3), scale err -0.26%
+V101 mono                   0.0335     58.4m    0.057%    2781  Sim(3)
+V101 stereo                 0.0357     58.5m    0.061%    2871  SE(3), scale err +0.46%
+V101 mono_inertial          0.0437     58.3m    0.075%    2769  SE(3), scale err +1.58%
+V101 stereo_inertial        0.0386     58.5m    0.066%    2790  SE(3), scale err +1.01%
+V102 mono                   0.0115     75.5m    0.015%    1595  Sim(3)
+V102 stereo                 0.0514     75.5m    0.068%    1671  SE(3), scale err +0.65%
+V102 mono_inertial          0.0215     73.9m    0.029%    1519  SE(3), scale err +0.83%
+V102 stereo_inertial        0.0218     75.8m    0.029%    1601  SE(3), scale err +0.73%
+V103 mono                   0.3906     79.3m    0.492%    1995  Sim(3)
+V103 stereo                 0.1728     79.3m    0.218%    2094  SE(3), scale err +0.67%
+V103 mono_inertial          0.0370     74.1m    0.050%    1879  SE(3), scale err +2.13%
+V103 stereo_inertial        0.0239     78.9m    0.030%    1994  SE(3), scale err +1.03%
+V201 mono                   0.0180     36.2m    0.050%    2075  Sim(3)
+V201 stereo                 0.0297     36.3m    0.082%    2147  SE(3), scale err +0.55%
+V201 mono_inertial          0.0390     36.4m    0.107%    2167  SE(3), scale err -0.10%
+V201 stereo_inertial        0.0356     36.4m    0.098%    2179  SE(3), scale err +1.15%
+V202 mono                   0.0160     83.6m    0.019%    2269  Sim(3)
+V202 stereo                 0.0728     83.6m    0.087%    2309  SE(3), scale err +0.01%
+V202 mono_inertial          0.0156     82.9m    0.019%    2249  SE(3), scale err -0.01%
+V202 stereo_inertial        0.0124     83.1m    0.015%    2262  SE(3), scale err -0.18%
+V203 mono                   0.0761     84.1m    0.090%    1709  Sim(3)
+V203 stereo                 0.9005     79.8m    1.129%    1669  SE(3), scale err -11.79%
+V203 mono_inertial          0.0281     85.9m    0.033%    1796  SE(3), scale err -0.34%
+V203 stereo_inertial        0.0589     86.0m    0.069%    1805  SE(3), scale err +0.14%
+                                                      
+median of 44               0.0386m              0.051%
+
+KITTI odometry  (sequences 00-10, the ones with ground truth)
+RUN                       ATE RMSE      PATH  ATE/PATH   PAIRS  NOTE
+----------------------    --------  --------  --------   -----  ----------------------
+00 mono                     6.0458   3717.6m    0.163%    2845  Sim(3), keyframes
+00 stereo                   1.1095   3724.2m    0.030%    4541  SE(3), per frame
+01 mono                   330.9646   2453.2m   13.491%     661  Sim(3), keyframes
+01 stereo                  27.5736   2453.2m    1.124%    1101  SE(3), per frame
+02 mono                    28.7383   5067.1m    0.567%    3628  Sim(3), keyframes
+02 stereo                   4.7397   5067.2m    0.094%    4661  SE(3), per frame
+03 mono                     0.9522    560.8m    0.170%     499  Sim(3), keyframes
+03 stereo                   1.6333    560.9m    0.291%     801  SE(3), per frame
+04 mono                     1.1122    393.6m    0.283%     195  Sim(3), keyframes
+04 stereo                   0.2821    393.6m    0.072%     271  SE(3), per frame
+05 mono                     5.0695   2204.3m    0.230%    1716  Sim(3), keyframes
+05 stereo                   1.0296   2205.6m    0.047%    2761  SE(3), per frame
+06 mono                    14.7245   1232.8m    1.194%     747  Sim(3), keyframes
+06 stereo                   1.1370   1232.9m    0.092%    1101  SE(3), per frame
+07 mono                     3.9331    694.3m    0.566%     707  Sim(3), keyframes
+07 stereo                   0.4279    694.7m    0.062%    1101  SE(3), per frame
+08 mono                    60.8801   3222.4m    1.889%    3040  Sim(3), keyframes
+08 stereo                   3.6682   3222.8m    0.114%    4071  SE(3), per frame
+09 mono                     9.4515   1705.0m    0.554%    1258  Sim(3), keyframes
+09 stereo                   1.9948   1705.1m    0.117%    1591  SE(3), per frame
+10 mono                     7.1821    919.4m    0.781%     934  Sim(3), keyframes
+10 stereo                   1.0027    919.5m    0.109%    1201  SE(3), per frame
+                                                      
+median of 22               3.9331m              0.230%
+
+TUM RGB-D  (freiburg1_desk)
+RUN                       ATE RMSE      PATH  ATE/PATH   PAIRS  NOTE
+----------------------    --------  --------  --------   -----  ----------------------
+fr1_desk mono               0.0140      9.3m    0.152%     154  Sim(3), keyframes
+fr1_desk rgbd               0.0171      9.3m    0.184%     573  SE(3), per frame
+fr1_desk rgbd (kf)          0.0196      9.2m    0.214%     152  SE(3), keyframes
+                                                      
+median of 3                0.0171m              0.184%
+```
