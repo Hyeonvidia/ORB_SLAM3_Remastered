@@ -12,10 +12,12 @@
 # The parts are object libraries rather than static ones so that each object
 # goes into the shared library exactly once and nothing is dropped for not
 # being referenced.
+#
+#   -DORBSLAM3R_BUILD_VIEWER=OFF   leaves the viewer out: Pangolin and OpenGL
+#                                  are then neither looked for nor linked
 # =============================================================================
 find_package(Eigen3 3.3 REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Pangolin REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Boost REQUIRED COMPONENTS serialization)
 
@@ -28,9 +30,9 @@ set_property(GLOBAL PROPERTY ORBSLAM3R_PART_GRAPH "") # what tools/deps_check.py
 #   USES    <part>...            parts whose headers this one may include
 #   PACKAGES <target>...         packages it links and may include
 #   HEADER_ONLY <name>...        packages it may include that have no target
-#   SHARED <target>)             the part that is the shared library itself
+#   NOT_BUILT)                   said, and checked, but left out of this build
 function(orbslam3r_part name)
-  cmake_parse_arguments(P "" "SHARED" "LAYERS;SOURCES;EXCEPT;USES;PACKAGES;HEADER_ONLY" ${ARGN})
+  cmake_parse_arguments(P "NOT_BUILT" "" "LAYERS;SOURCES;EXCEPT;USES;PACKAGES;HEADER_ONLY" ${ARGN})
   set(sources ${P_SOURCES})
   foreach(layer ${P_LAYERS})
     file(GLOB layer_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${layer}/*.cpp)
@@ -45,14 +47,19 @@ function(orbslam3r_part name)
     list(APPEND relative ${rel})
   endforeach()
 
-  if(P_SHARED)
-    set(target ${P_SHARED})
-    add_library(${target} SHARED ${sources})
-  else()
-    set(target orbslam3r_${name})
-    add_library(${target} OBJECT ${sources})
-    set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  string(REPLACE ";" " " layers "${P_LAYERS}")
+  string(REPLACE ";" " " files "${relative}")
+  string(REPLACE ";" " " used "${P_USES}")
+  string(REPLACE ";" " " packages "${P_PACKAGES} ${P_HEADER_ONLY}")
+  set_property(GLOBAL APPEND_STRING PROPERTY ORBSLAM3R_PART_GRAPH
+               "${name}|${layers}|${files}|${used}|${packages}\n")
+  if(P_NOT_BUILT)
+    return()
   endif()
+
+  set(target orbslam3r_${name})
+  add_library(${target} OBJECT ${sources})
+  set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   target_compile_features(${target} PUBLIC cxx_std_17)
   # Sophus's checks abort the process with their message on stdout, which a
   # file swallows; src/common/SophusEnsure.cpp puts it on stderr. PUBLIC,
@@ -69,13 +76,6 @@ function(orbslam3r_part name)
     list(APPEND uses orbslam3r_${part})
   endforeach()
   target_link_libraries(${target} PUBLIC ${uses} ${P_PACKAGES})
-
-  string(REPLACE ";" " " layers "${P_LAYERS}")
-  string(REPLACE ";" " " files "${relative}")
-  string(REPLACE ";" " " used "${P_USES}")
-  string(REPLACE ";" " " packages "${P_PACKAGES} ${P_HEADER_ONLY}")
-  set_property(GLOBAL APPEND_STRING PROPERTY ORBSLAM3R_PART_GRAPH
-               "${name}|${layers}|${files}|${used}|${packages}\n")
 endfunction()
 
 # One folder per layer of the architecture in Figure 1 of the ORB-SLAM3 paper;
@@ -109,29 +109,49 @@ orbslam3r_part(slam
   PACKAGES Eigen3::Eigen ${OpenCV_LIBS} Boost::serialization OpenSSL::Crypto
            orbslam3r::dbow2_ext   # DBoW2 + the text vocabulary + serialization
            orbslam3r::g2o_ext     # g2o + the renamed-symbol aliases + solver factory
-           # Tracking.cpp includes the viewer's drawers, and through them
-           # Pangolin's headers, which do not compile without the definitions
-           # its targets carry. Goes when Tracking reaches the drawers through
-           # ports.
-           ${Pangolin_LIBRARIES}
   HEADER_ONLY Sophus)
 
-orbslam3r_part(viewer
-  LAYERS viewer
-  USES slam common
-  PACKAGES Eigen3::Eigen ${OpenCV_LIBS} ${Pangolin_LIBRARIES}
-  HEADER_ONLY Sophus)
-
-orbslam3r_part(system SHARED ORB_SLAM3
+orbslam3r_part(system
   SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/System.cpp
-  USES slam viewer common camera
-  PACKAGES ${OpenCV_LIBS} Boost::serialization OpenSSL::Crypto ${Pangolin_LIBRARIES}
+  USES slam common camera
+  PACKAGES ${OpenCV_LIBS} Boost::serialization OpenSSL::Crypto
   HEADER_ONLY Sophus)
+
+# The viewer is above System: its buttons call System, and System knows it
+# only as the port and the three functions of include/ViewerPort.hpp. Whichever
+# of the two parts below is built defines those functions.
+option(ORBSLAM3R_BUILD_VIEWER "Build the Pangolin viewer into the library" ON)
+if(ORBSLAM3R_BUILD_VIEWER)
+  find_package(Pangolin REQUIRED)
+  set(with_viewer "")
+  set(without_viewer NOT_BUILT)
+else()
+  set(with_viewer NOT_BUILT)
+  set(without_viewer "")
+endif()
+orbslam3r_part(viewer ${with_viewer}
+  LAYERS viewer
+  USES system slam common
+  PACKAGES Eigen3::Eigen ${OpenCV_LIBS} ${Pangolin_LIBRARIES}
+  HEADER_ONLY Sophus pangolin)
+orbslam3r_part(noviewer ${without_viewer}
+  SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/NoViewer.cpp
+  USES system slam
+  HEADER_ONLY Sophus)
+
+# A shared library with no sources of its own. The parts are named one by one:
+# an object library's objects go only into what links it directly, not into
+# what links something that links it.
+add_library(ORB_SLAM3 SHARED)
 add_library(orbslam3r::ORB_SLAM3 ALIAS ORB_SLAM3)
-# An object library's objects go only into what links it directly, not into
-# what links something that links it; System.cpp includes nothing of features,
-# and the library needs its objects all the same.
-target_link_libraries(ORB_SLAM3 PUBLIC orbslam3r_features)
+target_link_libraries(ORB_SLAM3 PUBLIC
+  orbslam3r_common
+  orbslam3r_camera
+  orbslam3r_features
+  orbslam3r_slam
+  orbslam3r_system
+  $<IF:$<BOOL:${ORBSLAM3R_BUILD_VIEWER}>,orbslam3r_viewer,orbslam3r_noviewer>
+)
 
 get_property(part_graph GLOBAL PROPERTY ORBSLAM3R_PART_GRAPH)
 file(WRITE ${CMAKE_BINARY_DIR}/part_graph.txt "${part_graph}")

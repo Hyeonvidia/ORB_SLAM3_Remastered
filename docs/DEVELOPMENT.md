@@ -88,6 +88,36 @@ Produces `build/lib/libORB_SLAM3.so` and twelve dataset example binaries under
 Extract the vocabulary once first:
 `tar -xzf reference/ORB_SLAM3/Vocabulary/ORBvoc.txt.tar.gz -C Vocabulary`.
 
+### What the library is made of
+
+`src/CMakeLists.txt` builds the one shared library from parts, each an object
+library that names the parts and the packages it uses:
+
+| Part | Sources | Uses |
+|---|---|---|
+| `common` | `common/` except `Settings.cpp` | — |
+| `camera` | `camera/` | `common` |
+| `features` | `features/` | `common` |
+| `slam` | `atlas/ tracking/ optimization/ local_mapping/ loop_closing/`, `common/Settings.cpp` | `common camera features` |
+| `system` | `System.cpp` | `slam common camera` |
+| `viewer` | `viewer/` | `system slam common` |
+| `noviewer` | `NoViewer.cpp`, in place of `viewer` | `system slam` |
+
+The five layers in `slam` include each other in both directions and stay one
+part until that is undone. CMake cannot hold a part to its line -- every header
+is under one `include/` -- so `tools/deps_check.py` does, from the table CMake
+writes to `build/part_graph.txt`; `ctest` runs it as `part_graph`.
+
+```bash
+./docker/run.sh -- python3 /workspace/tools/deps_check.py          # the report
+./docker/run.sh -- cmake -S /workspace -B /workspace/build_noviewer -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DORBSLAM3R_BUILD_VIEWER=OFF         # no Pangolin, no OpenGL
+```
+
+Without the viewer, `System` gets drawers that do nothing and no viewer thread
+(`src/NoViewer.cpp`); the library then depends on 35 shared objects instead of
+62.
+
 ## Formatting
 
 ```bash

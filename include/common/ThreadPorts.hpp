@@ -20,6 +20,7 @@
 #define THREADPORTS_H
 
 #include <atomic>
+#include <string>
 
 namespace ORB_SLAM3
 {
@@ -126,6 +127,19 @@ namespace ORB_SLAM3
         virtual void InsertKeyFrame(KeyFrame* pKF) = 0;
         virtual void RequestReset() = 0;
         virtual void RequestResetActiveMap(Map* pMap) = 0;
+    };
+
+    // What Tracking asks of the System that owns it. It held the System
+    // itself, the class at the top of the stack, for these four calls.
+    class SystemPort
+    {
+    public:
+        virtual ~SystemPort() = default;
+
+        virtual void ResetActiveMap() = 0;
+        virtual void SaveTrajectoryEuRoC(const std::string &filename) = 0;
+        virtual void SaveTrajectoryEuRoC(const std::string &filename, Map* pMap) = 0;
+        virtual void SaveKeyFrameTrajectoryEuRoC(const std::string &filename, Map* pMap) = 0;
     };
 
 } // namespace ORB_SLAM3

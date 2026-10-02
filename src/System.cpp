@@ -18,15 +18,12 @@
 
 #include "System.hpp"
 #include "atlas/MemoryAudit.hpp"
-#include "viewer/FrameDrawer.hpp"
-#include "viewer/MapDrawer.hpp"
-#include "viewer/Viewer.hpp"
+#include "ViewerPort.hpp"
 #include "camera/KannalaBrandt8.hpp"
 #include "camera/Pinhole.hpp"
 #include "tracking/Frame.hpp"
 #include "common/Converter.hpp"
 #include <thread>
-#include <pangolin/pangolin.h>
 #include <iomanip>
 #include <openssl/evp.h>
 #include <sstream>
@@ -57,7 +54,7 @@ namespace ORB_SLAM3
 
     System::System(const std::string &strVocFile, const std::string &strSettingsFile, const eSensor sensor,
                    const bool bUseViewer, const int initFr, const std::string &strSequence)
-        : mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false), mbResetActiveMap(false),
+        : mSensor(sensor), mpViewer(static_cast<ViewerPort*>(NULL)), mbReset(false), mbResetActiveMap(false),
           mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false)
     {
         // Output welcome message
@@ -204,8 +201,8 @@ namespace ORB_SLAM3
             mpAtlas->SetInertialSensor();
 
         //Create Drawers. These are used by the Viewer
-        mpFrameDrawer = new FrameDrawer(mpAtlas);
-        mpMapDrawer = new MapDrawer(mpAtlas, strSettingsFile, settings_);
+        mpFrameDrawer = MakeFrameView(mpAtlas);
+        mpMapDrawer = MakeMapView(mpAtlas, strSettingsFile, settings_);
 
         //Initialize the Tracking thread
         //(it will live in the main thread of execution, the one that called this constructor)
@@ -266,11 +263,13 @@ namespace ORB_SLAM3
         if(bViewerEnabled)
         //if(false) // TODO
         {
-            mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile, settings_);
-            mtViewer = std::thread(&Viewer::Run, mpViewer);
-            mpViewer->both = mpFrameDrawer->both;
-            const char* holdEnv = std::getenv("ORBSLAM3R_VIEWER_HOLD");
-            mbViewerHold = holdEnv && std::string(holdEnv) == "1";
+            mpViewer = MakeViewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile, settings_);
+            if(mpViewer)
+            {
+                mtViewer = std::thread(&ViewerPort::Run, mpViewer);
+                const char* holdEnv = std::getenv("ORBSLAM3R_VIEWER_HOLD");
+                mbViewerHold = holdEnv && std::string(holdEnv) == "1";
+            }
         }
 
         // Fix verbosity

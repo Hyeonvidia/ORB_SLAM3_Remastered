@@ -19,6 +19,7 @@
 #ifndef VIEWER_H
 #define VIEWER_H
 
+#include "ViewerPort.hpp"
 #include <mutex>
 
 #include <string>
@@ -34,7 +35,7 @@ namespace ORB_SLAM3
     class System;
     class Settings;
 
-    class Viewer
+    class Viewer : public ViewerPort
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -45,19 +46,19 @@ namespace ORB_SLAM3
 
         // Main thread function. Draw points, keyframes, the current camera pose and the last processed
         // frame. Drawing is refreshed according to the camera fps. We use Pangolin.
-        void Run();
+        void Run() override;
 
-        void RequestFinish();
+        void RequestFinish() override;
 
-        void RequestStop();
+        void RequestStop() override;
 
-        bool isFinished();
+        bool isFinished() override;
 
-        bool isStopped();
+        bool isStopped() override;
 
         bool isStepByStep();
 
-        void Release();
+        void Release() override;
 
         //void SetTrackingPause();
 

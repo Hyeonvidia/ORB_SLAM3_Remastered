@@ -6,9 +6,9 @@
 #     cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=Release &&
 #     cmake --build /workspace/build -j 12'
 #
-# The SLAM library itself is not wired up yet -- see "Status" in README.md.
-# What builds today is the wrapper layer over the pinned upstream dependencies,
-# plus the tests and smoke test that prove the environment is sound.
+# vendor_ext/ is the wrapper layer over the pinned upstream dependencies, src/
+# the library, in parts (see src/CMakeLists.txt), Examples/ the dataset
+# binaries.
 # =============================================================================
 cmake_minimum_required(VERSION 3.16)
 project(ORB_SLAM3_Remastered VERSION 0.1.0 LANGUAGES CXX)

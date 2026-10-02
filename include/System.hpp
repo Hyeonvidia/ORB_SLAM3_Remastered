@@ -45,15 +45,15 @@
 namespace ORB_SLAM3
 {
 
-    // The viewer's three classes are held here by pointer and nothing more.
-    // Including their headers made this -- the header every example and half
-    // the library includes -- the main road by which Pangolin and OpenGL reached
-    // code that never draws anything.
-    class Viewer;
-    class FrameDrawer;
-    class MapDrawer;
+    // The viewer is held here through what System asks of it and nothing
+    // more (ViewerPort.hpp). Including its headers made this -- the header
+    // every example and half the library includes -- the main road by which
+    // Pangolin and OpenGL reached code that never draws anything; holding its
+    // classes, even by pointer, made the library impossible to build without
+    // it.
+    class ViewerPort;
 
-    class System
+    class System : public SystemPort
     {
     public:
         // Input sensor. Defined in common/Sensor.hpp so the layers below System
@@ -119,7 +119,7 @@ namespace ORB_SLAM3
 
         // Reset the system (clear Atlas or the active map)
         void Reset();
-        void ResetActiveMap();
+        void ResetActiveMap() override;
 
         // All threads will be requested to finish.
         // It waits until all threads have finished.
@@ -139,11 +139,11 @@ namespace ORB_SLAM3
         // See format details at: http://vision.in.tum.de/data/datasets/rgbd-dataset
         void SaveKeyFrameTrajectoryTUM(const std::string &filename);
 
-        void SaveTrajectoryEuRoC(const std::string &filename);
+        void SaveTrajectoryEuRoC(const std::string &filename) override;
         void SaveKeyFrameTrajectoryEuRoC(const std::string &filename);
 
-        void SaveTrajectoryEuRoC(const std::string &filename, Map* pMap);
-        void SaveKeyFrameTrajectoryEuRoC(const std::string &filename, Map* pMap);
+        void SaveTrajectoryEuRoC(const std::string &filename, Map* pMap) override;
+        void SaveKeyFrameTrajectoryEuRoC(const std::string &filename, Map* pMap) override;
 
         // Save data used for initialization debug
         void SaveDebugData(const int &iniIdx);
@@ -214,15 +214,15 @@ namespace ORB_SLAM3
         LoopClosing* mpLoopCloser;
 
         // The viewer draws the map and the current camera pose. It uses Pangolin.
-        Viewer* mpViewer;
+        ViewerPort* mpViewer;
         // ORBSLAM3R_VIEWER_HOLD=1: after Shutdown() the viewer keeps the final
         // map on screen until Esc or Stop is pressed in the window; the
         // System's destructor waits for that. Without it the window closes
         // with the last frame.
         bool mbViewerHold = false;
 
-        FrameDrawer* mpFrameDrawer;
-        MapDrawer* mpMapDrawer;
+        FrameViewPort* mpFrameDrawer;
+        MapViewPort* mpMapDrawer;
 
         // System threads: Local Mapping, Loop Closing, Viewer.
         // The Tracking thread "lives" in the main execution thread that creates the System object.

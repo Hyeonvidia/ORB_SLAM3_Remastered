@@ -21,6 +21,7 @@
 
 #include "atlas/MapPoint.hpp"
 #include "atlas/Atlas.hpp"
+#include "tracking/ViewPorts.hpp"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/features2d/features2d.hpp>
@@ -39,14 +40,15 @@ namespace ORB_SLAM3
 
     class Tracking;
 
-    class FrameDrawer
+    class FrameDrawer : public FrameViewPort
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         FrameDrawer(Atlas* pAtlas);
 
         // Update info from the last processed frame.
-        void Update(Tracking* pTracker);
+        void Update(Tracking* pTracker) override;
+        void SetBoth(bool bBoth) override { both = bBoth; }
 
         // Draw last processed frame.
         cv::Mat DrawFrame(float imageScale = 1.f);

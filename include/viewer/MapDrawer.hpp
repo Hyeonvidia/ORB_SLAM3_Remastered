@@ -22,6 +22,7 @@
 #include "atlas/Atlas.hpp"
 #include "atlas/MapPoint.hpp"
 #include "atlas/KeyFrame.hpp"
+#include "tracking/ViewPorts.hpp"
 #include <pangolin/pangolin.h>
 
 #include <mutex>
@@ -33,7 +34,7 @@ namespace ORB_SLAM3
 
     class Settings;
 
-    class MapDrawer
+    class MapDrawer : public MapViewPort
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -47,7 +48,7 @@ namespace ORB_SLAM3
         void DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph,
                            const bool bDrawOptLba);
         void DrawCurrentCamera(pangolin::OpenGlMatrix &Twc);
-        void SetCurrentCameraPose(const Sophus::SE3f &Tcw);
+        void SetCurrentCameraPose(const Sophus::SE3f &Tcw) override;
         void SetReferenceKeyFrame(KeyFrame* pKF);
         void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
 

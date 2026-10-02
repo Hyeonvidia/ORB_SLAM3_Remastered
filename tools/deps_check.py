@@ -48,19 +48,11 @@ PACKAGE_OF = {
     "DUtils": "orbslam3r::dbow2_ext",
 }
 
-# (file, include) pairs that break the rule today.
-WAIVED = {
-    # Tracking tells the two drawers what it has; ports the viewer implements
-    # are to take their place.
-    ("src/tracking/Tracking.cpp", "viewer/FrameDrawer.hpp"),
-    ("src/tracking/Tracking.cpp", "viewer/MapDrawer.hpp"),
-    # Tracking asks System to reset the active map, and spells the sensor as
-    # System:: where common/Sensor.hpp has it.
-    ("src/tracking/Tracking.cpp", "System.hpp"),
-    # The viewer's buttons call System, which is what makes the viewer: the
-    # two are one part in all but name until System makes it through a port.
-    ("src/viewer/Viewer.cpp", "System.hpp"),
-}
+# (file, include) pairs that break the rule today. None: Tracking held the
+# viewer's two drawers and the System, and System made the viewer; all four
+# are ports now (tracking/ViewPorts.hpp, common/ThreadPorts.hpp,
+# ViewerPort.hpp).
+WAIVED = set()
 
 
 def package_names(words):

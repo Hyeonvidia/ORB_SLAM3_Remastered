@@ -122,6 +122,11 @@ twice as fast, Local Mapping is idle more often and accepts more keyframes
   Mapping and Loop Closing ask of Tracking, what both ask of Loop Closing --
   not each other's classes. They start once they are wired; no thread reads
   another's members.
+- The library is put together from parts that each name what they use --
+  `common`, `camera`, `features`, the SLAM core, `System`, the viewer -- and
+  `tools/deps_check.py` holds every `#include` to that, in `ctest`. The viewer
+  is the last of them and optional: `-DORBSLAM3R_BUILD_VIEWER=OFF` builds a
+  library with no Pangolin or OpenGL in it.
 - Built and run in Docker only. `std::` written out, no `using namespace`.
 - Tests in seven seconds (`ctest`), a benchmark of the extractor on its own
   (`tests/bench_orb`), and the two checks above.

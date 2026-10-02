@@ -34,8 +34,10 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+# The viewer is last: it draws what the layers below hold and its buttons call
+# System, which knows it only through a port.
 ORDER = ["common", "camera", "features", "atlas", "tracking", "optimization",
-         "local_mapping", "loop_closing", "viewer", "System"]
+         "local_mapping", "loop_closing", "System", "viewer"]
 RANK = {layer: i for i, layer in enumerate(ORDER)}
 
 

@@ -24,6 +24,7 @@
 #include <opencv2/features2d/features2d.hpp>
 
 #include "common/ThreadPorts.hpp"
+#include "tracking/ViewPorts.hpp"
 #include "tracking/Frame.hpp"
 #include "atlas/ORBVocabulary.hpp"
 #include "atlas/KeyFrameDatabase.hpp"
@@ -44,21 +45,16 @@
 namespace ORB_SLAM3
 {
 
-    class FrameDrawer;
-    // Held by pointer only. Including viewer/MapDrawer.hpp for it put Pangolin
-    // in front of every file that includes the tracker.
-    class MapDrawer;
     class Atlas;
-    class System;
     class Settings;
 
     class Tracking : public TrackerPort
     {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Atlas* pAtlas,
-                 KeyFrameDatabase* pKFDB, const std::string &strSettingPath, const int sensor, Settings* settings,
-                 const std::string &_nameSeq = std::string());
+        Tracking(SystemPort* pSys, ORBVocabulary* pVoc, FrameViewPort* pFrameDrawer, MapViewPort* pMapDrawer,
+                 Atlas* pAtlas, KeyFrameDatabase* pKFDB, const std::string &strSettingPath, const int sensor,
+                 Settings* settings, const std::string &_nameSeq = std::string());
 
         ~Tracking();
 
@@ -285,11 +281,11 @@ namespace ORB_SLAM3
         std::vector<MapPoint*> mvpLocalMapPoints;
 
         // System
-        System* mpSystem;
+        SystemPort* mpSystem;
 
         //Drawers
-        FrameDrawer* mpFrameDrawer;
-        MapDrawer* mpMapDrawer;
+        FrameViewPort* mpFrameDrawer;
+        MapViewPort* mpMapDrawer;
         std::atomic<bool> bStepByStep;
 
         // Whether points beyond a distance are left out, and the distance:
