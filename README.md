@@ -54,13 +54,17 @@ Per stage, KITTI 07, before this work and now, measured side by side
 
 | Stage, ms | Stereo | Monocular |
 |---|---:|---:|
-| ORB extraction | 12.7 → **5.1** | 10.9 → **4.6** |
+| ORB extraction | 12.6 → **5.3** | 10.5 → **4.6** |
 | Stereo matching | 2.8 → **0.9** | |
-| Tracking, all of it, per frame | 19.3 → **10.9** | 14.5 → **8.9** |
-| Creating map points, per keyframe | 7.6 → **5.4** | 23.0 → **15.3** |
-| Local bundle adjustment | 17.1 → **13.6** | 61.5 → 64.1 |
-| Culling keyframes | 0.8 → 0.7 | 8.6 → **5.0** |
-| Local Mapping, all of it, per keyframe | 28.1 → **22.4** | 96.2 → **87.5** |
+| Tracking, all of it, per frame | 19.0 → **9.6** | 14.0 → **7.4** |
+| Creating map points, per keyframe | 7.5 → **5.4** | 22.9 → **14.3** |
+| Local bundle adjustment | 16.8 → **13.9** | 58.9 → 63.7 |
+| Culling keyframes | 0.7 → 0.7 | 9.1 → **4.4** |
+| Local Mapping, all of it, per keyframe | 27.6 → **22.1** | 94.1 → **84.9** |
+
+Monocular local bundle adjustment is 8 % longer per keyframe: with tracking
+twice as fast, Local Mapping is idle more often and accepts more keyframes
+(about 700 for KITTI 07 where it was 670), so each window is larger.
 
 - **Extraction**: the levels of the image pyramid in parallel -- what is
   extracted does not depend on the number of threads
