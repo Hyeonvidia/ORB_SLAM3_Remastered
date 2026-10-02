@@ -48,6 +48,8 @@ namespace ORB_SLAM3
     {
 
         int PoseOptimization(Frame* pFrame);
+        int PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit);
+        int PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit);
         void LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int &num_fixedKF, int &num_OptKF,
                                    int &num_MPs, int &num_edges);
         void WeldingBundleAdjustment(KeyFrame* pMainKF, std::vector<KeyFrame*> vpAdjustKF,

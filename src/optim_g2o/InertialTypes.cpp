@@ -599,15 +599,17 @@ namespace ORB_SLAM3
                                                   (VP2->estimate().twb - VP1->estimate().twb - VV1->estimate() * dt);
         }
 
-        EdgePriorPoseImu::EdgePriorPoseImu(ConstraintPoseImu* c)
+        EdgePriorPoseImu::EdgePriorPoseImu(const Eigen::Matrix3d &Rwb_, const Eigen::Vector3d &twb_,
+                                           const Eigen::Vector3d &vwb_, const Eigen::Vector3d &bg_,
+                                           const Eigen::Vector3d &ba_, const Matrix15d &H)
         {
             resize(4);
-            Rwb = c->Rwb;
-            twb = c->twb;
-            vwb = c->vwb;
-            bg = c->bg;
-            ba = c->ba;
-            setInformation(c->H);
+            Rwb = Rwb_;
+            twb = twb_;
+            vwb = vwb_;
+            bg = bg_;
+            ba = ba_;
+            setInformation(H);
         }
 
         void EdgePriorPoseImu::computeError()

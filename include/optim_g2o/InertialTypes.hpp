@@ -658,37 +658,14 @@ namespace ORB_SLAM3
             }
         };
 
-        class ConstraintPoseImu
-        {
-        public:
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-            ConstraintPoseImu(const Eigen::Matrix3d &Rwb_, const Eigen::Vector3d &twb_, const Eigen::Vector3d &vwb_,
-                              const Eigen::Vector3d &bg_, const Eigen::Vector3d &ba_, const Matrix15d &H_)
-                : Rwb(Rwb_), twb(twb_), vwb(vwb_), bg(bg_), ba(ba_), H(H_)
-            {
-                H = (H + H) / 2;
-                Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 15, 15>> es(H);
-                Eigen::Matrix<double, 15, 1> eigs = es.eigenvalues();
-                for(int i = 0; i < 15; i++)
-                    if(eigs[i] < 1e-12)
-                        eigs[i] = 0;
-                H = es.eigenvectors() * eigs.asDiagonal() * es.eigenvectors().transpose();
-            }
-
-            Eigen::Matrix3d Rwb;
-            Eigen::Vector3d twb;
-            Eigen::Vector3d vwb;
-            Eigen::Vector3d bg;
-            Eigen::Vector3d ba;
-            Matrix15d H;
-        };
-
         class EdgePriorPoseImu : public g2o::BaseMultiEdge<15, Vector15d>
         {
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-            EdgePriorPoseImu(ConstraintPoseImu* c);
+            // What was known of a state -- where it was thought to be and how
+            // firmly, H in the order rotation, position, velocity, biases.
+            EdgePriorPoseImu(const Eigen::Matrix3d &Rwb_, const Eigen::Vector3d &twb_, const Eigen::Vector3d &vwb_,
+                             const Eigen::Vector3d &bg_, const Eigen::Vector3d &ba_, const Matrix15d &H);
 
             virtual bool read(std::istream &is) override { return false; }
             virtual bool write(std::ostream &os) const override { return false; }
