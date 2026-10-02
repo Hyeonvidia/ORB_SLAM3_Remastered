@@ -23,7 +23,7 @@
 #include "optim/Sim3Solver.hpp"
 #include "optimization/Digest.hpp"
 
-#include <g2o/types/sim3/sim3.h>
+#include "common/Sim3.hpp"
 
 #include <vector>
 
@@ -40,7 +40,7 @@ namespace ORB_SLAM3
     {
     public:
         // vpMatches1[i] is the point of pKF2 matched to feature i of pKF1.
-        void Build(KeyFrame* pKF1, KeyFrame* pKF2, const std::vector<MapPoint*> &vpMatches1, const g2o::Sim3 &g2oS12,
+        void Build(KeyFrame* pKF1, KeyFrame* pKF2, const std::vector<MapPoint*> &vpMatches1, const Sim3 &g2oS12,
                    float th2, bool bFixScale, bool bAllPoints);
 
         // Five iterations; the pairs with an observation over th2 left out and
@@ -52,8 +52,7 @@ namespace ORB_SLAM3
         // The matches left out are set to null. Returns the number that fit
         // and gives the similarity found, or 0 and no similarity when fewer
         // than ten pairs were left after the first round.
-        int Apply(std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
-                  Eigen::Matrix<double, 7, 7> &mAcumHessian) const;
+        int Apply(std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12, Eigen::Matrix<double, 7, 7> &mAcumHessian) const;
 
         // For the build that runs v1.0's body beside this (Shadow.hpp): what
         // Build read, to be asked before Solve.

@@ -22,7 +22,7 @@
 #include <opencv2/core/core.hpp>
 
 #include <Eigen/Dense>
-#include <orbslam3r/g2o_ext/compat.hpp>
+#include "common/Sim3.hpp"
 
 #include <sophus/geometry.hpp>
 #include <sophus/sim3.hpp>
@@ -37,13 +37,7 @@ namespace ORB_SLAM3
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        static g2o::SE3Quat toSE3Quat(const cv::Mat &cvT);
-        static g2o::SE3Quat toSE3Quat(const Sophus::SE3f &T);
-        static g2o::SE3Quat toSE3Quat(const g2o::Sim3 &gSim3);
-
         // TODO templetize these functions
-        static cv::Mat toCvMat(const g2o::SE3Quat &SE3);
-        static cv::Mat toCvMat(const g2o::Sim3 &Sim3);
         static cv::Mat toCvMat(const Eigen::Matrix<double, 4, 4> &m);
         static cv::Mat toCvMat(const Eigen::Matrix<float, 4, 4> &m);
         static cv::Mat toCvMat(const Eigen::Matrix<float, 3, 4> &m);
@@ -72,7 +66,7 @@ namespace ORB_SLAM3
 
         //TODO: Sophus migration, to be deleted in the future
         static Sophus::SE3<float> toSophus(const cv::Mat &T);
-        static Sophus::Sim3f toSophus(const g2o::Sim3 &S);
+        static Sophus::Sim3f toSophus(const Sim3 &S);
     };
 
 } // namespace ORB_SLAM3

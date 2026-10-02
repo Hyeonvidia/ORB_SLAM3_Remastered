@@ -1114,7 +1114,7 @@ namespace ORB_SLAM3
         // v1.0's Optimizer::MergeInertialBA, but that it says which observations it
         // erased and whether it got as far as solving.
         void MergeInertialBAV1(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbStopFlag, Map* pMap,
-                               KeyFrameAndPose &corrPoses, ErasedList &vErased, bool &bSolved)
+                               KeyFrameAndPoseV1 &corrPoses, ErasedList &vErased, bool &bSolved)
         {
             const int Nd = 6;
             const unsigned long maxKFid = pCurrKF->mnId;
@@ -1735,7 +1735,10 @@ namespace ORB_SLAM3
 
             ErasedList vErased;
             bool bSolved = false;
-            MergeInertialBAV1(pCurrKF, pMergeKF, nullptr, pMap, corrPoses, vErased, bSolved);
+            KeyFrameAndPoseV1 corrPosesV1 = ToV1(corrPoses);
+            MergeInertialBAV1(pCurrKF, pMergeKF, nullptr, pMap, corrPosesV1, vErased, bSolved);
+            for(const auto &pose : corrPosesV1)
+                corrPoses[pose.first] = FromV1(pose.second);
 
             Count("MergeInertialBA", bSolved && task.Matches(vErased));
         }

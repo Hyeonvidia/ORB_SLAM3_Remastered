@@ -19,7 +19,7 @@
 #ifndef KEYFRAMEANDPOSE_H
 #define KEYFRAMEANDPOSE_H
 
-#include <orbslam3r/g2o_ext/compat.hpp>
+#include "common/Sim3.hpp"
 
 #include <Eigen/Core>
 
@@ -41,8 +41,7 @@ namespace ORB_SLAM3
     // LoopClosing at all. At namespace scope in optimization/ the dependency
     // points the right way: loop_closing uses the optimizer, not the reverse.
     // LoopClosing keeps its nested name as an alias of this one.
-    typedef std::map<KeyFrame*, g2o::Sim3, std::less<KeyFrame*>,
-                     Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3>>>
+    typedef std::map<KeyFrame*, Sim3, std::less<KeyFrame*>, Eigen::aligned_allocator<std::pair<KeyFrame* const, Sim3>>>
         KeyFrameAndPose;
 
 } // namespace ORB_SLAM3

@@ -1321,7 +1321,7 @@ namespace ORB_SLAM3
                 pKFi->SetPose(PoseFound(mWindow, n));
 
                 Sophus::SE3d Tiw = pKFi->GetPose().cast<double>();
-                g2o::Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
+                Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
                 corrPoses[pKFi] = g2oSiw;
 
                 if(pKFi->bImu)

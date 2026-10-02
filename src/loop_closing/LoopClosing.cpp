@@ -253,11 +253,11 @@ namespace ORB_SLAM3
                         else
                         {
                             Sophus::SE3d mTmw = mpMergeMatchedKF->GetPose().cast<double>();
-                            g2o::Sim3 gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
+                            Sim3 gSmw2(mTmw.unit_quaternion(), mTmw.translation(), 1.0);
                             Sophus::SE3d mTcw = mpCurrentKF->GetPose().cast<double>();
-                            g2o::Sim3 gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
-                            g2o::Sim3 gSw2c = mg2oMergeSlw.inverse();
-                            g2o::Sim3 gSw1m = mg2oMergeSlw;
+                            Sim3 gScw1(mTcw.unit_quaternion(), mTcw.translation(), 1.0);
+                            Sim3 gSw2c = mg2oMergeSlw.inverse();
+                            Sim3 gSw1m = mg2oMergeSlw;
 
                             mSold_new = (gSw2c * gScw1);
 
@@ -284,7 +284,7 @@ namespace ORB_SLAM3
                                     Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
                                     phi(0) = 0;
                                     phi(1) = 0;
-                                    mSold_new = g2o::Sim3(ExpSO3(phi), mSold_new.translation(), 1.0);
+                                    mSold_new = Sim3(ExpSO3(phi), mSold_new.translation(), 1.0);
                                 }
                             }
 
@@ -360,8 +360,8 @@ namespace ORB_SLAM3
                         if(mpCurrentKF->GetMap()->IsInertial())
                         {
                             Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
-                            g2o::Sim3 g2oTwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
-                            g2o::Sim3 g2oSww_new = g2oTwc * mg2oLoopScw;
+                            Sim3 g2oTwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
+                            Sim3 g2oSww_new = g2oTwc * mg2oLoopScw;
 
                             Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
                             std::cout << "phi = " << phi.transpose() << std::endl;
@@ -376,7 +376,7 @@ namespace ORB_SLAM3
                                     {
                                         phi(0) = 0;
                                         phi(1) = 0;
-                                        g2oSww_new = g2o::Sim3(ExpSO3(phi), g2oSww_new.translation(), 1.0);
+                                        g2oSww_new = Sim3(ExpSO3(phi), g2oSww_new.translation(), 1.0);
                                         mg2oLoopScw = g2oTwc.inverse() * g2oSww_new;
                                     }
                                 }
@@ -524,8 +524,8 @@ namespace ORB_SLAM3
             bCheckSpatial = true;
             // Find from the last KF candidates
             Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpLoopLastCurrentKF->GetPoseInverse()).cast<double>();
-            g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
-            g2o::Sim3 gScw = gScl * mg2oLoopSlw;
+            Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
+            Sim3 gScw = gScl * mg2oLoopSlw;
             int numProjMatches = 0;
             std::vector<MapPoint*> vpMatchedMPs;
             bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpLoopMatchedKF, gScw, numProjMatches,
@@ -572,8 +572,8 @@ namespace ORB_SLAM3
             // Find from the last KF candidates
             Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpMergeLastCurrentKF->GetPoseInverse()).cast<double>();
 
-            g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
-            g2o::Sim3 gScw = gScl * mg2oMergeSlw;
+            Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
+            Sim3 gScw = gScl * mg2oMergeSlw;
             int numProjMatches = 0;
             std::vector<MapPoint*> vpMatchedMPs;
             bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpMergeMatchedKF, gScw, numProjMatches,
@@ -687,7 +687,7 @@ namespace ORB_SLAM3
         return false;
     }
 
-    bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw,
+    bool LoopClosing::DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, Sim3 &gScw,
                                                      int &nNumProjMatches, std::vector<MapPoint*> &vpMPs,
                                                      std::vector<MapPoint*> &vpMatchedMPs)
     {
@@ -703,8 +703,8 @@ namespace ORB_SLAM3
         {
             //Verbose::PrintMess("Sim3 reffine: There are " + to_string(nNumProjMatches) + " initial matches ", Verbose::VERBOSITY_DEBUG);
             Sophus::SE3d mTwm = pMatchedKF->GetPoseInverse().cast<double>();
-            g2o::Sim3 gSwm(mTwm.unit_quaternion(), mTwm.translation(), 1.0);
-            g2o::Sim3 gScm = gScw * gSwm;
+            Sim3 gSwm(mTwm.unit_quaternion(), mTwm.translation(), 1.0);
+            Sim3 gScm = gScw * gSwm;
             Eigen::Matrix<double, 7, 7> mHessian7x7;
 
             bool bFixedScale = mbFixScale; // TODO CHECK; Solo para el monocular inertial
@@ -717,7 +717,7 @@ namespace ORB_SLAM3
 
             if(numOptMatches > nProjOptMatches)
             {
-                g2o::Sim3 gScw_estimation(gScw.rotation(), gScw.translation(), 1.0);
+                Sim3 gScw_estimation(gScw.rotation(), gScw.translation(), 1.0);
 
                 std::vector<MapPoint*> vpMatchedMP;
                 vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint*>(NULL));
@@ -735,7 +735,7 @@ namespace ORB_SLAM3
     }
 
     bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame*&pMatchedKF2,
-                                                 KeyFrame*&pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences,
+                                                 KeyFrame*&pLastCurrentKF, Sim3 &g2oScw, int &nNumCoincidences,
                                                  std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs)
     {
         int nBoWMatches = 20;
@@ -755,7 +755,7 @@ namespace ORB_SLAM3
         KeyFrame* pBestMatchedKF;
         int nBestMatchesReproj = 0;
         int nBestNumCoindicendes = 0;
-        g2o::Sim3 g2oBestScw;
+        Sim3 g2oBestScw;
         std::vector<MapPoint*> vpBestMapPoints;
         std::vector<MapPoint*> vpBestMatchedMapPoints;
 
@@ -904,11 +904,11 @@ namespace ORB_SLAM3
 
                     //std::cout << "There are " << vpKeyFrames.size() <<" KFs which view all the mappoints" << std::endl;
 
-                    g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(),
-                                   solver.GetEstimatedTranslation().cast<double>(), (double)solver.GetEstimatedScale());
-                    g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
-                                   pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                    g2o::Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
+                    Sim3 gScm(solver.GetEstimatedRotation().cast<double>(),
+                              solver.GetEstimatedTranslation().cast<double>(), (double)solver.GetEstimatedScale());
+                    Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
+                              pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+                    Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
                     Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
                     std::vector<MapPoint*> vpMatchedMP;
@@ -933,9 +933,9 @@ namespace ORB_SLAM3
 
                         if(numOptMatches >= nSim3Inliers)
                         {
-                            g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
-                                           pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                            g2o::Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
+                            Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
+                                      pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+                            Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
                             Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
                             std::vector<MapPoint*> vpMatchedMP;
@@ -992,8 +992,8 @@ namespace ORB_SLAM3
                                     KeyFrame* pKFj = vpCurrentCovKFs[j];
                                     Sophus::SE3d mTjc = (pKFj->GetPose() * mpCurrentKF->GetPoseInverse())
                                                             .cast<double>();
-                                    g2o::Sim3 gSjc(mTjc.unit_quaternion(), mTjc.translation(), 1.0);
-                                    g2o::Sim3 gSjw = gSjc * gScw;
+                                    Sim3 gSjc(mTjc.unit_quaternion(), mTjc.translation(), 1.0);
+                                    Sim3 gSjw = gSjc * gScw;
                                     int numProjMatches_j = 0;
                                     std::vector<MapPoint*> vpMatchedMPs_j;
                                     bool bValid = DetectCommonRegionsFromLastKF(
@@ -1065,7 +1065,7 @@ namespace ORB_SLAM3
         return false;
     }
 
-    bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw,
+    bool LoopClosing::DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, Sim3 &gScw,
                                                     int &nNumProjMatches, std::vector<MapPoint*> &vpMPs,
                                                     std::vector<MapPoint*> &vpMatchedMPs)
     {
@@ -1082,7 +1082,7 @@ namespace ORB_SLAM3
         return false;
     }
 
-    int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw,
+    int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, Sim3 &g2oScw,
                                              std::set<MapPoint*> &spMatchedMPinOrigin,
                                              std::vector<MapPoint*> &vpMapPoints,
                                              std::vector<MapPoint*> &vpMatchedMapPoints)
@@ -1187,7 +1187,7 @@ namespace ORB_SLAM3
         CorrectedSim3[mpCurrentKF] = mg2oLoopScw;
         Sophus::SE3f Twc = mpCurrentKF->GetPoseInverse();
         Sophus::SE3f Tcw = mpCurrentKF->GetPose();
-        g2o::Sim3 g2oScw(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>(), 1.0);
+        Sim3 g2oScw(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>(), 1.0);
         NonCorrectedSim3[mpCurrentKF] = g2oScw;
 
         // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
@@ -1225,8 +1225,8 @@ namespace ORB_SLAM3
                 {
                     Sophus::SE3f Tiw = pKFi->GetPose();
                     Sophus::SE3d Tic = (Tiw * Twc).cast<double>();
-                    g2o::Sim3 g2oSic(Tic.unit_quaternion(), Tic.translation(), 1.0);
-                    g2o::Sim3 g2oCorrectedSiw = g2oSic * mg2oLoopScw;
+                    Sim3 g2oSic(Tic.unit_quaternion(), Tic.translation(), 1.0);
+                    Sim3 g2oCorrectedSiw = g2oSic * mg2oLoopScw;
                     //Pose corrected with the Sim3 of the loop closure
                     CorrectedSim3[pKFi] = g2oCorrectedSiw;
 
@@ -1236,7 +1236,7 @@ namespace ORB_SLAM3
                     pKFi->SetPose(correctedTiw.cast<float>());
 
                     //Pose without correction
-                    g2o::Sim3 g2oSiw(Tiw.unit_quaternion().cast<double>(), Tiw.translation().cast<double>(), 1.0);
+                    Sim3 g2oSiw(Tiw.unit_quaternion().cast<double>(), Tiw.translation().cast<double>(), 1.0);
                     NonCorrectedSim3[pKFi] = g2oSiw;
                 }
             }
@@ -1245,10 +1245,10 @@ namespace ORB_SLAM3
             for(KeyFrameAndPose::iterator mit = CorrectedSim3.begin(), mend = CorrectedSim3.end(); mit != mend; mit++)
             {
                 KeyFrame* pKFi = mit->first;
-                g2o::Sim3 g2oCorrectedSiw = mit->second;
-                g2o::Sim3 g2oCorrectedSwi = g2oCorrectedSiw.inverse();
+                Sim3 g2oCorrectedSiw = mit->second;
+                Sim3 g2oCorrectedSwi = g2oCorrectedSiw.inverse();
 
-                g2o::Sim3 g2oSiw = NonCorrectedSim3[pKFi];
+                Sim3 g2oSiw = NonCorrectedSim3[pKFi];
 
                 // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
                 /*Sophus::SE3d correctedTiw(g2oCorrectedSiw.rotation(),g2oCorrectedSiw.translation() / g2oCorrectedSiw.scale());
@@ -1582,9 +1582,9 @@ namespace ORB_SLAM3
 
         //
         Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
-        g2o::Sim3 g2oNonCorrectedSwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
-        g2o::Sim3 g2oNonCorrectedScw = g2oNonCorrectedSwc.inverse();
-        g2o::Sim3 g2oCorrectedScw = mg2oMergeScw; //TODO Check the transformation
+        Sim3 g2oNonCorrectedSwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
+        Sim3 g2oNonCorrectedScw = g2oNonCorrectedSwc.inverse();
+        Sim3 g2oCorrectedScw = mg2oMergeScw; //TODO Check the transformation
 
         KeyFrameAndPose vCorrectedSim3, vNonCorrectedSim3;
         vCorrectedSim3[mpCurrentKF] = g2oCorrectedScw;
@@ -1605,17 +1605,17 @@ namespace ORB_SLAM3
             if(pKFi->GetMap() != pCurrentMap)
                 Verbose::PrintMess("Other map KF, this should't happen", Verbose::VERBOSITY_DEBUG);
 
-            g2o::Sim3 g2oCorrectedSiw;
+            Sim3 g2oCorrectedSiw;
 
             if(pKFi != mpCurrentKF)
             {
                 Sophus::SE3d Tiw = (pKFi->GetPose()).cast<double>();
-                g2o::Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
+                Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
                 //Pose without correction
                 vNonCorrectedSim3[pKFi] = g2oSiw;
 
                 Sophus::SE3d Tic = Tiw * Twc;
-                g2o::Sim3 g2oSic(Tic.unit_quaternion(), Tic.translation(), 1.0);
+                Sim3 g2oSic(Tic.unit_quaternion(), Tic.translation(), 1.0);
                 g2oCorrectedSiw = g2oSic * mg2oMergeScw;
                 vCorrectedSim3[pKFi] = g2oCorrectedSiw;
             }
@@ -1662,8 +1662,8 @@ namespace ORB_SLAM3
                 numPointsWithCorrection++;
                 continue;
             }
-            g2o::Sim3 g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
-            g2o::Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
+            Sim3 g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
+            Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
 
             // Project with non-corrected pose and project back with corrected pose
             Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
@@ -1844,15 +1844,15 @@ namespace ORB_SLAM3
                         continue;
                     }
 
-                    g2o::Sim3 g2oCorrectedSiw;
+                    Sim3 g2oCorrectedSiw;
 
                     Sophus::SE3d Tiw = (pKFi->GetPose()).cast<double>();
-                    g2o::Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
+                    Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
                     //Pose without correction
                     vNonCorrectedSim3[pKFi] = g2oSiw;
 
                     Sophus::SE3d Tic = Tiw * Twc;
-                    g2o::Sim3 g2oSim(Tic.unit_quaternion(), Tic.translation(), 1.0);
+                    Sim3 g2oSim(Tic.unit_quaternion(), Tic.translation(), 1.0);
                     g2oCorrectedSiw = g2oSim * mg2oMergeScw;
                     vCorrectedSim3[pKFi] = g2oCorrectedSiw;
 
@@ -1881,8 +1881,8 @@ namespace ORB_SLAM3
                         continue;
 
                     KeyFrame* pKFref = pMPi->GetReferenceKeyFrame();
-                    g2o::Sim3 g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
-                    g2o::Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
+                    Sim3 g2oCorrectedSwi = vCorrectedSim3[pKFref].inverse();
+                    Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
 
                     // Project with non-corrected pose and project back with corrected pose
                     Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
@@ -2098,7 +2098,7 @@ namespace ORB_SLAM3
             for(KeyFrame* pKFi : vpKFs)
             {
                 Sophus::SE3d Tiw = (pKFi->GetPose()).cast<double>();
-                g2o::Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
+                Sim3 g2oSiw(Tiw.unit_quaternion(), Tiw.translation(), 1.0);
                 NonCorrectedSim3[pKFi] = g2oSiw;
             }
         }
@@ -2310,7 +2310,7 @@ namespace ORB_SLAM3
             KeyFrame* pKFi = mit->first;
             Map* pMap = pKFi->GetMap();
 
-            g2o::Sim3 g2oScw = mit->second;
+            Sim3 g2oScw = mit->second;
             Sophus::Sim3f Scw = Converter::toSophus(g2oScw);
 
             std::vector<MapPoint*> vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint*>(NULL));

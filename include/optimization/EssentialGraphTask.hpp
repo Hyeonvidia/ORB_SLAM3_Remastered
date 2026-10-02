@@ -39,7 +39,7 @@ namespace ORB_SLAM3
     class Map;
     class MapPoint;
 
-    typedef std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> Sim3Vector;
+    typedef std::vector<Sim3, Eigen::aligned_allocator<Sim3>> Sim3Vector;
 
     // Optimizer::OptimizeEssentialGraph after a loop, in three steps. The graph
     // is every keyframe of the map, held to its neighbours by what each was to

@@ -352,12 +352,12 @@ namespace ORB_SLAM3
             return nIn;
         }
 
-        int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+        int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12,
                          const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
                          const bool bAllPoints)
         {
             std::vector<MapPoint*> vpMatchesNow = vpMatches1;
-            g2o::Sim3 S12Now = g2oS12;
+            Sim3 S12Now = g2oS12;
             Eigen::Matrix<double, 7, 7> hessianNow = mAcumHessian;
 
             Sim3Task task;
@@ -368,8 +368,10 @@ namespace ORB_SLAM3
             const int nNow = task.Apply(vpMatchesNow, S12Now, hessianNow);
 
             Digest read;
-            const int nV1 = OptimizeSim3V1(pKF1, pKF2, vpMatches1, g2oS12, th2, bFixScale, mAcumHessian, bAllPoints,
+            g2o::Sim3 S12V1 = ToV1(g2oS12);
+            const int nV1 = OptimizeSim3V1(pKF1, pKF2, vpMatches1, S12V1, th2, bFixScale, mAcumHessian, bAllPoints,
                                            read);
+            g2oS12 = FromV1(S12V1);
 
             // Local Mapping moves keyframes and points while Loop Closing
             // tries a candidate: the two are compared when they read the same.

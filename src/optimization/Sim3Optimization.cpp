@@ -60,8 +60,8 @@
 
 namespace ORB_SLAM3
 {
-    void Sim3Task::Build(KeyFrame* pKF1, KeyFrame* pKF2, const std::vector<MapPoint*> &vpMatches1,
-                         const g2o::Sim3 &g2oS12, const float th2, const bool bFixScale, const bool bAllPoints)
+    void Sim3Task::Build(KeyFrame* pKF1, KeyFrame* pKF2, const std::vector<MapPoint*> &vpMatches1, const Sim3 &g2oS12,
+                         const float th2, const bool bFixScale, const bool bAllPoints)
     {
         mTh2 = th2;
 
@@ -201,7 +201,7 @@ namespace ORB_SLAM3
         mbFound = true;
     }
 
-    int Sim3Task::Apply(std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+    int Sim3Task::Apply(std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12,
                         Eigen::Matrix<double, 7, 7> &mAcumHessian) const
     {
         for(std::size_t i = 0; i < mvbOut.size(); i++)
@@ -234,7 +234,7 @@ namespace ORB_SLAM3
         return digest;
     }
 
-    int Optimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+    int Optimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12,
                                 const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
                                 const bool bAllPoints)
     {

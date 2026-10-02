@@ -65,9 +65,9 @@ namespace ORB_SLAM3
     {
         // Member by member: the constructor from the three would normalise a
         // rotation that already is.
-        g2o::Sim3 MakeSim3(const Eigen::Quaterniond &R, const Eigen::Vector3d &t, double s)
+        Sim3 MakeSim3(const Eigen::Quaterniond &R, const Eigen::Vector3d &t, double s)
         {
-            g2o::Sim3 S;
+            Sim3 S;
             S.rotation() = R;
             S.translation() = t;
             S.scale() = s;
@@ -83,14 +83,14 @@ namespace ORB_SLAM3
             struct Pose
             {
                 KeyFrame* pKF;
-                g2o::Sim3 Siw;
+                Sim3 Siw;
                 bool bFixed;
                 bool bFixScale;
                 EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             };
             std::vector<Pose, Eigen::aligned_allocator<Pose>> vPoses;
 
-            void Add(KeyFrame* pKF, const g2o::Sim3 &Siw, bool bFixed, bool bFixScale)
+            void Add(KeyFrame* pKF, const Sim3 &Siw, bool bFixed, bool bFixScale)
             {
                 vPoses.push_back({pKF, Siw, bFixed, bFixScale});
             }
@@ -115,7 +115,7 @@ namespace ORB_SLAM3
         // pose in the problem, or they are the same keyframe -- v1.0's graph
         // refused those edges.
         void Constrain(optim::Sim3GraphProblem &problem, const std::vector<int> &vnPoseOfId, long unsigned int nIDi,
-                       long unsigned int nIDj, const g2o::Sim3 &Sji)
+                       long unsigned int nIDj, const Sim3 &Sji)
         {
             if(nIDi >= vnPoseOfId.size() || nIDj >= vnPoseOfId.size())
                 return;
@@ -209,7 +209,7 @@ namespace ORB_SLAM3
             else
             {
                 Sophus::SE3d Tcw = pKF->GetPose().cast<double>();
-                g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
+                Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
                 vScw[nIDi] = Siw;
             }
 
@@ -227,8 +227,8 @@ namespace ORB_SLAM3
             KeyFrame* pKF = mit->first;
             const long unsigned int nIDi = pKF->mnId;
             const std::set<KeyFrame*> &spConnections = mit->second;
-            const g2o::Sim3 Siw = vScw[nIDi];
-            const g2o::Sim3 Swi = Siw.inverse();
+            const Sim3 Siw = vScw[nIDi];
+            const Sim3 Swi = Siw.inverse();
 
             for(std::set<KeyFrame*>::const_iterator sit = spConnections.begin(), send = spConnections.end();
                 sit != send; sit++)
@@ -237,8 +237,8 @@ namespace ORB_SLAM3
                 if((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeight(*sit) < minFeat)
                     continue;
 
-                const g2o::Sim3 Sjw = vScw[nIDj];
-                const g2o::Sim3 Sji = Sjw * Swi;
+                const Sim3 Sjw = vScw[nIDj];
+                const Sim3 Sji = Sjw * Swi;
 
                 Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sji);
                 sInsertedEdges.insert(std::make_pair(std::min(nIDi, nIDj), std::max(nIDi, nIDj)));
@@ -252,7 +252,7 @@ namespace ORB_SLAM3
 
             const int nIDi = pKF->mnId;
 
-            g2o::Sim3 Swi;
+            Sim3 Swi;
 
             KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
 
@@ -268,7 +268,7 @@ namespace ORB_SLAM3
             {
                 int nIDj = pParentKF->mnId;
 
-                g2o::Sim3 Sjw;
+                Sim3 Sjw;
 
                 KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
 
@@ -277,7 +277,7 @@ namespace ORB_SLAM3
                 else
                     Sjw = vScw[nIDj];
 
-                g2o::Sim3 Sji = Sjw * Swi;
+                Sim3 Sji = Sjw * Swi;
 
                 Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sji);
             }
@@ -290,7 +290,7 @@ namespace ORB_SLAM3
                 KeyFrame* pLKF = *sit;
                 if(pLKF->mnId < pKF->mnId)
                 {
-                    g2o::Sim3 Slw;
+                    Sim3 Slw;
 
                     KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
 
@@ -299,7 +299,7 @@ namespace ORB_SLAM3
                     else
                         Slw = vScw[pLKF->mnId];
 
-                    g2o::Sim3 Sli = Slw * Swi;
+                    Sim3 Sli = Slw * Swi;
                     Constrain(mProblem, mvnPoseOfId, nIDi, pLKF->mnId, Sli);
                 }
             }
@@ -317,7 +317,7 @@ namespace ORB_SLAM3
                                std::make_pair(std::min(pKF->mnId, pKFn->mnId), std::max(pKF->mnId, pKFn->mnId))))
                             continue;
 
-                        g2o::Sim3 Snw;
+                        Sim3 Snw;
 
                         KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
 
@@ -326,7 +326,7 @@ namespace ORB_SLAM3
                         else
                             Snw = vScw[pKFn->mnId];
 
-                        g2o::Sim3 Sni = Snw * Swi;
+                        Sim3 Sni = Snw * Swi;
 
                         Constrain(mProblem, mvnPoseOfId, nIDi, pKFn->mnId, Sni);
                     }
@@ -336,14 +336,14 @@ namespace ORB_SLAM3
             // Inertial edges if inertial
             if(pKF->bImu && pKF->mPrevKF)
             {
-                g2o::Sim3 Spw;
+                Sim3 Spw;
                 KeyFrameAndPose::const_iterator itp = NonCorrectedSim3.find(pKF->mPrevKF);
                 if(itp != NonCorrectedSim3.end())
                     Spw = itp->second;
                 else
                     Spw = vScw[pKF->mPrevKF->mnId];
 
-                g2o::Sim3 Spi = Spw * Swi;
+                Sim3 Spi = Spw * Swi;
                 Constrain(mProblem, mvnPoseOfId, nIDi, pKF->mPrevKF->mnId, Spi);
             }
         }
@@ -382,7 +382,7 @@ namespace ORB_SLAM3
             if(n < 0)
                 continue;
 
-            g2o::Sim3 CorrectedSiw = MakeSim3(mProblem.R[n], mProblem.t[n], mProblem.s[n]);
+            Sim3 CorrectedSiw = MakeSim3(mProblem.R[n], mProblem.t[n], mProblem.s[n]);
             vCorrectedSwc[nIDi] = CorrectedSiw.inverse();
             double s = CorrectedSiw.scale();
 
@@ -412,8 +412,8 @@ namespace ORB_SLAM3
                 nIDr = pRefKF->mnId;
             }
 
-            g2o::Sim3 Srw = vScw[nIDr];
-            g2o::Sim3 correctedSwr = vCorrectedSwc[nIDr];
+            Sim3 Srw = vScw[nIDr];
+            Sim3 correctedSwr = vCorrectedSwc[nIDr];
 
             Eigen::Matrix<double, 3, 1> eigP3Dw = pMP->GetWorldPos().cast<double>();
             Eigen::Matrix<double, 3, 1> eigCorrectedP3Dw = correctedSwr.map(Srw.map(eigP3Dw));
@@ -495,7 +495,7 @@ namespace ORB_SLAM3
             const int nIDi = pKFi->mnId;
 
             Sophus::SE3d Tcw = pKFi->GetPose().cast<double>();
-            g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
+            Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
             vCorrectedSwc[nIDi] = Siw.inverse();
             poses.Add(pKFi, Siw, true, true);
@@ -513,13 +513,13 @@ namespace ORB_SLAM3
             const int nIDi = pKFi->mnId;
 
             Sophus::SE3d Tcw = pKFi->GetPose().cast<double>();
-            g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
+            Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
             vCorrectedSwc[nIDi] = Siw.inverse();
             poses.Add(pKFi, Siw, true, false);
 
             Sophus::SE3d Tcw_bef = pKFi->mTcwBefMerge.cast<double>();
-            vScw[nIDi] = g2o::Sim3(Tcw_bef.unit_quaternion(), Tcw_bef.translation(), 1.0);
+            vScw[nIDi] = Sim3(Tcw_bef.unit_quaternion(), Tcw_bef.translation(), 1.0);
 
             sIdKF.insert(nIDi);
 
@@ -538,7 +538,7 @@ namespace ORB_SLAM3
                 continue;
 
             Sophus::SE3d Tcw = pKFi->GetPose().cast<double>();
-            g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
+            Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
             vScw[nIDi] = Siw;
             poses.Add(pKFi, Siw, false, false);
@@ -562,8 +562,8 @@ namespace ORB_SLAM3
             int num_connections = 0;
             const int nIDi = pKFi->mnId;
 
-            g2o::Sim3 correctedSwi;
-            g2o::Sim3 Swi;
+            Sim3 correctedSwi;
+            Sim3 Swi;
 
             if(vpGoodPose[nIDi])
                 correctedSwi = vCorrectedSwc[nIDi];
@@ -577,7 +577,7 @@ namespace ORB_SLAM3
             {
                 int nIDj = pParentKFi->mnId;
 
-                g2o::Sim3 Sjw;
+                Sim3 Sjw;
                 bool bHasRelation = false;
 
                 if(vpGoodPose[nIDi] && vpGoodPose[nIDj])
@@ -593,7 +593,7 @@ namespace ORB_SLAM3
 
                 if(bHasRelation)
                 {
-                    g2o::Sim3 Sji = Sjw * Swi;
+                    Sim3 Sji = Sjw * Swi;
 
                     Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sji);
                     num_connections++;
@@ -608,7 +608,7 @@ namespace ORB_SLAM3
                 KeyFrame* pLKF = *sit;
                 if(spKFs.find(pLKF) != spKFs.end() && pLKF->mnId < pKFi->mnId)
                 {
-                    g2o::Sim3 Slw;
+                    Sim3 Slw;
                     bool bHasRelation = false;
 
                     if(vpGoodPose[nIDi] && vpGoodPose[pLKF->mnId])
@@ -624,7 +624,7 @@ namespace ORB_SLAM3
 
                     if(bHasRelation)
                     {
-                        g2o::Sim3 Sli = Slw * Swi;
+                        Sim3 Sli = Slw * Swi;
                         Constrain(mProblem, mvnPoseOfId, nIDi, pLKF->mnId, Sli);
                         num_connections++;
                     }
@@ -641,7 +641,7 @@ namespace ORB_SLAM3
                 {
                     if(!pKFn->isBad() && pKFn->mnId < pKFi->mnId)
                     {
-                        g2o::Sim3 Snw = vScw[pKFn->mnId];
+                        Sim3 Snw = vScw[pKFn->mnId];
                         bool bHasRelation = false;
 
                         if(vpGoodPose[nIDi] && vpGoodPose[pKFn->mnId])
@@ -657,7 +657,7 @@ namespace ORB_SLAM3
 
                         if(bHasRelation)
                         {
-                            g2o::Sim3 Sni = Snw * Swi;
+                            Sim3 Sni = Snw * Swi;
 
                             Constrain(mProblem, mvnPoseOfId, nIDi, pKFn->mnId, Sni);
                             num_connections++;
@@ -695,7 +695,7 @@ namespace ORB_SLAM3
             const int n = mvnPoseOfId[pKFi->mnId];
             if(n < 0)
                 continue;
-            g2o::Sim3 CorrectedSiw = MakeSim3(mProblem.R[n], mProblem.t[n], mProblem.s[n]);
+            Sim3 CorrectedSiw = MakeSim3(mProblem.R[n], mProblem.t[n], mProblem.s[n]);
             double s = CorrectedSiw.scale();
             Sophus::SE3d Tiw(CorrectedSiw.rotation(), CorrectedSiw.translation() / s);
             vTiw[i] = Tiw.cast<float>();
@@ -812,7 +812,7 @@ namespace ORB_SLAM3
         // As Constrain above, of a graph of poses that turn about the
         // vertical only: what pose i was to pose j.
         void Constrain(optim::Pose4DofGraphProblem &problem, const std::vector<int> &vnPoseOfId, long unsigned int nIDi,
-                       long unsigned int nIDj, const g2o::Sim3 &Sij)
+                       long unsigned int nIDj, const Sim3 &Sij)
         {
             if(nIDi >= vnPoseOfId.size() || nIDj >= vnPoseOfId.size())
                 return;
@@ -861,7 +861,7 @@ namespace ORB_SLAM3
             if(it != CorrectedSim3.end())
             {
                 vScw[nIDi] = it->second;
-                const g2o::Sim3 Swc = it->second.inverse();
+                const Sim3 Swc = it->second.inverse();
                 Eigen::Matrix3d Rwc = Swc.rotation().toRotationMatrix();
                 Eigen::Vector3d twc = Swc.translation();
                 vPoses.push_back({pKF, BodyPoseOf(Rwc, twc, pKF), pKF == pLoopKF});
@@ -869,7 +869,7 @@ namespace ORB_SLAM3
             else
             {
                 Sophus::SE3d Tcw = pKF->GetPose().cast<double>();
-                g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
+                Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
 
                 vScw[nIDi] = Siw;
                 vPoses.push_back({pKF, BodyPoseOf(pKF), pKF == pLoopKF});
@@ -901,7 +901,7 @@ namespace ORB_SLAM3
             KeyFrame* pKF = mit->first;
             const long unsigned int nIDi = pKF->mnId;
             const std::set<KeyFrame*> &spConnections = mit->second;
-            const g2o::Sim3 Siw = vScw[nIDi];
+            const Sim3 Siw = vScw[nIDi];
 
             for(std::set<KeyFrame*>::const_iterator sit = spConnections.begin(), send = spConnections.end();
                 sit != send; sit++)
@@ -910,8 +910,8 @@ namespace ORB_SLAM3
                 if((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeight(*sit) < minFeat)
                     continue;
 
-                const g2o::Sim3 Sjw = vScw[nIDj];
-                const g2o::Sim3 Sij = Siw * Sjw.inverse();
+                const Sim3 Sjw = vScw[nIDj];
+                const Sim3 Sij = Siw * Sjw.inverse();
 
                 Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sij);
                 sInsertedEdges.insert(std::make_pair(std::min(nIDi, nIDj), std::max(nIDi, nIDj)));
@@ -925,7 +925,7 @@ namespace ORB_SLAM3
 
             const int nIDi = pKF->mnId;
 
-            g2o::Sim3 Siw;
+            Sim3 Siw;
 
             // Use noncorrected poses for posegraph edges
             KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
@@ -945,7 +945,7 @@ namespace ORB_SLAM3
             {
                 int nIDj = prevKF->mnId;
 
-                g2o::Sim3 Swj;
+                Sim3 Swj;
 
                 KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(prevKF);
 
@@ -954,7 +954,7 @@ namespace ORB_SLAM3
                 else
                     Swj = vScw[nIDj].inverse();
 
-                g2o::Sim3 Sij = Siw * Swj;
+                Sim3 Sij = Siw * Swj;
                 Constrain(mProblem, mvnPoseOfId, nIDi, nIDj, Sij);
             }
 
@@ -966,7 +966,7 @@ namespace ORB_SLAM3
                 KeyFrame* pLKF = *sit;
                 if(pLKF->mnId < pKF->mnId)
                 {
-                    g2o::Sim3 Swl;
+                    Sim3 Swl;
 
                     KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
 
@@ -975,7 +975,7 @@ namespace ORB_SLAM3
                     else
                         Swl = vScw[pLKF->mnId].inverse();
 
-                    g2o::Sim3 Sil = Siw * Swl;
+                    Sim3 Sil = Siw * Swl;
                     Constrain(mProblem, mvnPoseOfId, nIDi, pLKF->mnId, Sil);
                 }
             }
@@ -993,7 +993,7 @@ namespace ORB_SLAM3
                                std::make_pair(std::min(pKF->mnId, pKFn->mnId), std::max(pKF->mnId, pKFn->mnId))))
                             continue;
 
-                        g2o::Sim3 Swn;
+                        Sim3 Swn;
 
                         KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
 
@@ -1002,7 +1002,7 @@ namespace ORB_SLAM3
                         else
                             Swn = vScw[pKFn->mnId].inverse();
 
-                        g2o::Sim3 Sin = Siw * Swn;
+                        Sim3 Sin = Siw * Swn;
                         Constrain(mProblem, mvnPoseOfId, nIDi, pKFn->mnId, Sin);
                     }
                 }
@@ -1058,7 +1058,7 @@ namespace ORB_SLAM3
             Eigen::Matrix3d Ri = mProblem.poses[n].Rcw[0];
             Eigen::Vector3d ti = mProblem.poses[n].tcw[0];
 
-            g2o::Sim3 CorrectedSiw = g2o::Sim3(Ri, ti, 1.);
+            Sim3 CorrectedSiw = Sim3(Ri, ti, 1.);
             vCorrectedSwc[nIDi] = CorrectedSiw.inverse();
 
             Sophus::SE3d Tiw(CorrectedSiw.rotation(), CorrectedSiw.translation());
@@ -1081,8 +1081,8 @@ namespace ORB_SLAM3
             KeyFrame* pRefKF = pMP->GetReferenceKeyFrame();
             nIDr = pRefKF->mnId;
 
-            g2o::Sim3 Srw = vScw[nIDr];
-            g2o::Sim3 correctedSwr = vCorrectedSwc[nIDr];
+            Sim3 Srw = vScw[nIDr];
+            Sim3 correctedSwr = vCorrectedSwc[nIDr];
 
             Eigen::Matrix<double, 3, 1> eigP3Dw = pMP->GetWorldPos().cast<double>();
             Eigen::Matrix<double, 3, 1> eigCorrectedP3Dw = correctedSwr.map(Srw.map(eigP3Dw));

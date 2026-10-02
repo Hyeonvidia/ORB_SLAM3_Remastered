@@ -58,7 +58,7 @@ namespace ORB_SLAM3
         void BundleAdjustment(const std::vector<KeyFrame*> &vpKFs, const std::vector<MapPoint*> &vpMP, int nIterations,
                               bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust);
 
-        int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+        int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12,
                          const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
                          const bool bAllPoints);
 
@@ -85,6 +85,36 @@ namespace ORB_SLAM3
                              int &num_edges, bool bLarge, bool bRecInit);
         void MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbStopFlag, Map* pMap,
                              KeyFrameAndPose &corrPoses);
+
+        // v1.0's bodies are on g2o's Sim3, which the rest no longer names: the
+        // same seven numbers, given member by member so that nothing is
+        // normalised on the way.
+        typedef std::map<KeyFrame*, g2o::Sim3, std::less<KeyFrame*>,
+                         Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3>>>
+            KeyFrameAndPoseV1;
+        inline g2o::Sim3 ToV1(const Sim3 &S)
+        {
+            g2o::Sim3 G;
+            G.rotation() = S.rotation();
+            G.translation() = S.translation();
+            G.scale() = S.scale();
+            return G;
+        }
+        inline Sim3 FromV1(const g2o::Sim3 &G)
+        {
+            Sim3 S;
+            S.rotation() = G.rotation();
+            S.translation() = G.translation();
+            S.scale() = G.scale();
+            return S;
+        }
+        inline KeyFrameAndPoseV1 ToV1(const KeyFrameAndPose &poses)
+        {
+            KeyFrameAndPoseV1 v1;
+            for(const auto &pose : poses)
+                v1[pose.first] = ToV1(pose.second);
+            return v1;
+        }
 
         // One line per task at exit: calls, and calls that differed. Moved
         // counts a call that could not be compared: a global adjustment runs

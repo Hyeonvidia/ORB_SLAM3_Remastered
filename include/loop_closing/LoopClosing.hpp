@@ -28,7 +28,7 @@
 #include <boost/algorithm/string.hpp>
 #include <thread>
 #include <mutex>
-#include <orbslam3r/g2o_ext/compat.hpp>
+#include "common/Sim3.hpp"
 
 #include <iosfwd>
 #include <list>
@@ -125,16 +125,15 @@ namespace ORB_SLAM3
 
         //Methods to implement the new place recognition algorithm
         bool NewDetectCommonRegions();
-        bool DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw,
+        bool DetectAndReffineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, Sim3 &gScw,
                                             int &nNumProjMatches, std::vector<MapPoint*> &vpMPs,
                                             std::vector<MapPoint*> &vpMatchedMPs);
         bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, KeyFrame*&pMatchedKF,
-                                        KeyFrame*&pLastCurrentKF, g2o::Sim3 &g2oScw, int &nNumCoincidences,
+                                        KeyFrame*&pLastCurrentKF, Sim3 &g2oScw, int &nNumCoincidences,
                                         std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
-        bool DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw,
-                                           int &nNumProjMatches, std::vector<MapPoint*> &vpMPs,
-                                           std::vector<MapPoint*> &vpMatchedMPs);
-        int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw,
+        bool DetectCommonRegionsFromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, Sim3 &gScw, int &nNumProjMatches,
+                                           std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
+        int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, Sim3 &g2oScw,
                                     std::set<MapPoint*> &spMatchedMPinOrigin, std::vector<MapPoint*> &vpMapPoints,
                                     std::vector<MapPoint*> &vpMatchedMapPoints);
 
@@ -188,7 +187,7 @@ namespace ORB_SLAM3
         std::vector<MapPoint*> mvpCurrentMatchedPoints;
         std::vector<MapPoint*> mvpLoopMapPoints;
         cv::Mat mScw;
-        g2o::Sim3 mg2oScw;
+        Sim3 mg2oScw;
 
         //-------
         Map* mpLastMap;
@@ -197,8 +196,8 @@ namespace ORB_SLAM3
         int mnLoopNumCoincidences;
         int mnLoopNumNotFound;
         KeyFrame* mpLoopLastCurrentKF;
-        g2o::Sim3 mg2oLoopSlw;
-        g2o::Sim3 mg2oLoopScw;
+        Sim3 mg2oLoopSlw;
+        Sim3 mg2oLoopScw;
         KeyFrame* mpLoopMatchedKF;
         std::vector<MapPoint*> mvpLoopMPs;
         std::vector<MapPoint*> mvpLoopMatchedMPs;
@@ -206,15 +205,15 @@ namespace ORB_SLAM3
         int mnMergeNumCoincidences;
         int mnMergeNumNotFound;
         KeyFrame* mpMergeLastCurrentKF;
-        g2o::Sim3 mg2oMergeSlw;
-        g2o::Sim3 mg2oMergeSmw;
-        g2o::Sim3 mg2oMergeScw;
+        Sim3 mg2oMergeSlw;
+        Sim3 mg2oMergeSmw;
+        Sim3 mg2oMergeScw;
         KeyFrame* mpMergeMatchedKF;
         std::vector<MapPoint*> mvpMergeMPs;
         std::vector<MapPoint*> mvpMergeMatchedMPs;
         std::vector<KeyFrame*> mvpMergeConnectedKFs;
 
-        g2o::Sim3 mSold_new;
+        Sim3 mSold_new;
         //-------
 
         long unsigned int mLastLoopKFid;

@@ -93,7 +93,6 @@ orbslam3r_part(common
   LAYERS common
   EXCEPT common/Settings.cpp   # builds the cameras, so it is above them
   PACKAGES Eigen3::Eigen ${OpenCV_LIBS} Boost::serialization
-           orbslam3r::g2o_ext     # Converter's g2o overloads
            orbslam3r::dbow2_ext   # DUtils::Random, in TwoViewReconstruction's RANSAC
   HEADER_ONLY Sophus)
 

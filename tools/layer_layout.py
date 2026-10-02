@@ -71,7 +71,7 @@ LAYERS = {
     "common": ["Converter", "GeometricTools", "Settings", "Verbose",
                "SerializationUtils", "ImuTypes", "TwoViewReconstruction",
                "NavState", "Sensor", "TimeStats", "SophusEnsure", "WorkerPool",
-               "ThreadPorts", "FlatMap"],
+               "ThreadPorts", "FlatMap", "Sim3"],
     "viewer": ["Viewer", "FrameDrawer", "MapDrawer"],
 }
 # System sits above the layers and stays at the root of each tree.
