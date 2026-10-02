@@ -39,7 +39,7 @@
 
 #include <mutex>
 
-#include "optimization/OptimizableTypes.hpp"
+#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cmath>

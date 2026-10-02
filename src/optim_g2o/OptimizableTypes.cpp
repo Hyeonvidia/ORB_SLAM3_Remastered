@@ -16,7 +16,7 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "optimization/OptimizableTypes.hpp"
+#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <istream>
 #include <ostream>

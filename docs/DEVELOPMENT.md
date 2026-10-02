@@ -98,7 +98,9 @@ library that names the parts and the packages it uses:
 | `common` | `common/` except `Settings.cpp` | — |
 | `camera` | `camera/` | `common` |
 | `features` | `features/` | `common` |
-| `slam` | `atlas/ tracking/ optimization/ local_mapping/ loop_closing/`, `common/Settings.cpp` | `common camera features` |
+| `optim` | `optim/` (headers so far) | — |
+| `optim_g2o` | `optim_g2o/` | `optim camera` |
+| `slam` | `atlas/ tracking/ optimization/ local_mapping/ loop_closing/`, `common/Settings.cpp` | `common camera features optim optim_g2o` |
 | `system` | `System.cpp` | `slam common camera` |
 | `viewer` | `viewer/` | `system slam common` |
 | `noviewer` | `NoViewer.cpp`, in place of `viewer` | `system slam` |
@@ -117,6 +119,39 @@ writes to `build/part_graph.txt`; `ctest` runs it as `part_graph`.
 Without the viewer, `System` gets drawers that do nothing and no viewer thread
 (`src/NoViewer.cpp`); the library then depends on 35 shared objects instead of
 62.
+
+### Taking an optimisation apart
+
+`optimization/` has one source per task. A task that has been taken apart is
+three steps -- copy what is needed out of the map, solve, write back -- with
+the middle one seeing neither the map nor g2o:
+
+- `optim/` says the problem as plain values (`PoseProblem`) and what a solver
+  of it must do (`PoseSolver`);
+- `optim_g2o/` solves it with g2o (`G2oPoseSolver`), building the graph v1.0
+  built, edge for edge;
+- `optimization/PoseTask` builds the problem from a frame, runs the rounds --
+  which observations are in, which cost they get -- and applies the result.
+
+`Optimizer::PoseOptimization` is the first; the other seventeen functions are
+as v1.0 wrote them.
+
+That a task taken apart computes what it computed is shown by running both:
+
+```bash
+./docker/run.sh -- bash -c '
+  cmake -S /workspace -B /workspace/build_shadow -G Ninja -DCMAKE_BUILD_TYPE=Release \
+        -DORBSLAM3R_OPT_SHADOW=ON && cmake --build /workspace/build_shadow -j 12'
+```
+
+In that build each such task runs twice on the same input, as it is now and
+with v1.0's body (`src/optimization/Shadow*.cpp`), and the calls whose results
+differ in any bit are counted; a line per task is printed at exit
+(`OPT_SHADOW PoseOptimization: 5822 calls, 0 differ`). It compiles the two
+without fused multiply-add, because only then do the same expressions give the
+same bits whatever the compiler inlined; it is not a build to time. Run a plan
+through it with `CHECK_BIN=/workspace/build_shadow/bin` and
+`tools/check_run.py`.
 
 ## Formatting
 

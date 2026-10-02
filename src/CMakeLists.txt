@@ -58,15 +58,21 @@ function(orbslam3r_part name)
   endif()
 
   set(target orbslam3r_${name})
-  add_library(${target} OBJECT ${sources})
-  set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-  target_compile_features(${target} PUBLIC cxx_std_17)
+  if(sources)
+    set(scope PUBLIC)
+    add_library(${target} OBJECT ${sources})
+    set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  else()
+    set(scope INTERFACE) # a part that is headers only, so far
+    add_library(${target} INTERFACE)
+  endif()
+  target_compile_features(${target} ${scope} cxx_std_17)
   # Sophus's checks abort the process with their message on stdout, which a
   # file swallows; src/common/SophusEnsure.cpp puts it on stderr. PUBLIC,
   # because the check is inline in Sophus's headers and every user must see
   # the same one.
-  target_compile_definitions(${target} PUBLIC SOPHUS_ENABLE_ENSURE_HANDLER)
-  target_include_directories(${target} PUBLIC
+  target_compile_definitions(${target} ${scope} SOPHUS_ENABLE_ENSURE_HANDLER)
+  target_include_directories(${target} ${scope}
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
@@ -75,7 +81,7 @@ function(orbslam3r_part name)
   foreach(part ${P_USES})
     list(APPEND uses orbslam3r_${part})
   endforeach()
-  target_link_libraries(${target} PUBLIC ${uses} ${P_PACKAGES})
+  target_link_libraries(${target} ${scope} ${uses} ${P_PACKAGES})
 endfunction()
 
 # One folder per layer of the architecture in Figure 1 of the ORB-SLAM3 paper;
@@ -102,10 +108,23 @@ orbslam3r_part(features
   USES common
   PACKAGES ${OpenCV_LIBS})
 
+# An optimisation said without the map and without the library that solves it:
+# what is to be found, from what, and what a solver of it must do.
+orbslam3r_part(optim
+  LAYERS optim
+  PACKAGES Eigen3::Eigen)
+
+# Those solvers, on g2o, and the g2o edges they and the optimisations not yet
+# taken apart are built of.
+orbslam3r_part(optim_g2o
+  LAYERS optim_g2o
+  USES optim camera
+  PACKAGES Eigen3::Eigen orbslam3r::g2o_ext)
+
 orbslam3r_part(slam
   LAYERS atlas tracking optimization local_mapping loop_closing
   SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/common/Settings.cpp
-  USES common camera features
+  USES common camera features optim optim_g2o
   PACKAGES Eigen3::Eigen ${OpenCV_LIBS} Boost::serialization OpenSSL::Crypto
            orbslam3r::dbow2_ext   # DBoW2 + the text vocabulary + serialization
            orbslam3r::g2o_ext     # g2o + the renamed-symbol aliases + solver factory
@@ -139,6 +158,21 @@ orbslam3r_part(noviewer ${without_viewer}
   USES system slam
   HEADER_ONLY Sophus)
 
+# -DORBSLAM3R_OPT_SHADOW=ON: every optimisation that has been taken apart runs
+# twice on the same input, as it is now and as v1.0 wrote it, and the calls
+# whose results differ in any bit are counted (optimization/Shadow.hpp). The
+# two are different code computing the same expressions, and only without
+# fused multiply-add do the same expressions give the same bits whatever the
+# compiler inlined: with it, a product is rounded or not according to what it
+# was inlined next to. So the flag, on what the two are compiled from.
+option(ORBSLAM3R_OPT_SHADOW "Run taken-apart optimisations beside v1.0's and count the calls that differ" OFF)
+if(ORBSLAM3R_OPT_SHADOW)
+  foreach(part slam optim_g2o)
+    target_compile_definitions(orbslam3r_${part} PRIVATE ORBSLAM3R_OPT_SHADOW)
+    target_compile_options(orbslam3r_${part} PRIVATE -ffp-contract=off)
+  endforeach()
+endif()
+
 # A shared library with no sources of its own. The parts are named one by one:
 # an object library's objects go only into what links it directly, not into
 # what links something that links it.
@@ -148,6 +182,8 @@ target_link_libraries(ORB_SLAM3 PUBLIC
   orbslam3r_common
   orbslam3r_camera
   orbslam3r_features
+  orbslam3r_optim
+  orbslam3r_optim_g2o
   orbslam3r_slam
   orbslam3r_system
   $<IF:$<BOOL:${ORBSLAM3R_BUILD_VIEWER}>,orbslam3r_viewer,orbslam3r_noviewer>
