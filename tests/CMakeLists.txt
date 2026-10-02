@@ -65,3 +65,11 @@ target_include_directories(test_bowwords PRIVATE ${PROJECT_SOURCE_DIR}/include $
 target_compile_features(test_bowwords PRIVATE cxx_std_17)
 target_link_libraries(test_bowwords PRIVATE orbslam3r::dbow2_ext ${OpenCV_LIBS})
 add_test(NAME bowwords COMMAND test_bowwords)
+
+# Every #include against what src/CMakeLists.txt says its part may use.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME part_graph
+           COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/deps_check.py --check
+                   --graph ${CMAKE_BINARY_DIR}/part_graph.txt)
+endif()
