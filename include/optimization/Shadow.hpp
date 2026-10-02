@@ -67,6 +67,9 @@ namespace ORB_SLAM3
         void OptimizeEssentialGraph(KeyFrame* pCurKF, std::vector<KeyFrame*> &vpFixedKFs,
                                     std::vector<KeyFrame*> &vpFixedCorrectedKFs, std::vector<KeyFrame*> &vpNonFixedKFs,
                                     std::vector<MapPoint*> &vpNonCorrectedMPs);
+        void OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+                                        const KeyFrameAndPose &NonCorrectedSim3, const KeyFrameAndPose &CorrectedSim3,
+                                        const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections);
 
         // One line per task at exit: calls, and calls that differed. Moved
         // counts a call that could not be compared: a global adjustment runs

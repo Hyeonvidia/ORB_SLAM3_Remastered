@@ -779,6 +779,347 @@ namespace ORB_SLAM3
                 Count("OptimizeEssentialGraph (merge)", task.Matches(vpNonFixedKFs, vTiw));
         }
 
+        // v1.0's Optimizer::OptimizeEssentialGraph4DoF, likewise.
+        void OptimizeEssentialGraph4DoFV1(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+                                          const KeyFrameAndPose &NonCorrectedSim3, const KeyFrameAndPose &CorrectedSim3,
+                                          const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections, Digest &read)
+        {
+            std::size_t nRead = 0; // constraints, in the order their edges are added
+            auto NotePose = [&read](bool bAdded, VertexPose4DoF* pVertex)
+            {
+                if(!bAdded)
+                    return;
+                const ImuCamPose &P = pVertex->estimate();
+                read.Add('V', static_cast<long unsigned int>(pVertex->id()), P.Rwb, P.twb, P.Rcw[0], P.tcw[0], P.Rcb[0],
+                         P.tcb[0], pVertex->fixed());
+            };
+            auto NoteEdge =
+                [&read, &nRead](bool bAdded, long unsigned int from, long unsigned int to, const Eigen::Matrix4d &T)
+            {
+                if(!bAdded)
+                    return;
+                const Eigen::Matrix3d R = T.block<3, 3>(0, 0);
+                const Eigen::Vector3d t = T.block<3, 1>(0, 3);
+                read.Add('E', nRead++, from, to, R, t);
+            };
+            typedef g2o::BlockSolver<g2o::BlockSolverTraits<4, 4>> BlockSolver_4_4;
+
+            // Setup optimizer
+            g2o::SparseOptimizer optimizer;
+            optimizer.setVerbose(false);
+
+            auto* solver =
+                orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolverX, orbslam3r::g2o_ext::LinearSolver::kEigen>();
+
+            optimizer.setAlgorithm(solver);
+
+            const std::vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+            const std::vector<MapPoint*> vpMPs = pMap->GetAllMapPoints();
+
+            const unsigned int nMaxKFid = pMap->GetMaxKFid();
+
+            std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> vScw(nMaxKFid + 1);
+            std::vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3>> vCorrectedSwc(nMaxKFid + 1);
+
+            std::vector<VertexPose4DoF*> vpVertices(nMaxKFid + 1);
+
+            const int minFeat = 100;
+            // Set KeyFrame vertices
+            for(size_t i = 0, iend = vpKFs.size(); i < iend; i++)
+            {
+                KeyFrame* pKF = vpKFs[i];
+                if(pKF->isBad())
+                    continue;
+
+                VertexPose4DoF* V4DoF;
+
+                const int nIDi = pKF->mnId;
+
+                KeyFrameAndPose::const_iterator it = CorrectedSim3.find(pKF);
+
+                if(it != CorrectedSim3.end())
+                {
+                    vScw[nIDi] = it->second;
+                    const g2o::Sim3 Swc = it->second.inverse();
+                    Eigen::Matrix3d Rwc = Swc.rotation().toRotationMatrix();
+                    Eigen::Vector3d twc = Swc.translation();
+                    V4DoF = new VertexPose4DoF(Rwc, twc, pKF);
+                }
+                else
+                {
+                    Sophus::SE3d Tcw = pKF->GetPose().cast<double>();
+                    g2o::Sim3 Siw(Tcw.unit_quaternion(), Tcw.translation(), 1.0);
+
+                    vScw[nIDi] = Siw;
+                    V4DoF = new VertexPose4DoF(pKF);
+                }
+
+                if(pKF == pLoopKF)
+                    V4DoF->setFixed(true);
+
+                V4DoF->setId(nIDi);
+                V4DoF->setMarginalized(false);
+
+                NotePose(optimizer.addVertex(V4DoF), V4DoF);
+                vpVertices[nIDi] = V4DoF;
+            }
+            std::set<std::pair<long unsigned int, long unsigned int>> sInsertedEdges;
+
+            // Edge used in posegraph has still 6Dof, even if updates of camera poses are just in 4DoF
+            Eigen::Matrix<double, 6, 6> matLambda = Eigen::Matrix<double, 6, 6>::Identity();
+            matLambda(0, 0) = 1e3;
+            matLambda(1, 1) = 1e3;
+            matLambda(0, 0) = 1e3;
+
+            // Set Loop edges
+            Edge4DoF* e_loop;
+            for(std::map<KeyFrame*, std::set<KeyFrame*>>::const_iterator mit = LoopConnections.begin(),
+                                                                         mend = LoopConnections.end();
+                mit != mend; mit++)
+            {
+                KeyFrame* pKF = mit->first;
+                const long unsigned int nIDi = pKF->mnId;
+                const std::set<KeyFrame*> &spConnections = mit->second;
+                const g2o::Sim3 Siw = vScw[nIDi];
+
+                for(std::set<KeyFrame*>::const_iterator sit = spConnections.begin(), send = spConnections.end();
+                    sit != send; sit++)
+                {
+                    const long unsigned int nIDj = (*sit)->mnId;
+                    if((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeight(*sit) < minFeat)
+                        continue;
+
+                    const g2o::Sim3 Sjw = vScw[nIDj];
+                    const g2o::Sim3 Sij = Siw * Sjw.inverse();
+                    Eigen::Matrix4d Tij;
+                    Tij.block<3, 3>(0, 0) = Sij.rotation().toRotationMatrix();
+                    Tij.block<3, 1>(0, 3) = Sij.translation();
+                    Tij(3, 3) = 1.;
+
+                    Edge4DoF* e = new Edge4DoF(Tij);
+                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
+
+                    e->information() = matLambda;
+                    e_loop = e;
+                    NoteEdge(optimizer.addEdge(e), nIDi, nIDj, Tij);
+
+                    sInsertedEdges.insert(std::make_pair(std::min(nIDi, nIDj), std::max(nIDi, nIDj)));
+                }
+            }
+
+            // 1. Set normal edges
+            for(size_t i = 0, iend = vpKFs.size(); i < iend; i++)
+            {
+                KeyFrame* pKF = vpKFs[i];
+
+                const int nIDi = pKF->mnId;
+
+                g2o::Sim3 Siw;
+
+                // Use noncorrected poses for posegraph edges
+                KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
+
+                if(iti != NonCorrectedSim3.end())
+                    Siw = iti->second;
+                else
+                    Siw = vScw[nIDi];
+
+                // 1.1.0 Spanning tree edge
+                KeyFrame* pParentKF = static_cast<KeyFrame*>(NULL);
+                if(pParentKF)
+                {
+                    int nIDj = pParentKF->mnId;
+
+                    g2o::Sim3 Swj;
+
+                    KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
+
+                    if(itj != NonCorrectedSim3.end())
+                        Swj = (itj->second).inverse();
+                    else
+                        Swj = vScw[nIDj].inverse();
+
+                    g2o::Sim3 Sij = Siw * Swj;
+                    Eigen::Matrix4d Tij;
+                    Tij.block<3, 3>(0, 0) = Sij.rotation().toRotationMatrix();
+                    Tij.block<3, 1>(0, 3) = Sij.translation();
+                    Tij(3, 3) = 1.;
+
+                    Edge4DoF* e = new Edge4DoF(Tij);
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
+                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
+                    e->information() = matLambda;
+                    NoteEdge(optimizer.addEdge(e), nIDi, nIDj, Tij);
+                }
+
+                // 1.1.1 Inertial edges
+                KeyFrame* prevKF = pKF->mPrevKF;
+                if(prevKF)
+                {
+                    int nIDj = prevKF->mnId;
+
+                    g2o::Sim3 Swj;
+
+                    KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(prevKF);
+
+                    if(itj != NonCorrectedSim3.end())
+                        Swj = (itj->second).inverse();
+                    else
+                        Swj = vScw[nIDj].inverse();
+
+                    g2o::Sim3 Sij = Siw * Swj;
+                    Eigen::Matrix4d Tij;
+                    Tij.block<3, 3>(0, 0) = Sij.rotation().toRotationMatrix();
+                    Tij.block<3, 1>(0, 3) = Sij.translation();
+                    Tij(3, 3) = 1.;
+
+                    Edge4DoF* e = new Edge4DoF(Tij);
+                    e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
+                    e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
+                    e->information() = matLambda;
+                    NoteEdge(optimizer.addEdge(e), nIDi, nIDj, Tij);
+                }
+
+                // 1.2 Loop edges
+                const std::set<KeyFrame*> sLoopEdges = pKF->GetLoopEdges();
+                for(std::set<KeyFrame*>::const_iterator sit = sLoopEdges.begin(), send = sLoopEdges.end(); sit != send;
+                    sit++)
+                {
+                    KeyFrame* pLKF = *sit;
+                    if(pLKF->mnId < pKF->mnId)
+                    {
+                        g2o::Sim3 Swl;
+
+                        KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
+
+                        if(itl != NonCorrectedSim3.end())
+                            Swl = itl->second.inverse();
+                        else
+                            Swl = vScw[pLKF->mnId].inverse();
+
+                        g2o::Sim3 Sil = Siw * Swl;
+                        Eigen::Matrix4d Til;
+                        Til.block<3, 3>(0, 0) = Sil.rotation().toRotationMatrix();
+                        Til.block<3, 1>(0, 3) = Sil.translation();
+                        Til(3, 3) = 1.;
+
+                        Edge4DoF* e = new Edge4DoF(Til);
+                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
+                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pLKF->mnId)));
+                        e->information() = matLambda;
+                        NoteEdge(optimizer.addEdge(e), nIDi, pLKF->mnId, Til);
+                    }
+                }
+
+                // 1.3 Covisibility graph edges
+                const std::vector<KeyFrame*> vpConnectedKFs = pKF->GetCovisiblesByWeight(minFeat);
+                for(std::vector<KeyFrame*>::const_iterator vit = vpConnectedKFs.begin(); vit != vpConnectedKFs.end();
+                    vit++)
+                {
+                    KeyFrame* pKFn = *vit;
+                    if(pKFn && pKFn != pParentKF && pKFn != prevKF && pKFn != pKF->mNextKF && !pKF->hasChild(pKFn) &&
+                       !sLoopEdges.count(pKFn))
+                    {
+                        if(!pKFn->isBad() && pKFn->mnId < pKF->mnId)
+                        {
+                            if(sInsertedEdges.count(
+                                   std::make_pair(std::min(pKF->mnId, pKFn->mnId), std::max(pKF->mnId, pKFn->mnId))))
+                                continue;
+
+                            g2o::Sim3 Swn;
+
+                            KeyFrameAndPose::const_iterator itn = NonCorrectedSim3.find(pKFn);
+
+                            if(itn != NonCorrectedSim3.end())
+                                Swn = itn->second.inverse();
+                            else
+                                Swn = vScw[pKFn->mnId].inverse();
+
+                            g2o::Sim3 Sin = Siw * Swn;
+                            Eigen::Matrix4d Tin;
+                            Tin.block<3, 3>(0, 0) = Sin.rotation().toRotationMatrix();
+                            Tin.block<3, 1>(0, 3) = Sin.translation();
+                            Tin(3, 3) = 1.;
+                            Edge4DoF* e = new Edge4DoF(Tin);
+                            e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDi)));
+                            e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFn->mnId)));
+                            e->information() = matLambda;
+                            NoteEdge(optimizer.addEdge(e), nIDi, pKFn->mnId, Tin);
+                        }
+                    }
+                }
+            }
+
+            optimizer.initializeOptimization();
+            optimizer.computeActiveErrors();
+            optimizer.optimize(20);
+
+            std::lock_guard<std::mutex> lock(pMap->mMutexMapUpdate);
+
+            // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
+            for(size_t i = 0; i < vpKFs.size(); i++)
+            {
+                KeyFrame* pKFi = vpKFs[i];
+
+                const int nIDi = pKFi->mnId;
+
+                VertexPose4DoF* Vi = static_cast<VertexPose4DoF*>(optimizer.vertex(nIDi));
+                Eigen::Matrix3d Ri = Vi->estimate().Rcw[0];
+                Eigen::Vector3d ti = Vi->estimate().tcw[0];
+
+                g2o::Sim3 CorrectedSiw = g2o::Sim3(Ri, ti, 1.);
+                vCorrectedSwc[nIDi] = CorrectedSiw.inverse();
+
+                Sophus::SE3d Tiw(CorrectedSiw.rotation(), CorrectedSiw.translation());
+                pKFi->SetPose(Tiw.cast<float>());
+            }
+
+            // Correct points. Transform to "non-optimized" reference keyframe pose and transform back with optimized pose
+            for(size_t i = 0, iend = vpMPs.size(); i < iend; i++)
+            {
+                MapPoint* pMP = vpMPs[i];
+
+                if(pMP->isBad())
+                    continue;
+
+                int nIDr;
+
+                KeyFrame* pRefKF = pMP->GetReferenceKeyFrame();
+                nIDr = pRefKF->mnId;
+
+                g2o::Sim3 Srw = vScw[nIDr];
+                g2o::Sim3 correctedSwr = vCorrectedSwc[nIDr];
+
+                Eigen::Matrix<double, 3, 1> eigP3Dw = pMP->GetWorldPos().cast<double>();
+                Eigen::Matrix<double, 3, 1> eigCorrectedP3Dw = correctedSwr.map(Srw.map(eigP3Dw));
+                pMP->SetWorldPos(eigCorrectedP3Dw.cast<float>());
+
+                pMP->UpdateNormalAndDepth();
+            }
+            pMap->IncreaseChangeIndex();
+        }
+
+        void OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF,
+                                        const KeyFrameAndPose &NonCorrectedSim3, const KeyFrameAndPose &CorrectedSim3,
+                                        const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections)
+        {
+            EssentialGraph4DofTask task;
+            task.Build(pMap, pLoopKF, pCurKF, NonCorrectedSim3, CorrectedSim3, LoopConnections);
+            const Digest input = task.Input();
+            const std::unique_ptr<optim::Pose4DofGraphSolver> pSolver = optim::MakePose4DofGraphSolver();
+            task.Solve(*pSolver);
+            const EssentialGraphTask::Written written = task.Preview();
+
+            Digest read;
+            OptimizeEssentialGraph4DoFV1(pMap, pLoopKF, pCurKF, NonCorrectedSim3, CorrectedSim3, LoopConnections, read);
+
+            if(read != input)
+                Moved("OptimizeEssentialGraph4DoF");
+            else
+                Count("OptimizeEssentialGraph4DoF", task.Matches(written));
+        }
+
     } // namespace shadow
 
 } // namespace ORB_SLAM3

@@ -19,6 +19,8 @@
 #ifndef ESSENTIALGRAPHTASK_H
 #define ESSENTIALGRAPHTASK_H
 
+#include "optim/Pose4DofGraphProblem.hpp"
+#include "optim/Pose4DofGraphSolver.hpp"
 #include "optim/Sim3GraphProblem.hpp"
 #include "optim/Sim3GraphSolver.hpp"
 #include "optimization/Digest.hpp"
@@ -112,6 +114,40 @@ namespace ORB_SLAM3
         std::vector<KeyFrame*> mvpPoseKF;
         std::vector<int> mvnPoseOfId;
         std::vector<bool> mvbBadPose; // by keyframe id: it has a pose in the old frame
+    };
+
+    // Optimizer::OptimizeEssentialGraph4DoF: the graph after a loop in an
+    // inertial map, where gravity has fixed roll and pitch and scale is known.
+    // The keyframes move in translation and in yaw only; the keyframe the loop
+    // was closed with is held. A keyframe is held to the one before it rather
+    // than to its parent, and otherwise as above.
+    class EssentialGraph4DofTask
+    {
+    public:
+        void Build(Map* pMap, KeyFrame* pLoopKF, KeyFrame* pCurKF, const KeyFrameAndPose &NonCorrectedSim3,
+                   const KeyFrameAndPose &CorrectedSim3,
+                   const std::map<KeyFrame*, std::set<KeyFrame*>> &LoopConnections);
+
+        void Solve(optim::Pose4DofGraphSolver &solver);
+
+        // Every keyframe takes its pose and every point is moved as its
+        // reference keyframe moved. Takes the map's update lock.
+        void Apply(Map* pMap) const;
+
+        // For the build that runs v1.0's body beside this: as above.
+        Digest Input() const;
+        EssentialGraphTask::Written Preview() const;
+        bool Matches(const EssentialGraphTask::Written &written) const;
+
+    private:
+        void Write(EssentialGraphTask::Written* pPreview) const;
+
+        optim::Pose4DofGraphProblem mProblem;
+        std::vector<KeyFrame*> mvpKFs; // the map's, as listed
+        std::vector<MapPoint*> mvpMPs;
+        std::vector<KeyFrame*> mvpPoseKF; // by pose of the problem
+        std::vector<int> mvnPoseOfId;     // by keyframe id: its pose in the problem, or -1
+        Sim3Vector mvScw;                 // by keyframe id: its pose before the optimisation
     };
 
 } // namespace ORB_SLAM3

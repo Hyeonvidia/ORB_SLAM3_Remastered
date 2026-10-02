@@ -118,8 +118,8 @@ orbslam3r_part(optim
 # taken apart are built of.
 orbslam3r_part(optim_g2o
   LAYERS optim_g2o
-  USES optim camera
-  PACKAGES Eigen3::Eigen orbslam3r::g2o_ext)
+  USES optim camera common   # common: the preintegration of the inertial edges
+  PACKAGES Eigen3::Eigen ${OpenCV_LIBS} orbslam3r::g2o_ext)
 
 orbslam3r_part(slam
   LAYERS atlas tracking optimization local_mapping loop_closing
