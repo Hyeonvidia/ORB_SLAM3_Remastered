@@ -38,18 +38,18 @@ namespace ORB_SLAM3
         mProblem.Rcw = Tcw.unit_quaternion().cast<double>();
         mProblem.tcw = Tcw.translation().cast<double>();
 
-        mProblem.camera = pFrame->mpCamera;
-        mProblem.camera2 = pFrame->mpCamera2;
+        mProblem.rig.camera = pFrame->mpCamera;
+        mProblem.rig.camera2 = pFrame->mpCamera2;
         if(pFrame->mpCamera2)
         {
-            mProblem.Rrl = pFrame->GetRelativePoseTrl().unit_quaternion().cast<double>();
-            mProblem.trl = pFrame->GetRelativePoseTrl().translation().cast<double>();
+            mProblem.rig.Rrl = pFrame->GetRelativePoseTrl().unit_quaternion().cast<double>();
+            mProblem.rig.trl = pFrame->GetRelativePoseTrl().translation().cast<double>();
         }
-        mProblem.fx = pFrame->fx;
-        mProblem.fy = pFrame->fy;
-        mProblem.cx = pFrame->cx;
-        mProblem.cy = pFrame->cy;
-        mProblem.bf = pFrame->mbf;
+        mProblem.rig.fx = pFrame->fx;
+        mProblem.rig.fy = pFrame->fy;
+        mProblem.rig.cx = pFrame->cx;
+        mProblem.rig.cy = pFrame->cy;
+        mProblem.rig.bf = pFrame->mbf;
 
         const int N = pFrame->N;
         mProblem.reserve(N);
@@ -61,7 +61,7 @@ namespace ORB_SLAM3
             if(!pMP)
                 continue;
 
-            optim::PoseProblem::Kind kind;
+            optim::ObservationKind kind;
             cv::KeyPoint kp;
             float uR = 0.f;
             //Conventional SLAM
@@ -69,10 +69,10 @@ namespace ORB_SLAM3
             {
                 kp = pFrame->mvKeysUn[i];
                 if(pFrame->mvuRight[i] < 0)
-                    kind = optim::PoseProblem::kMono;
+                    kind = optim::kMono;
                 else
                 {
-                    kind = optim::PoseProblem::kStereo;
+                    kind = optim::kStereo;
                     uR = pFrame->mvuRight[i];
                 }
             }
@@ -80,17 +80,17 @@ namespace ORB_SLAM3
             else if(i < pFrame->Nleft)
             {
                 kp = pFrame->mvKeys[i];
-                kind = optim::PoseProblem::kMono;
+                kind = optim::kMono;
             }
             else
             {
                 kp = pFrame->mvKeysRight[i - pFrame->Nleft];
-                kind = optim::PoseProblem::kRight;
+                kind = optim::kRight;
             }
 
             const float invSigma2 = pFrame->mvInvLevelSigma2[kp.octave];
             mProblem.add(kind, pMP->GetWorldPos().cast<double>(), Eigen::Vector3d(kp.pt.x, kp.pt.y, uR), invSigma2,
-                         kind == optim::PoseProblem::kStereo ? deltaStereo : deltaMono);
+                         kind == optim::kStereo ? deltaStereo : deltaMono);
             mvnFeature.push_back(i);
         }
         mvbOutlier.assign(mProblem.size(), 0);
@@ -123,7 +123,7 @@ namespace ORB_SLAM3
             for(std::size_t i = 0; i < n; i++)
             {
                 const float chi2 = mProblem.chi2[i];
-                const float th = mProblem.kind[i] == optim::PoseProblem::kStereo ? chi2Stereo[it] : chi2Mono[it];
+                const float th = mProblem.kind[i] == optim::kStereo ? chi2Stereo[it] : chi2Mono[it];
                 const bool bBad = chi2 > th;
                 mvbOutlier[i] = bBad;
                 mProblem.active[i] = !bBad;

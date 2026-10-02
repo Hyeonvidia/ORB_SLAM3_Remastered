@@ -65,28 +65,28 @@ namespace ORB_SLAM3
                     for(std::size_t i = 0; i < n; i++)
                     {
                         g2o::OptimizableGraph::Edge* pEdge = nullptr;
-                        if(problem.kind[i] == PoseProblem::kStereo)
+                        if(problem.kind[i] == kStereo)
                         {
                             g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
                             e->setVertex(0, mpPose);
                             e->setMeasurement(problem.uv[i]);
                             Eigen::Matrix3d Info = Eigen::Matrix3d::Identity() * problem.invSigma2[i];
                             e->setInformation(Info);
-                            e->fx = problem.fx;
-                            e->fy = problem.fy;
-                            e->cx = problem.cx;
-                            e->cy = problem.cy;
-                            e->bf = problem.bf;
+                            e->fx = problem.rig.fx;
+                            e->fy = problem.rig.fy;
+                            e->cx = problem.rig.cx;
+                            e->cy = problem.rig.cy;
+                            e->bf = problem.rig.bf;
                             e->Xw = problem.Xw[i];
                             pEdge = e;
                         }
-                        else if(problem.kind[i] == PoseProblem::kMono)
+                        else if(problem.kind[i] == kMono)
                         {
                             EdgeSE3ProjectXYZOnlyPose* e = new EdgeSE3ProjectXYZOnlyPose();
                             e->setVertex(0, mpPose);
                             e->setMeasurement(problem.uv[i].head<2>());
                             e->setInformation(Eigen::Matrix2d::Identity() * problem.invSigma2[i]);
-                            e->pCamera = problem.camera;
+                            e->pCamera = problem.rig.camera;
                             e->Xw = problem.Xw[i];
                             pEdge = e;
                         }
@@ -96,9 +96,9 @@ namespace ORB_SLAM3
                             e->setVertex(0, mpPose);
                             e->setMeasurement(problem.uv[i].head<2>());
                             e->setInformation(Eigen::Matrix2d::Identity() * problem.invSigma2[i]);
-                            e->pCamera = problem.camera2;
+                            e->pCamera = problem.rig.camera2;
                             e->Xw = problem.Xw[i];
-                            e->mTrl = g2o::SE3Quat(problem.Rrl, problem.trl);
+                            e->mTrl = g2o::SE3Quat(problem.rig.Rrl, problem.rig.trl);
                             pEdge = e;
                         }
 

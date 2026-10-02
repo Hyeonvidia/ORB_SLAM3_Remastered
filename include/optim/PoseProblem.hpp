@@ -19,6 +19,8 @@
 #ifndef OPTIM_POSEPROBLEM_H
 #define OPTIM_POSEPROBLEM_H
 
+#include "optim/Rig.hpp"
+
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
@@ -28,8 +30,6 @@
 
 namespace ORB_SLAM3
 {
-
-    class GeometricCamera;
 
     namespace optim
     {
@@ -44,25 +44,14 @@ namespace ORB_SLAM3
         // the system has them.
         struct PoseProblem
         {
-            enum Kind : std::uint8_t
-            {
-                kMono,   // (u, v) in `camera`
-                kStereo, // (u, v, uR) of a rectified pair: fx, fy, cx, cy, bf
-                kRight,  // (u, v) in `camera2`, which is right-from-left of `camera`
-            };
-
             // In: where to start. Out: what was found.
             Eigen::Quaterniond Rcw = Eigen::Quaterniond::Identity();
             Eigen::Vector3d tcw = Eigen::Vector3d::Zero();
 
-            GeometricCamera* camera = nullptr;
-            GeometricCamera* camera2 = nullptr;
-            Eigen::Quaterniond Rrl = Eigen::Quaterniond::Identity();
-            Eigen::Vector3d trl = Eigen::Vector3d::Zero();
-            double fx = 0, fy = 0, cx = 0, cy = 0, bf = 0;
+            Rig rig;
 
             // One entry per observation, in the order they are to be summed.
-            std::vector<std::uint8_t> kind;
+            std::vector<std::uint8_t> kind; // ObservationKind
             std::vector<Eigen::Vector3d> Xw;
             std::vector<Eigen::Vector3d> uv; // (u, v, uR); uR unused but for kStereo
             std::vector<double> invSigma2;   // the information of each is this times identity
@@ -92,8 +81,8 @@ namespace ORB_SLAM3
                 chi2.reserve(n);
             }
 
-            void add(Kind k, const Eigen::Vector3d &point, const Eigen::Vector3d &observed, double information,
-                     double width)
+            void add(ObservationKind k, const Eigen::Vector3d &point, const Eigen::Vector3d &observed,
+                     double information, double width)
             {
                 kind.push_back(k);
                 Xw.push_back(point);

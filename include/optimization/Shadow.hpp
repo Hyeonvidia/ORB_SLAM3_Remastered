@@ -31,11 +31,15 @@ namespace ORB_SLAM3
 {
 
     class Frame;
+    class KeyFrame;
+    class Map;
 
     namespace shadow
     {
 
         int PoseOptimization(Frame* pFrame);
+        void LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int &num_fixedKF, int &num_OptKF,
+                                   int &num_MPs, int &num_edges);
 
         // One line per task at exit: calls, and calls that differed.
         void Count(const char* task, bool same);

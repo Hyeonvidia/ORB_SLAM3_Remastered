@@ -51,9 +51,10 @@ LAYERS = {
     "local_mapping": ["LocalMapping"],
     "loop_closing": ["LoopClosing", "Sim3Solver"],
     # Optimizer is the header; its functions are in one source per task.
-    "optim": ["PoseProblem", "PoseSolver"],
-    "optim_g2o": ["OptimizableTypes", "G2oPoseSolver"],
-    "optimization": ["Optimizer", "G2oTypes", "KeyFrameAndPose", "PoseTask", "Shadow", "ShadowPoseOptimization",
+    "optim": ["Rig", "SolveOptions", "PoseProblem", "PoseSolver", "BaProblem", "BundleAdjuster"],
+    "optim_g2o": ["OptimizableTypes", "G2oPoseSolver", "G2oBundleAdjuster"],
+    "optimization": ["Optimizer", "G2oTypes", "KeyFrameAndPose", "PoseTask", "LocalBaTask", "Shadow",
+                     "ShadowPoseOptimization", "ShadowLocalBundleAdjustment",
                      "PoseOptimization", "InertialPoseOptimization", "LocalBundleAdjustment",
                      "GlobalBundleAdjustment", "InertialBundleAdjustment", "InertialInitialization",
                      "EssentialGraph", "Sim3Optimization"],
