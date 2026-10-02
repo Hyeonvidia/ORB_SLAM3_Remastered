@@ -24,7 +24,7 @@
 #include "common/TimeStats.hpp"
 #include "optimization/Optimizer.hpp"
 #include "tracking/ORBmatcher.hpp"
-#include "optimization/G2oTypes.hpp"
+#include "common/SO3.hpp"
 
 #include <mutex>
 #include <thread>

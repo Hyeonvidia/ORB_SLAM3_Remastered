@@ -19,30 +19,14 @@
 #include "optimization/Optimizer.hpp"
 #include "optimization/BodyPoseOf.hpp"
 #include "optimization/InertialAlignmentTask.hpp"
-#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
-
-#include <complex>
 
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
 
-#include <g2o/core/sparse_block_matrix.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/solver_factory.hpp>
-#include <g2o/core/robust_kernel_impl.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
-#include "optimization/G2oTypes.hpp"
 #include "common/Converter.hpp"
 
 #include <mutex>
-
-#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -135,7 +119,7 @@ namespace ORB_SLAM3
     {
         // Recover optimized data
         // Biases
-        Vector6d vb;
+        Eigen::Matrix<double, 6, 1> vb;
         vb << mProblem.gyroBias, mProblem.accBias;
         const Eigen::Vector3d &bg = mProblem.gyroBias;
 
@@ -162,41 +146,6 @@ namespace ORB_SLAM3
             else
                 pKFi->SetNewBias(b);
         }
-    }
-
-    Digest InertialAlignmentTask::Input() const
-    {
-        Digest digest;
-        for(std::size_t i = 0; i < mProblem.poses.size(); i++)
-            digest.Add('P', mvpPoseKF[i]->mnId, mProblem.poses[i].Rwb, mProblem.poses[i].twb, mProblem.velocity[i]);
-        for(std::size_t k = 0; k < mProblem.constraints(); k++)
-        {
-            const IMU::Preintegrated* pInt = mProblem.preintegration[k];
-            digest.Add('E', mvpPoseKF[mProblem.from[k]]->mnId, mvpPoseKF[mProblem.to[k]]->mnId, pInt->dT, pInt->dR,
-                       pInt->dV, pInt->dP);
-        }
-        return digest;
-    }
-
-    bool InertialAlignmentTask::Holds() const
-    {
-        Vector6d vb;
-        vb << mProblem.gyroBias, mProblem.accBias;
-        const IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
-        for(size_t i = 0; i < mvpKFs.size(); i++)
-        {
-            if(mvnPose[i] < 0)
-                continue;
-            const Eigen::Vector3f v = mProblem.velocity[mvnPose[i]].cast<float>();
-            const Eigen::Vector3f vMap = mvpKFs[i]->GetVelocity();
-            if(std::memcmp(v.data(), vMap.data(), 3 * sizeof(float)) != 0)
-                return false;
-            const IMU::Bias bMap = mvpKFs[i]->GetImuBias();
-            if(bMap.bax != b.bax || bMap.bay != b.bay || bMap.baz != b.baz || bMap.bwx != b.bwx || bMap.bwy != b.bwy ||
-               bMap.bwz != b.bwz)
-                return false;
-        }
-        return true;
     }
 
     // What each of the three holds and how it is solved.
@@ -263,9 +212,6 @@ namespace ORB_SLAM3
                                          bool bGauss, float priorG, float priorA)
     {
         Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::InertialOptimization(pMap, Rwg, scale, bg, ba, bMono, covInertial, bFixedVel, bGauss, priorG, priorA);
-#else
         InertialAlignmentTask task;
         task.Build(pMap, Rwg, scale, bMono, bFixedVel, priorG, priorA);
         const std::unique_ptr<optim::InertialAlignmentSolver> pSolver = optim::MakeInertialAlignmentSolver();
@@ -277,15 +223,11 @@ namespace ORB_SLAM3
         scale = found.scale;
         Rwg = found.Rwg;
         task.Apply();
-#endif
     }
 
     void Optimizer::InertialOptimization(Map* pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG,
                                          float priorA)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::InertialOptimization(pMap, bg, ba, priorG, priorA);
-#else
         InertialAlignmentTask task;
         task.Build(pMap, priorG, priorA);
         const std::unique_ptr<optim::InertialAlignmentSolver> pSolver = optim::MakeInertialAlignmentSolver();
@@ -295,14 +237,10 @@ namespace ORB_SLAM3
         bg = found.gyroBias;
         ba = found.accBias;
         task.Apply();
-#endif
     }
 
     void Optimizer::InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::InertialOptimization(pMap, Rwg, scale);
-#else
         InertialAlignmentTask task;
         task.Build(pMap, Rwg, scale);
         const std::unique_ptr<optim::InertialAlignmentSolver> pSolver = optim::MakeInertialAlignmentSolver();
@@ -312,7 +250,6 @@ namespace ORB_SLAM3
         const optim::InertialAlignmentProblem &found = task.Problem();
         scale = found.scale;
         Rwg = found.Rwg;
-#endif
     }
 
 } // namespace ORB_SLAM3

@@ -99,8 +99,8 @@ library that names the parts and the packages it uses:
 | `camera` | `camera/` | `common` |
 | `features` | `features/` | `common` |
 | `optim` | `optim/` (headers so far) | — |
-| `optim_g2o` | `optim_g2o/` | `optim camera` |
-| `slam` | `atlas/ tracking/ optimization/ local_mapping/ loop_closing/`, `common/Settings.cpp` | `common camera features optim optim_g2o` |
+| `optim_g2o` | `optim_g2o/` | `optim camera common` |
+| `slam` | `atlas/ tracking/ optimization/ local_mapping/ loop_closing/`, `common/Settings.cpp` | `common camera features optim` |
 | `system` | `System.cpp` | `slam common camera` |
 | `viewer` | `viewer/` | `system slam common` |
 | `noviewer` | `NoViewer.cpp`, in place of `viewer` | `system slam` |
@@ -120,38 +120,52 @@ Without the viewer, `System` gets drawers that do nothing and no viewer thread
 (`src/NoViewer.cpp`); the library then depends on 35 shared objects instead of
 62.
 
-### Taking an optimisation apart
+### How an optimisation is put together
 
-`optimization/` has one source per task. A task that has been taken apart is
-three steps -- copy what is needed out of the map, solve, write back -- with
-the middle one seeing neither the map nor g2o:
+Every optimisation is three steps -- copy what is needed out of the map, solve,
+write back -- and the middle one sees neither the map nor the library that
+solves it:
 
-- `optim/` says the problem as plain values (`PoseProblem`) and what a solver
-  of it must do (`PoseSolver`);
-- `optim_g2o/` solves it with g2o (`G2oPoseSolver`), building the graph v1.0
-  built, edge for edge;
-- `optimization/PoseTask` builds the problem from a frame, runs the rounds --
-  which observations are in, which cost they get -- and applies the result.
+- `optim/` says a problem as plain values and what a solver of it must do;
+- `optim_g2o/` solves it with g2o, building the graph ORB-SLAM3 v1.0 built, edge
+  for edge. It is the only part that names g2o, and `slam` does not name it:
+  `optim::Make…()` is declared in `optim/` and defined here, so which library
+  solves is decided when the shared library is linked;
+- a task in `optimization/` builds the problem from keyframes, points or a
+  frame, runs the rounds where there are rounds -- which observations are in,
+  which cost they get -- and applies the result. The functions of `Optimizer`
+  are a task each, in the source named after it.
 
-`Optimizer::PoseOptimization` is the first; the other seventeen functions are
-as v1.0 wrote them.
+| `Optimizer::` | task | problem and solver in `optim/` |
+|---|---|---|
+| `PoseOptimization` | `PoseTask` | `PoseProblem`, `PoseSolver` |
+| `LocalBundleAdjustment` (a keyframe; a welding window), `BundleAdjustment` | `LocalBaTask`, `WeldingBaTask`, `GlobalBaTask` | `BaProblem`, `BundleAdjuster` |
+| `OptimizeSim3` | `Sim3Task` | `Sim3Problem`, `Sim3Solver` |
+| `OptimizeEssentialGraph` (after a loop; after a merge) | `EssentialGraphTask`, `MergeGraphTask` | `Sim3GraphProblem`, `Sim3GraphSolver` |
+| `OptimizeEssentialGraph4DoF` | `EssentialGraph4DofTask` | `Pose4DofGraphProblem`, `Pose4DofGraphSolver` |
+| `PoseInertialOptimizationLastKeyFrame`, `…LastFrame` | `InertialPoseTask` | `InertialPoseProblem`, `InertialPoseSolver` |
+| `InertialOptimization` (three) | `InertialAlignmentTask` | `InertialAlignmentProblem`, `InertialAlignmentSolver` |
+| `LocalInertialBA`, `FullInertialBA`, `MergeInertialBA` | `LocalInertialBaTask`, `FullInertialBaTask`, `MergeInertialBaTask` | `InertialBaProblem`, `InertialBundleAdjuster` |
 
-That a task taken apart computes what it computed is shown by running both:
+A problem's unknowns are laid out in the order of its arrays and its terms
+summed in the order of theirs; the tasks sort keyframes and points by id and
+give the terms in the order v1.0 added its edges. A solver that keeps to both
+gives the same bits as v1.0 for the same input, and the g2o one does.
 
-```bash
-./docker/run.sh -- bash -c '
-  cmake -S /workspace -B /workspace/build_shadow -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DORBSLAM3R_OPT_SHADOW=ON && cmake --build /workspace/build_shadow -j 12'
-```
+That was shown rather than argued. Until the tag `m1a-shadow` a build with
+`-DORBSLAM3R_OPT_SHADOW=ON` ran each task and v1.0's body of the same function
+on the same input and counted the calls whose results differed in any bit:
+none, over more than a hundred thousand calls, and for each function a change
+put in on purpose was counted. Two paths were never reached by
+what is on disk: an observation in the second camera of a pair that is not
+rectified, and the inertial alignment with gravity and scale held. v1.0's
+bodies and that build are gone from the tree; check out the tag to run it.
 
-In that build each such task runs twice on the same input, as it is now and
-with v1.0's body (`src/optimization/Shadow*.cpp`), and the calls whose results
-differ in any bit are counted; a line per task is printed at exit
-(`OPT_SHADOW PoseOptimization: 5822 calls, 0 differ`). It compiles the two
-without fused multiply-add, because only then do the same expressions give the
-same bits whatever the compiler inlined; it is not a build to time. Run a plan
-through it with `CHECK_BIN=/workspace/build_shadow/bin` and
-`tools/check_run.py`.
+Two things it found about v1.0 that are still so. Gauss-Newton leaves an edge
+the error its last iteration began with and Levenberg-Marquardt that of its
+last trial, and the inliers are judged by those; and Local Mapping judges a
+monocular observation of an inertial adjustment by whether its point is within
+ten metres, a number Tracking writes while it reads.
 
 ## Formatting
 

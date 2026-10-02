@@ -55,16 +55,10 @@ namespace ORB_SLAM3
         int LocalKeyFrames() const { return static_cast<int>(mvnLocalPose.size()); }
         int Edges() const { return static_cast<int>(mProblem.observations()); }
 
-        // For the build that runs v1.0's body beside this (Shadow.hpp): the
-        // observations Apply would erase; whether they are `erased` and the
-        // map holds the poses and points Apply would write; and the marks
-        // Build left on the window taken off again, so that v1.0's body finds
-        // the same window.
-        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
-        bool Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased) const;
-        void ResetMarks();
-
     private:
+        // The observations Apply erases.
+        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
+
         optim::BaProblem mProblem;
         bool mbInertial = false;
         bool mbDepth = false; // an observation with depth: stereo, or the second camera

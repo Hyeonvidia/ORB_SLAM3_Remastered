@@ -21,7 +21,6 @@
 
 #include "optim/Sim3Problem.hpp"
 #include "optim/Sim3Solver.hpp"
-#include "optimization/Digest.hpp"
 
 #include "common/Sim3.hpp"
 
@@ -53,10 +52,6 @@ namespace ORB_SLAM3
         // and gives the similarity found, or 0 and no similarity when fewer
         // than ten pairs were left after the first round.
         int Apply(std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12, Eigen::Matrix<double, 7, 7> &mAcumHessian) const;
-
-        // For the build that runs v1.0's body beside this (Shadow.hpp): what
-        // Build read, to be asked before Solve.
-        Digest Input() const;
 
     private:
         optim::Sim3Problem mProblem;

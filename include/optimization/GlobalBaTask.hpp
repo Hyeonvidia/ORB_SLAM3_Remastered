@@ -21,7 +21,6 @@
 
 #include "optim/BaProblem.hpp"
 #include "optim/BundleAdjuster.hpp"
-#include "optimization/Digest.hpp"
 
 #include <vector>
 
@@ -48,12 +47,6 @@ namespace ORB_SLAM3
         // origin keyframe; otherwise beside them (mTcwGBA, mPosGBA), for Loop
         // Closing to apply once Local Mapping has stopped.
         void Apply(unsigned long nLoopKF) const;
-
-        // For the build that runs v1.0's body beside this (Shadow.hpp): what
-        // Build read of the map, to be asked before Solve, and whether the
-        // map holds what Apply would write.
-        Digest Input() const;
-        bool Matches(unsigned long nLoopKF) const;
 
     private:
         optim::BaProblem mProblem;

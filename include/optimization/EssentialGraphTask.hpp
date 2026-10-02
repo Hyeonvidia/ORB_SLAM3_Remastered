@@ -23,7 +23,6 @@
 #include "optim/Pose4DofGraphSolver.hpp"
 #include "optim/Sim3GraphProblem.hpp"
 #include "optim/Sim3GraphSolver.hpp"
-#include "optimization/Digest.hpp"
 #include "optimization/KeyFrameAndPose.hpp"
 
 #include <sophus/se3.hpp>
@@ -60,21 +59,8 @@ namespace ORB_SLAM3
         // moved as its reference keyframe moved. Takes the map's update lock.
         void Apply(Map* pMap, KeyFrame* pCurKF) const;
 
-        // For the build that runs v1.0's body beside this (Shadow.hpp): what
-        // Build read, to be asked before Solve; what Apply would write, to be
-        // asked before v1.0 writes; and whether the map then holds it.
-        Digest Input() const;
-        struct Written
-        {
-            std::vector<Sophus::SE3f> vTiw;   // by keyframe of the map as listed
-            std::vector<Eigen::Vector3f> vXw; // by point likewise
-            std::vector<unsigned char> vbPoint;
-        };
-        Written Preview(KeyFrame* pCurKF) const;
-        bool Matches(const Written &written) const;
-
     private:
-        void Write(KeyFrame* pCurKF, Written* pPreview) const;
+        void Write(KeyFrame* pCurKF) const;
 
         optim::Sim3GraphProblem mProblem;
         std::vector<KeyFrame*> mvpKFs; // the map's, as listed
@@ -103,12 +89,6 @@ namespace ORB_SLAM3
         void Apply(KeyFrame* pCurKF, const std::vector<KeyFrame*> &vpNonFixedKFs,
                    const std::vector<MapPoint*> &vpNonCorrectedMPs) const;
 
-        // For the build that runs v1.0's body beside this: as above, of the
-        // poses only -- the points are moved by what the keyframes then hold.
-        Digest Input() const;
-        std::vector<Sophus::SE3f> Preview(const std::vector<KeyFrame*> &vpNonFixedKFs) const;
-        bool Matches(const std::vector<KeyFrame*> &vpNonFixedKFs, const std::vector<Sophus::SE3f> &vTiw) const;
-
     private:
         optim::Sim3GraphProblem mProblem;
         std::vector<KeyFrame*> mvpPoseKF;
@@ -134,13 +114,8 @@ namespace ORB_SLAM3
         // reference keyframe moved. Takes the map's update lock.
         void Apply(Map* pMap) const;
 
-        // For the build that runs v1.0's body beside this: as above.
-        Digest Input() const;
-        EssentialGraphTask::Written Preview() const;
-        bool Matches(const EssentialGraphTask::Written &written) const;
-
     private:
-        void Write(EssentialGraphTask::Written* pPreview) const;
+        void Write() const;
 
         optim::Pose4DofGraphProblem mProblem;
         std::vector<KeyFrame*> mvpKFs; // the map's, as listed

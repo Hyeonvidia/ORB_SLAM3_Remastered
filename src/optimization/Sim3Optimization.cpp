@@ -17,31 +17,15 @@
 */
 
 #include "optimization/Optimizer.hpp"
-#include "optimization/Shadow.hpp"
 #include "optimization/Sim3Task.hpp"
 #include "tracking/Frame.hpp"
 
-#include <complex>
-
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
 
-#include <g2o/core/sparse_block_matrix.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/solver_factory.hpp>
-#include <g2o/core/robust_kernel_impl.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
-#include "optimization/G2oTypes.hpp"
 #include "common/Converter.hpp"
 
 #include <mutex>
-
-#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -221,32 +205,15 @@ namespace ORB_SLAM3
         return mnIn;
     }
 
-    Digest Sim3Task::Input() const
-    {
-        Digest digest;
-        digest.Add('S', mProblem.R12.x(), mProblem.R12.y(), mProblem.R12.z(), mProblem.R12.w(), mProblem.t12.x(),
-                   mProblem.t12.y(), mProblem.t12.z(), mProblem.s12, mProblem.fixScale);
-        for(std::size_t i = 0; i < mProblem.size(); i++)
-            digest.Add('C', i, mvnMatch[i], mProblem.X1[i].x(), mProblem.X1[i].y(), mProblem.X1[i].z(),
-                       mProblem.X2[i].x(), mProblem.X2[i].y(), mProblem.X2[i].z(), mProblem.uv1[i].x(),
-                       mProblem.uv1[i].y(), mProblem.uv2[i].x(), mProblem.uv2[i].y(), mProblem.invSigma2_1[i],
-                       mProblem.invSigma2_2[i]);
-        return digest;
-    }
-
     int Optimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, Sim3 &g2oS12,
                                 const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
                                 const bool bAllPoints)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        return shadow::OptimizeSim3(pKF1, pKF2, vpMatches1, g2oS12, th2, bFixScale, mAcumHessian, bAllPoints);
-#else
         Sim3Task task;
         task.Build(pKF1, pKF2, vpMatches1, g2oS12, th2, bFixScale, bAllPoints);
         const std::unique_ptr<optim::Sim3Solver> pSolver = optim::MakeSim3Solver();
         task.Solve(*pSolver);
         return task.Apply(vpMatches1, g2oS12, mAcumHessian);
-#endif
     }
 
 } // namespace ORB_SLAM3

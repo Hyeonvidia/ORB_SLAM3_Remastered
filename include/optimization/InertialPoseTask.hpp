@@ -22,7 +22,6 @@
 #include "common/ImuTypes.hpp"
 #include "optim/InertialPoseProblem.hpp"
 #include "optim/InertialPoseSolver.hpp"
-#include "optimization/Digest.hpp"
 
 #include <Eigen/Core>
 
@@ -65,10 +64,6 @@ namespace ORB_SLAM3
         // the frame's state for the next optimisation to start from; the frame
         // before gives up what was known of its own. Returns how many fitted.
         int Apply(Frame* pFrame) const;
-
-        // For the build that runs v1.0's body beside this (Shadow.hpp): the
-        // earlier state as it was read.
-        Digest Input() const;
 
     private:
         void Add(optim::ObservationKind kind, int nFeature, MapPoint* pMP, const Eigen::Vector3d &obs, float invSigma2,

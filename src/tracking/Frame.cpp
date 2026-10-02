@@ -18,7 +18,7 @@
 
 #include "tracking/Frame.hpp"
 
-#include "optimization/G2oTypes.hpp"
+#include "optimization/ConstraintPoseImu.hpp"
 #include "atlas/MapPoint.hpp"
 #include "atlas/KeyFrame.hpp"
 #include "features/ORBextractor.hpp"

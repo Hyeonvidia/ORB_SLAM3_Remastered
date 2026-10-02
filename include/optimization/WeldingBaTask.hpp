@@ -48,19 +48,16 @@ namespace ORB_SLAM3
         // As LocalBaTask::Apply, under the update lock of pMainKF's map.
         void Apply(KeyFrame* pMainKF);
 
-        // For the build that runs v1.0's body beside this; see LocalBaTask.
-        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
-        bool Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased) const;
-        void ResetMarks();
-
     private:
+        // The observations Apply erases.
+        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
+
         optim::BaProblem mProblem;
 
         // In the order v1.0 walked them.
-        std::vector<KeyFrame*> mvpKF; // every keyframe of the window, for the marks
         std::vector<KeyFrame*> mvpAdjustKF;
         std::vector<int> mvnAdjustPose;
-        std::vector<MapPoint*> mvpMarked; // every point of the window, for the marks
+        std::vector<MapPoint*> mvpMarked; // every point of the window
         std::vector<MapPoint*> mvpPoints; // those that were not bad when the window was copied
         std::vector<int> mvnPoint;
 

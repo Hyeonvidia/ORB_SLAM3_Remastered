@@ -19,30 +19,14 @@
 #include "optimization/Optimizer.hpp"
 #include "optimization/LocalBaTask.hpp"
 #include "optimization/WeldingBaTask.hpp"
-#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
-
-#include <complex>
 
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
 
-#include <g2o/core/sparse_block_matrix.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/solver_factory.hpp>
-#include <g2o/core/robust_kernel_impl.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
-#include "optimization/G2oTypes.hpp"
 #include "common/Converter.hpp"
 
 #include <mutex>
-
-#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -354,46 +338,9 @@ namespace ORB_SLAM3
         pMap->IncreaseChangeIndex();
     }
 
-    bool LocalBaTask::Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased) const
-    {
-        if(erased != mvToErase)
-            return false;
-        for(std::size_t i = 0; i < mvpLocalKF.size(); i++)
-        {
-            const int n = mvnLocalPose[i];
-            const Sophus::SE3f Tiw(mProblem.Rcw[n].cast<float>(), mProblem.tcw[n].cast<float>());
-            const Sophus::SE3f Tmap = mvpLocalKF[i]->GetPose();
-            if(std::memcmp(Tiw.data(), Tmap.data(), 7 * sizeof(float)) != 0)
-                return false;
-        }
-        for(std::size_t i = 0; i < mvpPoints.size(); i++)
-        {
-            const Eigen::Vector3f X = mProblem.Xw[mvnPoint[i]].cast<float>();
-            const Eigen::Vector3f Xmap = mvpPoints[i]->GetWorldPos();
-            if(std::memcmp(X.data(), Xmap.data(), 3 * sizeof(float)) != 0)
-                return false;
-        }
-        return true;
-    }
-
-    void LocalBaTask::ResetMarks()
-    {
-        // No keyframe has this id, so v1.0's body takes none of them as seen.
-        const long unsigned int none = ~0ul;
-        for(KeyFrame* pKFi : mvpLocalKF)
-            pKFi->mnBALocalForKF = none;
-        for(KeyFrame* pKFi : mvpFixedKF)
-            pKFi->mnBAFixedForKF = none;
-        for(MapPoint* pMP : mvpPoints)
-            pMP->mnBALocalForKF = none;
-    }
-
     void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int &num_fixedKF, int &num_OptKF,
                                           int &num_MPs, int &num_edges)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::LocalBundleAdjustment(pKF, pbStopFlag, pMap, num_fixedKF, num_OptKF, num_MPs, num_edges);
-#else
         LocalBaTask task;
         const bool bBuilt = task.Build(pKF, pMap);
         num_fixedKF = task.FixedKeyFrames();
@@ -409,7 +356,6 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::BundleAdjuster> pSolver = optim::MakeBundleAdjuster();
         task.Solve(*pSolver, pbStopFlag);
         task.Apply(pMap);
-#endif
     }
 
     void WeldingBaTask::Build(KeyFrame* pMainKF, const std::vector<KeyFrame*> &vpAdjustKF,
@@ -430,7 +376,6 @@ namespace ORB_SLAM3
             }
 
             pKFi->mnBALocalForMerge = pMainKF->mnId;
-            mvpKF.push_back(pKFi);
             vPoses.push_back(std::make_pair(pKFi, true));
             if(pKFi->mnId > maxKFid)
                 maxKFid = pKFi->mnId;
@@ -456,7 +401,6 @@ namespace ORB_SLAM3
                 continue;
 
             pKFi->mnBALocalForMerge = pMainKF->mnId;
-            mvpKF.push_back(pKFi);
             mvpAdjustKF.push_back(pKFi);
             vPoses.push_back(std::make_pair(pKFi, false));
             if(pKFi->mnId > maxKFid)
@@ -664,48 +608,9 @@ namespace ORB_SLAM3
         }
     }
 
-    bool WeldingBaTask::Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased) const
-    {
-        if(erased != mvToErase)
-            return false;
-        for(std::size_t i = 0; i < mvpAdjustKF.size(); i++)
-        {
-            if(mvpAdjustKF[i]->isBad())
-                continue;
-            const int n = mvnAdjustPose[i];
-            const Sophus::SE3f Tiw(mProblem.Rcw[n].cast<float>(), mProblem.tcw[n].cast<float>());
-            const Sophus::SE3f Tmap = mvpAdjustKF[i]->GetPose();
-            if(std::memcmp(Tiw.data(), Tmap.data(), 7 * sizeof(float)) != 0)
-                return false;
-        }
-        for(std::size_t i = 0; i < mvpPoints.size(); i++)
-        {
-            if(mvpPoints[i]->isBad())
-                continue;
-            const Eigen::Vector3f X = mProblem.Xw[mvnPoint[i]].cast<float>();
-            const Eigen::Vector3f Xmap = mvpPoints[i]->GetWorldPos();
-            if(std::memcmp(X.data(), Xmap.data(), 3 * sizeof(float)) != 0)
-                return false;
-        }
-        return true;
-    }
-
-    void WeldingBaTask::ResetMarks()
-    {
-        // No keyframe has this id, so v1.0's body takes none of them as seen.
-        const long unsigned int none = ~0ul;
-        for(KeyFrame* pKFi : mvpKF)
-            pKFi->mnBALocalForMerge = none;
-        for(MapPoint* pMP : mvpMarked)
-            pMP->mnBALocalForMerge = none;
-    }
-
     void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF, std::vector<KeyFrame*> vpAdjustKF,
                                           std::vector<KeyFrame*> vpFixedKF, bool* pbStopFlag)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::WeldingBundleAdjustment(pMainKF, vpAdjustKF, vpFixedKF, pbStopFlag);
-#else
         WeldingBaTask task;
         task.Build(pMainKF, vpAdjustKF, vpFixedKF);
 
@@ -716,7 +621,6 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::BundleAdjuster> pSolver = optim::MakeBundleAdjuster();
         task.Solve(*pSolver, pbStopFlag);
         task.Apply(pMainKF);
-#endif
     }
 
 } // namespace ORB_SLAM3

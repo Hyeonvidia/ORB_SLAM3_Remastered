@@ -23,7 +23,6 @@
 #include "optim/InertialAlignmentProblem.hpp"
 #include "optim/InertialAlignmentSolver.hpp"
 #include "optim/SolveOptions.hpp"
-#include "optimization/Digest.hpp"
 
 #include <Eigen/Core>
 
@@ -67,11 +66,6 @@ namespace ORB_SLAM3
         // gyroscope bias moved by more than 0.01 integrates its measurements
         // again.
         void Apply() const;
-
-        // For the build that runs v1.0's body beside this (Shadow.hpp): what
-        // Build read, and whether the keyframes hold what Apply would write.
-        Digest Input() const;
-        bool Holds() const;
 
     private:
         void Read(Map* pMap, bool bSetBias);

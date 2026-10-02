@@ -18,30 +18,14 @@
 
 #include "optimization/Optimizer.hpp"
 #include "optimization/GlobalBaTask.hpp"
-#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
-
-#include <complex>
 
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
 
-#include <g2o/core/sparse_block_matrix.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/solver_factory.hpp>
-#include <g2o/core/robust_kernel_impl.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
-#include "optimization/G2oTypes.hpp"
 #include "common/Converter.hpp"
 
 #include <mutex>
-
-#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -285,80 +269,9 @@ namespace ORB_SLAM3
         }
     }
 
-    Digest GlobalBaTask::Input() const
-    {
-        Digest digest;
-        for(std::size_t i = 0; i < mProblem.poses(); i++)
-        {
-            const Eigen::Quaterniond &R = mProblem.Rcw[i];
-            const Eigen::Vector3d &t = mProblem.tcw[i];
-            digest.Add('K', mvpPoseKF[i]->mnId, R.x(), R.y(), R.z(), R.w(), t.x(), t.y(), t.z(),
-                       mProblem.poseFixed[i] != 0);
-        }
-        for(std::size_t i = 0; i < mProblem.points(); i++)
-        {
-            const Eigen::Vector3d &X = mProblem.Xw[i];
-            digest.Add('P', mvpPointMP[i]->mnId, X.x(), X.y(), X.z());
-        }
-        for(std::size_t i = 0; i < mProblem.observations(); i++)
-        {
-            const Eigen::Vector3d &uv = mProblem.uv[i];
-            digest.Add('O', i, static_cast<int>(mProblem.kind[i]), mvpPoseKF[mProblem.pose[i]]->mnId,
-                       mvpPointMP[mProblem.point[i]]->mnId, uv.x(), uv.y(), uv.z(), mProblem.invSigma2[i],
-                       mProblem.robust[i] != 0);
-        }
-        return digest;
-    }
-
-    bool GlobalBaTask::Matches(const unsigned long nLoopKF) const
-    {
-        const bool bDirect = nLoopKF == mpMap->GetOriginKF()->mnId;
-        for(size_t i = 0; i < mvpKF.size(); i++)
-        {
-            KeyFrame* pKF = mvpKF[i];
-            const int n = mvnPose[i];
-            if(pKF->isBad() || n < 0)
-                continue;
-            if(bDirect)
-            {
-                const Sophus::SE3f Tcw(mProblem.Rcw[n].cast<float>(), mProblem.tcw[n].cast<float>());
-                const Sophus::SE3f Tmap = pKF->GetPose();
-                if(std::memcmp(Tcw.data(), Tmap.data(), 7 * sizeof(float)) != 0)
-                    return false;
-            }
-            else
-            {
-                const Sophus::SE3f Tcw = Sophus::SE3d(mProblem.Rcw[n], mProblem.tcw[n]).cast<float>();
-                if(pKF->mnBAGlobalForKF != nLoopKF ||
-                   std::memcmp(Tcw.data(), pKF->mTcwGBA.data(), 7 * sizeof(float)) != 0)
-                    return false;
-            }
-        }
-        for(size_t i = 0; i < mvpMP.size(); i++)
-        {
-            MapPoint* pMP = mvpMP[i];
-            if(mvnPoint[i] < 0 || pMP->isBad())
-                continue;
-            const Eigen::Vector3f X = mProblem.Xw[mvnPoint[i]].cast<float>();
-            if(bDirect)
-            {
-                const Eigen::Vector3f Xmap = pMP->GetWorldPos();
-                if(std::memcmp(X.data(), Xmap.data(), 3 * sizeof(float)) != 0)
-                    return false;
-            }
-            else if(pMP->mnBAGlobalForKF != nLoopKF ||
-                    std::memcmp(X.data(), pMP->mPosGBA.data(), 3 * sizeof(float)) != 0)
-                return false;
-        }
-        return true;
-    }
-
     void Optimizer::BundleAdjustment(const std::vector<KeyFrame*> &vpKFs, const std::vector<MapPoint*> &vpMP,
                                      int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::BundleAdjustment(vpKFs, vpMP, nIterations, pbStopFlag, nLoopKF, bRobust);
-#else
         GlobalBaTask task;
         task.Build(vpKFs, vpMP, bRobust);
 
@@ -367,7 +280,6 @@ namespace ORB_SLAM3
         Verbose::PrintMess("BA: End of the optimization", Verbose::VERBOSITY_NORMAL);
 
         task.Apply(nLoopKF);
-#endif
     }
 
 } // namespace ORB_SLAM3

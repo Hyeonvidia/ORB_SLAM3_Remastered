@@ -18,31 +18,16 @@
 
 #include "optimization/Optimizer.hpp"
 #include "optimization/BodyPoseOf.hpp"
+#include "optimization/ConstraintPoseImu.hpp"
 #include "optimization/InertialPoseTask.hpp"
-#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
-
-#include <complex>
 
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
 
-#include <g2o/core/sparse_block_matrix.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/solver_factory.hpp>
-#include <g2o/core/robust_kernel_impl.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
-#include "optimization/G2oTypes.hpp"
 #include "common/Converter.hpp"
 
 #include <mutex>
-
-#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -372,7 +357,7 @@ namespace ORB_SLAM3
         const optim::InertialState &found = mProblem.state;
         pFrame->SetImuPoseVelocity(found.pose.Rwb.cast<float>(), found.pose.twb.cast<float>(),
                                    found.velocity.cast<float>());
-        Vector6d b;
+        Eigen::Matrix<double, 6, 1> b;
         b << found.gyroBias, found.accBias;
         pFrame->mImuBias = IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
 
@@ -402,19 +387,8 @@ namespace ORB_SLAM3
         return static_cast<int>(mProblem.size()) - mnBad;
     }
 
-    Digest InertialPoseTask::Input() const
-    {
-        Digest digest;
-        const optim::InertialState &before = mProblem.previous;
-        digest.Add('K', before.pose.Rwb, before.pose.twb, before.velocity, before.gyroBias, before.accBias);
-        return digest;
-    }
-
     int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame* pFrame, bool bRecInit)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        return shadow::PoseInertialOptimizationLastKeyFrame(pFrame, bRecInit);
-#else
         InertialPoseTask task;
         {
             std::lock_guard<std::mutex> lock(MapPoint::mGlobalMutex);
@@ -423,14 +397,10 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::InertialPoseSolver> pSolver = optim::MakeInertialPoseSolver();
         task.Solve(*pSolver, bRecInit);
         return task.Apply(pFrame);
-#endif
     }
 
     int Optimizer::PoseInertialOptimizationLastFrame(Frame* pFrame, bool bRecInit)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        return shadow::PoseInertialOptimizationLastFrame(pFrame, bRecInit);
-#else
         InertialPoseTask task;
         {
             std::lock_guard<std::mutex> lock(MapPoint::mGlobalMutex);
@@ -439,7 +409,6 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::InertialPoseSolver> pSolver = optim::MakeInertialPoseSolver();
         task.Solve(*pSolver, bRecInit);
         return task.Apply(pFrame);
-#endif
     }
 
 } // namespace ORB_SLAM3

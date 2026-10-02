@@ -113,8 +113,8 @@ orbslam3r_part(optim
   LAYERS optim
   PACKAGES Eigen3::Eigen)
 
-# Those solvers, on g2o, and the g2o edges they and the optimisations not yet
-# taken apart are built of.
+# Those solvers, on g2o, and the g2o vertices and edges they are built of. The
+# only part that names g2o.
 orbslam3r_part(optim_g2o
   LAYERS optim_g2o
   USES optim camera common   # common: the preintegration of the inertial edges
@@ -123,10 +123,9 @@ orbslam3r_part(optim_g2o
 orbslam3r_part(slam
   LAYERS atlas tracking optimization local_mapping loop_closing
   SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/common/Settings.cpp
-  USES common camera features optim optim_g2o
+  USES common camera features optim
   PACKAGES Eigen3::Eigen ${OpenCV_LIBS} Boost::serialization OpenSSL::Crypto
            orbslam3r::dbow2_ext   # DBoW2 + the text vocabulary + serialization
-           orbslam3r::g2o_ext     # g2o + the renamed-symbol aliases + solver factory
   HEADER_ONLY Sophus)
 
 orbslam3r_part(system
@@ -156,21 +155,6 @@ orbslam3r_part(noviewer ${without_viewer}
   SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/NoViewer.cpp
   USES system slam
   HEADER_ONLY Sophus)
-
-# -DORBSLAM3R_OPT_SHADOW=ON: every optimisation that has been taken apart runs
-# twice on the same input, as it is now and as v1.0 wrote it, and the calls
-# whose results differ in any bit are counted (optimization/Shadow.hpp). The
-# two are different code computing the same expressions, and only without
-# fused multiply-add do the same expressions give the same bits whatever the
-# compiler inlined: with it, a product is rounded or not according to what it
-# was inlined next to. So the flag, on what the two are compiled from.
-option(ORBSLAM3R_OPT_SHADOW "Run taken-apart optimisations beside v1.0's and count the calls that differ" OFF)
-if(ORBSLAM3R_OPT_SHADOW)
-  foreach(part slam optim_g2o)
-    target_compile_definitions(orbslam3r_${part} PRIVATE ORBSLAM3R_OPT_SHADOW)
-    target_compile_options(orbslam3r_${part} PRIVATE -ffp-contract=off)
-  endforeach()
-endif()
 
 # A shared library with no sources of its own. The parts are named one by one:
 # an object library's objects go only into what links it directly, not into

@@ -59,10 +59,10 @@ LAYERS = {
     "optim_g2o": ["OptimizableTypes", "G2oPoseSolver", "G2oBundleAdjuster", "G2oSim3Solver", "G2oSim3GraphSolver",
                   "InertialTypes", "G2oPose4DofGraphSolver", "G2oInertialPoseSolver",
                   "G2oInertialAlignmentSolver", "G2oInertialBundleAdjuster"],
-    "optimization": ["Optimizer", "G2oTypes", "KeyFrameAndPose", "PoseTask", "LocalBaTask", "WeldingBaTask", "GlobalBaTask", "Digest",
-                     "Sim3Task", "EssentialGraphTask", "BodyPoseOf", "InertialPoseTask", "ShadowInertialPoseOptimization", "InertialAlignmentTask", "ShadowInertialInitialization", "InertialBaTask",
-                     "ShadowInertialBundleAdjustment", "ShadowEssentialGraph", "Shadow", "ShadowGlobalBundleAdjustment", "ShadowSim3Optimization",
-                     "ShadowPoseOptimization", "ShadowLocalBundleAdjustment",
+    "optimization": ["Optimizer", "ConstraintPoseImu", "KeyFrameAndPose", "PoseTask", "LocalBaTask", "WeldingBaTask", "GlobalBaTask", 
+                     "Sim3Task", "EssentialGraphTask", "BodyPoseOf", "InertialPoseTask", "InertialAlignmentTask", "InertialBaTask",
+                      
+                     
                      "PoseOptimization", "InertialPoseOptimization", "LocalBundleAdjustment",
                      "GlobalBundleAdjustment", "InertialBundleAdjustment", "InertialInitialization",
                      "EssentialGraph", "Sim3Optimization"],
@@ -71,7 +71,7 @@ LAYERS = {
     "common": ["Converter", "GeometricTools", "Settings", "Verbose",
                "SerializationUtils", "ImuTypes", "TwoViewReconstruction",
                "NavState", "Sensor", "TimeStats", "SophusEnsure", "WorkerPool",
-               "ThreadPorts", "FlatMap", "Sim3"],
+               "ThreadPorts", "FlatMap", "Sim3", "SO3"],
     "viewer": ["Viewer", "FrameDrawer", "MapDrawer"],
 }
 # System sits above the layers and stays at the root of each tree.

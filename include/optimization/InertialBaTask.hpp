@@ -22,7 +22,6 @@
 #include "common/ImuTypes.hpp"
 #include "optim/InertialBaProblem.hpp"
 #include "optim/InertialBundleAdjuster.hpp"
-#include "optimization/Digest.hpp"
 #include "optimization/KeyFrameAndPose.hpp"
 
 #include <deque>
@@ -77,17 +76,11 @@ namespace ORB_SLAM3
         // Takes the map's update lock.
         void Apply(Map* pMap);
 
-        // For the build that runs v1.0's body beside this (Shadow.hpp): the
-        // observations Apply would erase, and what was read of the points to
-        // tell; whether Apply would do nothing; whether the map holds what it
-        // would write; and the marks Build left taken off again.
-        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
-        Digest Judged() const { return mJudged; }
-        bool Failed() const;
-        bool Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased, bool bFailed) const;
-        void ResetMarks();
-
     private:
+        // The observations Apply erases, and whether it does nothing at all.
+        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
+        bool Failed() const;
+
         InertialBaWindow mWindow;
         bool mbLarge = false;
         int mnIterations = 10;
@@ -95,11 +88,8 @@ namespace ORB_SLAM3
         std::vector<KeyFrame*> mvpLocalKF; // in the order v1.0 walked them
         std::vector<KeyFrame*> mvpFixedKF;
         std::vector<MapPoint*> mvpPoints;
-        std::vector<KeyFrame*> mvpMarkedLocal;
-        std::vector<KeyFrame*> mvpMarkedFixed;
 
         std::vector<std::pair<KeyFrame*, MapPoint*>> mvToErase;
-        Digest mJudged;
     };
 
     // Optimizer::FullInertialBA over every keyframe and point of a map, in
@@ -120,12 +110,6 @@ namespace ORB_SLAM3
         // beside them (mTcwGBA, mVwbGBA, mBiasGBA, mPosGBA), for whoever asked
         // to apply.
         void Apply(unsigned long nLoopId) const;
-
-        // For the build that runs v1.0's body beside this: what Build read of
-        // the map, to be asked before Solve, and whether the map holds what
-        // Apply would write.
-        Digest Input() const;
-        bool Matches(unsigned long nLoopId) const;
 
     private:
         InertialBaWindow mWindow;
@@ -154,19 +138,15 @@ namespace ORB_SLAM3
         // keyframe's pose is put in corrPoses. Takes the map's update lock.
         void Apply(Map* pMap, KeyFrameAndPose &corrPoses);
 
-        // For the build that runs v1.0's body beside this: as above.
-        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
-        bool Matches(const std::vector<std::pair<KeyFrame*, MapPoint*>> &erased) const;
-        void ResetMarks();
-
     private:
+        // The observations Apply erases.
+        const std::vector<std::pair<KeyFrame*, MapPoint*>> &Classify();
+
         InertialBaWindow mWindow;
 
         std::vector<KeyFrame*> mvpLocalKF; // in the order v1.0 walked them
         std::vector<KeyFrame*> mvpCovKF;
         std::vector<MapPoint*> mvpPoints;
-        std::vector<KeyFrame*> mvpMarkedLocal;
-        std::vector<KeyFrame*> mvpMarkedFixed;
 
         std::vector<std::pair<KeyFrame*, MapPoint*>> mvToErase;
     };

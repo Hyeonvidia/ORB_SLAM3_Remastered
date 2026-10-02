@@ -18,7 +18,6 @@
 
 #include "optimization/Optimizer.hpp"
 #include "optimization/PoseTask.hpp"
-#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
 
 #include <cmath>
@@ -157,9 +156,6 @@ namespace ORB_SLAM3
 
     int Optimizer::PoseOptimization(Frame* pFrame)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        return shadow::PoseOptimization(pFrame);
-#else
         PoseTask task;
         {
             std::lock_guard<std::mutex> lock(MapPoint::mGlobalMutex);
@@ -168,7 +164,6 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::PoseSolver> pSolver = optim::MakePoseSolver();
         task.Solve(*pSolver);
         return task.Apply(pFrame);
-#endif
     }
 
 } // namespace ORB_SLAM3

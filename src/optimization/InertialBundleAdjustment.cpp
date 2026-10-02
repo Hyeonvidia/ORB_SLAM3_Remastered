@@ -19,30 +19,14 @@
 #include "optimization/Optimizer.hpp"
 #include "optimization/BodyPoseOf.hpp"
 #include "optimization/InertialBaTask.hpp"
-#include "optimization/Shadow.hpp"
 #include "tracking/Frame.hpp"
-
-#include <complex>
 
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
 
-#include <g2o/core/sparse_block_matrix.h>
-#include <g2o/core/block_solver.h>
-#include <g2o/core/optimization_algorithm_levenberg.h>
-#include <g2o/core/optimization_algorithm_gauss_newton.h>
-#include <g2o/solvers/eigen/linear_solver_eigen.h>
-#include <orbslam3r/g2o_ext/compat.hpp>
-#include <orbslam3r/g2o_ext/solver_factory.hpp>
-#include <g2o/core/robust_kernel_impl.h>
-#include <g2o/solvers/dense/linear_solver_dense.h>
-#include "optimization/G2oTypes.hpp"
 #include "common/Converter.hpp"
 
 #include <mutex>
-
-#include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -178,7 +162,7 @@ namespace ORB_SLAM3
 
         IMU::Bias BiasFound(const Eigen::Vector3d &bg, const Eigen::Vector3d &ba)
         {
-            Vector6d b;
+            Eigen::Matrix<double, 6, 1> b;
             b << bg, ba;
             return IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
         }
@@ -188,47 +172,6 @@ namespace ORB_SLAM3
             return BiasFound(window.problem.states[n].gyroBias, window.problem.states[n].accBias);
         }
 
-        bool Same(const Sophus::SE3f &a, const Sophus::SE3f &b)
-        {
-            return std::memcmp(a.data(), b.data(), 7 * sizeof(float)) == 0;
-        }
-
-        bool Same(const Eigen::Vector3f &a, const Eigen::Vector3f &b)
-        {
-            return std::memcmp(a.data(), b.data(), 3 * sizeof(float)) == 0;
-        }
-
-        bool Same(const IMU::Bias &a, const IMU::Bias &b)
-        {
-            return a.bax == b.bax && a.bay == b.bay && a.baz == b.baz && a.bwx == b.bwx && a.bwy == b.bwy &&
-                   a.bwz == b.bwz;
-        }
-
-        // Whether a keyframe holds the state found for it.
-        bool Holds(const InertialBaWindow &window, KeyFrame* pKFi)
-        {
-            const int n = window.stateOfId.at(pKFi->mnId);
-            if(!Same(PoseFound(window, n), pKFi->GetPose()))
-                return false;
-            if(pKFi->bImu && window.problem.inertial[n])
-            {
-                const Eigen::Vector3f v = window.problem.states[n].velocity.cast<float>();
-                if(!Same(v, pKFi->GetVelocity()) || !Same(BiasFound(window, n), pKFi->GetImuBias()))
-                    return false;
-            }
-            return true;
-        }
-
-        bool HoldsPoints(const InertialBaWindow &window)
-        {
-            for(std::size_t j = 0; j < window.pointMP.size(); j++)
-            {
-                const Eigen::Vector3f X = window.problem.Xw[j].cast<float>();
-                if(!Same(X, window.pointMP[j]->GetWorldPos()))
-                    return false;
-            }
-            return true;
-        }
     } // namespace
 
     void LocalInertialBaTask::Build(KeyFrame* pKF, const bool bLarge, const bool bRecInit)
@@ -251,14 +194,12 @@ namespace ORB_SLAM3
         vpOptimizableKFs.reserve(Nd);
         vpOptimizableKFs.push_back(pKF);
         pKF->mnBALocalForKF = pKF->mnId;
-        mvpMarkedLocal.push_back(pKF);
         for(int i = 1; i < Nd; i++)
         {
             if(vpOptimizableKFs.back()->mPrevKF)
             {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
                 vpOptimizableKFs.back()->mnBALocalForKF = pKF->mnId;
-                mvpMarkedLocal.push_back(vpOptimizableKFs.back());
             }
             else
                 break;
@@ -290,13 +231,11 @@ namespace ORB_SLAM3
         {
             lFixedKeyFrames.push_back(vpOptimizableKFs.back()->mPrevKF);
             vpOptimizableKFs.back()->mPrevKF->mnBAFixedForKF = pKF->mnId;
-            mvpMarkedFixed.push_back(vpOptimizableKFs.back()->mPrevKF);
         }
         else
         {
             vpOptimizableKFs.back()->mnBALocalForKF = 0;
             vpOptimizableKFs.back()->mnBAFixedForKF = pKF->mnId;
-            mvpMarkedFixed.push_back(vpOptimizableKFs.back());
             lFixedKeyFrames.push_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
         }
@@ -319,7 +258,6 @@ namespace ORB_SLAM3
                 if(pKFi->mnBALocalForKF != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId)
                 {
                     pKFi->mnBAFixedForKF = pKF->mnId;
-                    mvpMarkedFixed.push_back(pKFi);
                     if(!pKFi->isBad())
                     {
                         lFixedKeyFrames.push_back(pKFi);
@@ -485,14 +423,12 @@ namespace ORB_SLAM3
         const optim::InertialBaProblem &problem = mWindow.problem;
         mvToErase.clear();
         mvToErase.reserve(problem.observations());
-        mJudged = Digest();
 
         const float chi2Mono2 = 5.991;
         const float chi2Stereo2 = 7.815;
 
         // Check inlier observations
         // Mono, of either camera
-        std::size_t nMono = 0;
         for(std::size_t i = 0, iend = problem.observations(); i < iend; i++)
         {
             if(problem.kind[i] == optim::kStereo)
@@ -500,7 +436,6 @@ namespace ORB_SLAM3
             MapPoint* pMP = mWindow.obsMP[i];
             bool bClose = pMP->mTrackDepth < 10.f;
             const bool bBad = pMP->isBad();
-            mJudged.Add('M', nMono++, bClose, bBad);
 
             if(bBad)
                 continue;
@@ -514,14 +449,12 @@ namespace ORB_SLAM3
         }
 
         // Stereo
-        std::size_t nStereo = 0;
         for(std::size_t i = 0, iend = problem.observations(); i < iend; i++)
         {
             if(problem.kind[i] != optim::kStereo)
                 continue;
             MapPoint* pMP = mWindow.obsMP[i];
             const bool bBad = pMP->isBad();
-            mJudged.Add('S', nStereo++, bBad);
 
             if(bBad)
                 continue;
@@ -594,30 +527,6 @@ namespace ORB_SLAM3
         }
 
         pMap->IncreaseChangeIndex();
-    }
-
-    bool LocalInertialBaTask::Matches(const ErasedList &erased, const bool bFailed) const
-    {
-        if(erased != mvToErase || bFailed != Failed())
-            return false;
-        if(bFailed)
-            return true;
-        for(KeyFrame* pKFi : mvpLocalKF)
-            if(!Holds(mWindow, pKFi))
-                return false;
-        return HoldsPoints(mWindow);
-    }
-
-    void LocalInertialBaTask::ResetMarks()
-    {
-        // No keyframe has this id, so v1.0's body takes none of them as seen.
-        const long unsigned int none = ~0ul;
-        for(KeyFrame* pKFi : mvpMarkedLocal)
-            pKFi->mnBALocalForKF = none;
-        for(KeyFrame* pKFi : mvpMarkedFixed)
-            pKFi->mnBAFixedForKF = none;
-        for(MapPoint* pMP : mvpPoints)
-            pMP->mnBALocalForKF = none;
     }
 
     bool FullInertialBaTask::Build(Map* pMap, const bool bFixLocal, const bool bInit, const float priorG,
@@ -901,81 +810,6 @@ namespace ORB_SLAM3
         mpMap->IncreaseChangeIndex();
     }
 
-    Digest FullInertialBaTask::Input() const
-    {
-        const optim::InertialBaProblem &problem = mWindow.problem;
-        Digest digest;
-        for(std::size_t i = 0; i < problem.states.size(); i++)
-        {
-            const optim::InertialState &state = problem.states[i];
-            const long unsigned int id = mWindow.stateKF[i]->mnId;
-            digest.Add('K', id, state.pose.Rcw[0], state.pose.tcw[0], problem.fixed[i] != 0);
-            if(problem.inertial[i])
-            {
-                digest.Add('v', id, state.velocity);
-                if(!problem.sharedBias)
-                    digest.Add('b', id, state.gyroBias, state.accBias);
-            }
-        }
-        if(problem.sharedBias)
-            digest.Add('B', problem.sharedGyroBias, problem.sharedAccBias);
-        for(std::size_t k = 0; k < problem.terms(); k++)
-        {
-            const IMU::Preintegrated* pInt = problem.preintegration[k];
-            digest.Add('I', mWindow.stateKF[problem.from[k]]->mnId, mWindow.stateKF[problem.to[k]]->mnId, pInt->dT,
-                       pInt->dR, pInt->dV, pInt->dP);
-        }
-        for(std::size_t j = 0; j < problem.Xw.size(); j++)
-            digest.Add('P', mWindow.pointMP[j]->mnId, problem.Xw[j]);
-        // An observation's place is among those of its point.
-        std::size_t nOfPoint = 0;
-        for(std::size_t k = 0; k < problem.observations(); k++)
-        {
-            if(k > 0 && problem.point[k] != problem.point[k - 1])
-                nOfPoint = 0;
-            const Eigen::Vector3d &uv = problem.uv[k];
-            digest.Add('O', nOfPoint++, static_cast<int>(problem.kind[k]), mWindow.obsKF[k]->mnId,
-                       mWindow.obsMP[k]->mnId, uv.x(), uv.y(), uv.z(), problem.invSigma2[k]);
-        }
-        return digest;
-    }
-
-    bool FullInertialBaTask::Matches(const unsigned long nLoopId) const
-    {
-        const optim::InertialBaProblem &problem = mWindow.problem;
-        for(size_t i = 0; i < mvpKF.size(); i++)
-        {
-            KeyFrame* pKFi = mvpKF[i];
-            const int n = mvnState[i];
-            if(n < 0)
-                continue;
-            if(!Same(PoseFound(mWindow, n), nLoopId == 0 ? pKFi->GetPose() : pKFi->mTcwGBA))
-                return false;
-            if(nLoopId != 0 && pKFi->mnBAGlobalForKF != nLoopId)
-                return false;
-            if(pKFi->bImu)
-            {
-                const Eigen::Vector3f v = problem.states[n].velocity.cast<float>();
-                if(!Same(v, nLoopId == 0 ? pKFi->GetVelocity() : pKFi->mVwbGBA))
-                    return false;
-                const IMU::Bias b = mbInit ? BiasFound(problem.sharedGyroBias, problem.sharedAccBias)
-                                           : BiasFound(mWindow, n);
-                if(!Same(b, nLoopId == 0 ? pKFi->GetImuBias() : pKFi->mBiasGBA))
-                    return false;
-            }
-        }
-        for(std::size_t j = 0; j < mWindow.pointMP.size(); j++)
-        {
-            MapPoint* pMP = mWindow.pointMP[j];
-            const Eigen::Vector3f X = problem.Xw[j].cast<float>();
-            if(!Same(X, nLoopId == 0 ? pMP->GetWorldPos() : pMP->mPosGBA))
-                return false;
-            if(nLoopId != 0 && pMP->mnBAGlobalForKF != nLoopId)
-                return false;
-        }
-        return true;
-    }
-
     void MergeInertialBaTask::Build(KeyFrame* pCurrKF, KeyFrame* pMergeKF)
     {
         const int Nd = 6;
@@ -989,16 +823,8 @@ namespace ORB_SLAM3
         std::vector<KeyFrame*> &vpOptimizableCovKFs = mvpCovKF;
         vpOptimizableCovKFs.reserve(maxCovKF);
 
-        auto MarkLocal = [this, pCurrKF](KeyFrame* pKFi)
-        {
-            pKFi->mnBALocalForKF = pCurrKF->mnId;
-            mvpMarkedLocal.push_back(pKFi);
-        };
-        auto MarkFixed = [this, pCurrKF](KeyFrame* pKFi)
-        {
-            pKFi->mnBAFixedForKF = pCurrKF->mnId;
-            mvpMarkedFixed.push_back(pKFi);
-        };
+        auto MarkLocal = [pCurrKF](KeyFrame* pKFi) { pKFi->mnBALocalForKF = pCurrKF->mnId; };
+        auto MarkFixed = [pCurrKF](KeyFrame* pKFi) { pKFi->mnBAFixedForKF = pCurrKF->mnId; };
 
         // Add sliding window for current KF
         vpOptimizableKFs.push_back(pCurrKF);
@@ -1342,38 +1168,10 @@ namespace ORB_SLAM3
         pMap->IncreaseChangeIndex();
     }
 
-    bool MergeInertialBaTask::Matches(const ErasedList &erased) const
-    {
-        if(erased != mvToErase)
-            return false;
-        for(KeyFrame* pKFi : mvpLocalKF)
-            if(!Holds(mWindow, pKFi))
-                return false;
-        for(KeyFrame* pKFi : mvpCovKF)
-            if(!Holds(mWindow, pKFi))
-                return false;
-        return HoldsPoints(mWindow);
-    }
-
-    void MergeInertialBaTask::ResetMarks()
-    {
-        // No keyframe has this id, so v1.0's body takes none of them as seen.
-        const long unsigned int none = ~0ul;
-        for(KeyFrame* pKFi : mvpMarkedLocal)
-            pKFi->mnBALocalForKF = none;
-        for(KeyFrame* pKFi : mvpMarkedFixed)
-            pKFi->mnBAFixedForKF = none;
-        for(MapPoint* pMP : mvpPoints)
-            pMP->mnBALocalForKF = none;
-    }
-
     void Optimizer::FullInertialBA(Map* pMap, int its, const bool bFixLocal, const long unsigned int nLoopId,
                                    bool* pbStopFlag, bool bInit, float priorG, float priorA, Eigen::VectorXd* vSingVal,
                                    bool* bHess)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::FullInertialBA(pMap, its, bFixLocal, nLoopId, pbStopFlag, bInit, priorG, priorA, vSingVal, bHess);
-#else
         FullInertialBaTask task;
         if(!task.Build(pMap, bFixLocal, bInit, priorG, priorA))
             return;
@@ -1385,30 +1183,22 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::InertialBundleAdjuster> pSolver = optim::MakeInertialBundleAdjuster();
         task.Solve(*pSolver, its, pbStopFlag);
         task.Apply(nLoopId);
-#endif
     }
 
     void Optimizer::LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int &num_fixedKF, int &num_OptKF,
                                     int &num_MPs, int &num_edges, bool bLarge, bool bRecInit)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::LocalInertialBA(pKF, pbStopFlag, pMap, num_fixedKF, num_OptKF, num_MPs, num_edges, bLarge, bRecInit);
-#else
         // pbStopFlag: v1.0 gave it to the optimiser after the optimisation.
         LocalInertialBaTask task;
         task.Build(pKF, bLarge, bRecInit);
         const std::unique_ptr<optim::InertialBundleAdjuster> pSolver = optim::MakeInertialBundleAdjuster();
         task.Solve(*pSolver);
         task.Apply(pMap);
-#endif
     }
 
     void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbStopFlag, Map* pMap,
                                     KeyFrameAndPose &corrPoses)
     {
-#ifdef ORBSLAM3R_OPT_SHADOW
-        shadow::MergeInertialBA(pCurrKF, pMergeKF, pbStopFlag, pMap, corrPoses);
-#else
         MergeInertialBaTask task;
         task.Build(pCurrKF, pMergeKF);
 
@@ -1419,7 +1209,6 @@ namespace ORB_SLAM3
         const std::unique_ptr<optim::InertialBundleAdjuster> pSolver = optim::MakeInertialBundleAdjuster();
         task.Solve(*pSolver, pbStopFlag);
         task.Apply(pMap, corrPoses);
-#endif
     }
 
 } // namespace ORB_SLAM3

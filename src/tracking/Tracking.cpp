@@ -23,7 +23,7 @@
 #include "tracking/ORBmatcher.hpp"
 #include "common/Converter.hpp"
 #include "common/Sensor.hpp"
-#include "optimization/G2oTypes.hpp"
+#include "optimization/ConstraintPoseImu.hpp"
 #include "optimization/Optimizer.hpp"
 #include "camera/Pinhole.hpp"
 #include "camera/KannalaBrandt8.hpp"
