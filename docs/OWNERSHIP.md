@@ -43,7 +43,7 @@ is not what this problem needs.
 - `Tracking::mlpTemporalPoints` keeps owning its visual-odometry points, which
   never enter a map.
 - Nothing is freed at the moment it is culled. Local BA goes on writing to
-  points it has just culled (`Optimizer.cpp`, the `vToErase` loop and then
+  points it has just culled (`LocalBundleAdjustment.cpp`, the `vToErase` loop and then
   `SetWorldPos`), so "culled" cannot mean "gone".
 
 ## What the census says

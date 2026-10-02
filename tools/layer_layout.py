@@ -50,7 +50,11 @@ LAYERS = {
     "tracking": ["Tracking", "Frame", "MLPnPsolver", "ORBmatcher"],
     "local_mapping": ["LocalMapping"],
     "loop_closing": ["LoopClosing", "Sim3Solver"],
-    "optimization": ["Optimizer", "G2oTypes", "OptimizableTypes", "KeyFrameAndPose"],
+    # Optimizer is the header; its functions are in one source per task.
+    "optimization": ["Optimizer", "G2oTypes", "OptimizableTypes", "KeyFrameAndPose",
+                     "PoseOptimization", "InertialPoseOptimization", "LocalBundleAdjustment",
+                     "GlobalBundleAdjustment", "InertialBundleAdjustment", "InertialInitialization",
+                     "EssentialGraph", "Sim3Optimization"],
     "camera": ["GeometricCamera", "Pinhole", "KannalaBrandt8"],
     "features": ["ORBextractor", "ORBdescriptor"],
     "common": ["Converter", "GeometricTools", "Settings", "Verbose",
