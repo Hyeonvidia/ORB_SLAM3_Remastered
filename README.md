@@ -1,10 +1,10 @@
 # ORB_SLAM3_Remastered
 
 ORB-SLAM3 rebuilt for a robot's onboard computer: monocular, stereo and RGB-D
-SLAM that tracks a frame in half the time of ORB-SLAM3 v1.0 and runs in a
-third of the memory -- 60 % in monocular -- at the same accuracy, with the
-defects found on the way fixed and the code laid out along the architecture
-of the paper.
+SLAM that tracks a frame in under half the time of ORB-SLAM3 v1.0 and runs
+in a third of the memory -- 60 % in monocular -- at the same accuracy, with
+the defects found on the way fixed and the code laid out along the
+architecture of the paper.
 
 ![KITTI 07, stereo: the frame with its features, and the map being built](docs/media/kitti07_stereo.gif)
 
@@ -14,10 +14,10 @@ of the paper.
 
 | Run | Tracking per frame, ms | Peak memory, MB | ATE, m |
 |---|---:|---:|---:|
-| KITTI 07 monocular | 13.3 → **6.7** (-50 %) | 1545 → **950** (-39 %) | 2.13 → 3.17 |
-| KITTI 07 stereo | 17.1 → **8.7** (-49 %) | 896 → **374** (-58 %) | 0.408 → 0.449 |
-| TUM fr1_desk RGB-D | 12.5 → **7.2** (-42 %) | 808 → **255** (-68 %) | 0.018 → 0.018 |
-| EuRoC V101 stereo | – → 6.7 | 752 → **220** (-71 %) | 0.037 → 0.037 |
+| KITTI 07 monocular | 13.3 → **6.2** (-53 %) | 1545 → **919** (-40 %) | 2.13 → 2.71 |
+| KITTI 07 stereo | 17.1 → **7.9** (-54 %) | 896 → **370** (-59 %) | 0.408 → 0.469 |
+| TUM fr1_desk RGB-D | 12.5 → **6.8** (-46 %) | 808 → **252** (-69 %) | 0.018 → 0.018 |
+| EuRoC V101 stereo | – → 6.5 | 752 → **232** (-69 %) | 0.037 → 0.037 |
 
 v1.0 → now, medians of three runs of each, four runs sharing the machine
 (linux/arm64 in Docker, Apple M-series). Accuracy moves from one run to the
@@ -29,10 +29,10 @@ between 0.40 and 0.48 m, monocular between 2.0 and 4.5 (v1.0 between 2.1 and
 
 | Run | Loops closed | Maps merged | Tracking per frame, ms | ATE, m |
 |---|---:|---:|---:|---:|
-| KITTI 05 stereo (three loops) | 3 | – | 10.0 | 1.00 |
-| KITTI 05 monocular | 3 | – | 7.3 | 6.72 |
-| EuRoC V101 + V102 in one session, stereo | 2 | 1 | 7.6 | 0.037 |
-| EuRoC V101 + V102 in one session, monocular | 1 | 1 | 6.6 | 0.037 |
+| KITTI 05 stereo (three loops) | 3 | – | 8.9 | 0.96 |
+| KITTI 05 monocular | 3 | – | 6.6 | 5.55 |
+| EuRoC V101 + V102 in one session, stereo | 3 | 1 | 6.7 | 0.037 |
+| EuRoC V101 + V102 in one session, monocular | 1 | 1 | 6.2 | 0.029 |
 
 One run of each. KITTI 05 monocular has ended between 4.3 and 7.4 m in the
 runs of this tree, and between 5.6 and 7.8 in those of v1.0.
@@ -54,7 +54,7 @@ Per stage, KITTI 07, before this work and now, measured side by side
 
 | Stage, ms | Stereo | Monocular |
 |---|---:|---:|
-| ORB extraction | 12.7 → **6.3** | 10.9 → **5.7** |
+| ORB extraction | 12.7 → **5.1** | 10.9 → **4.6** |
 | Stereo matching | 2.8 → **0.9** | |
 | Tracking, all of it, per frame | 19.3 → **10.9** | 14.5 → **8.9** |
 | Creating map points, per keyframe | 7.6 → **5.4** | 23.0 → **15.3** |
@@ -64,8 +64,10 @@ Per stage, KITTI 07, before this work and now, measured side by side
 
 - **Extraction**: the levels of the image pyramid in parallel -- what is
   extracted does not depend on the number of threads
-  (`ORBextractor.nThreads`) -- and a descriptor's 512 sampling points rotated
-  four at a time (SSE2 / NEON). 9.8 → 4.5 ms an image on two threads.
+  (`ORBextractor.nThreads`); a descriptor's 512 sampling points rotated four
+  at a time (SSE2 / NEON); FAST once over a level instead of once per cell,
+  with a stronger corner across a cell's edge now suppressing a weaker one.
+  9.8 → 3.6 ms an image on two threads, 6.4 on one.
 - **Matching**: descriptors compared 64 bits at a time, inline, in every
   search; stereo matching sums its windows on the pixels instead of making a
   matrix for each.
@@ -87,7 +89,8 @@ Per stage, KITTI 07, before this work and now, measured side by side
   mono is 236 KB; it was 472 as v1.0 keeps it.
 - MapPoints that were culled are freed once no thread can still be using them
   ([docs/OWNERSHIP.md](docs/OWNERSHIP.md)); v1.0 never frees one. A map
-  point's observations are one block, not a node per observation.
+  point's observations are one block, not a node per observation, and the
+  point itself is 0.44 KB, not 0.70.
 
 **Defects of v1.0 that were fixed**
 
@@ -152,8 +155,10 @@ odometry and TUM RGB-D.
   runs of 12, this tree in 1 of 12.
 - One run of TUM fr1_desk RGB-D in fourteen of one build ended at an ATE of
   0.140 m without losing tracking; not explained, and not seen since.
-- FAST detection is what is left of extraction's cost, 5.5 ms of 8 on one
-  thread.
+- Two of the first eleven runs of KITTI 07 stereo with the one-pass FAST
+  ended at 0.55 and 0.86 m where forty runs before had all ended between
+  0.39 and 0.49; sixteen runs of each side by side then showed no
+  difference. Watched.
 - Local bundle adjustment in monocular still runs with g2o's damping; half of
   what an adjustment costs besides is building the graph for g2o.
 - Tracking the local map takes 0.1 to 0.4 ms longer per frame in stereo than
