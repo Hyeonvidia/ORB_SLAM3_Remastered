@@ -79,6 +79,13 @@ namespace ORB_SLAM3
         void InertialOptimization(Map* pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG, float priorA);
         void InertialOptimization(Map* pMap, Eigen::Matrix3d &Rwg, double &scale);
 
+        void FullInertialBA(Map* pMap, int its, const bool bFixLocal, const unsigned long nLoopId, bool* pbStopFlag,
+                            bool bInit, float priorG, float priorA, Eigen::VectorXd* vSingVal, bool* bHess);
+        void LocalInertialBA(KeyFrame* pKF, bool* pbStopFlag, Map* pMap, int &num_fixedKF, int &num_OptKF, int &num_MPs,
+                             int &num_edges, bool bLarge, bool bRecInit);
+        void MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool* pbStopFlag, Map* pMap,
+                             KeyFrameAndPose &corrPoses);
+
         // One line per task at exit: calls, and calls that differed. Moved
         // counts a call that could not be compared: a global adjustment runs
         // while the other threads go on changing the map, and when the two

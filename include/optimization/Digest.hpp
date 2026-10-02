@@ -37,8 +37,20 @@ namespace ORB_SLAM3
             std::uint64_t h = 1469598103934665603ull;
             Mix(h, tag);
             (Mix(h, values), ...);
+            // Scrambled before it is summed. Without, two things that differ
+            // in their last byte have hashes that differ by a multiple of the
+            // prime, whatever else is in them, and the differences of several
+            // such pairs cancel in the sum as often as not.
+            h ^= h >> 33;
+            h *= 0xff51afd7ed558ccdull;
+            h ^= h >> 33;
+            h *= 0xc4ceb9fe1a85ec53ull;
+            h ^= h >> 33;
             mSum += h;
         }
+
+        // What another walk read, as if it had been read here.
+        void Add(const Digest &other) { mSum += other.mSum; }
 
         bool operator==(const Digest &other) const { return mSum == other.mSum; }
         bool operator!=(const Digest &other) const { return mSum != other.mSum; }
