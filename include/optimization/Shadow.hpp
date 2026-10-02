@@ -27,6 +27,9 @@
 
 #ifdef ORBSLAM3R_OPT_SHADOW
 
+#include <Eigen/Core>
+#include <g2o/types/sim3/sim3.h>
+
 #include <vector>
 
 namespace ORB_SLAM3
@@ -48,6 +51,10 @@ namespace ORB_SLAM3
 
         void BundleAdjustment(const std::vector<KeyFrame*> &vpKFs, const std::vector<MapPoint*> &vpMP, int nIterations,
                               bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust);
+
+        int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+                         const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
+                         const bool bAllPoints);
 
         // One line per task at exit: calls, and calls that differed. Moved
         // counts a call that could not be compared: a global adjustment runs

@@ -17,6 +17,8 @@
 */
 
 #include "optimization/Optimizer.hpp"
+#include "optimization/Shadow.hpp"
+#include "optimization/Sim3Task.hpp"
 #include "tracking/Frame.hpp"
 
 #include <complex>
@@ -42,6 +44,8 @@
 #include "optim_g2o/OptimizableTypes.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <memory>
 #include <cmath>
 #include <iostream>
 #include <list>
@@ -56,14 +60,10 @@
 
 namespace ORB_SLAM3
 {
-    int Optimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
-                                const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
-                                const bool bAllPoints)
+    void Sim3Task::Build(KeyFrame* pKF1, KeyFrame* pKF2, const std::vector<MapPoint*> &vpMatches1,
+                         const g2o::Sim3 &g2oS12, const float th2, const bool bFixScale, const bool bAllPoints)
     {
-        g2o::SparseOptimizer optimizer;
-
-        auto* solver = orbslam3r::g2o_ext::MakeLevenberg<g2o::BlockSolverX, orbslam3r::g2o_ext::LinearSolver::kDense>();
-        optimizer.setAlgorithm(solver);
+        mTh2 = th2;
 
         // Camera poses
         const Eigen::Matrix3f R1w = pKF1->GetRotation();
@@ -71,38 +71,18 @@ namespace ORB_SLAM3
         const Eigen::Matrix3f R2w = pKF2->GetRotation();
         const Eigen::Vector3f t2w = pKF2->GetTranslation();
 
-        // Set Sim3 vertex
-        ORB_SLAM3::VertexSim3Expmap* vSim3 = new ORB_SLAM3::VertexSim3Expmap();
-        vSim3->_fix_scale = bFixScale;
-        vSim3->setEstimate(g2oS12);
-        vSim3->setId(0);
-        vSim3->setFixed(false);
-        vSim3->pCamera1 = pKF1->mpCamera;
-        vSim3->pCamera2 = pKF2->mpCamera;
-        optimizer.addVertex(vSim3);
-
-        // Set MapPoint vertices
-        const int N = vpMatches1.size();
-        const std::vector<MapPoint*> vpMapPoints1 = pKF1->GetMapPointMatches();
-        std::vector<ORB_SLAM3::EdgeSim3ProjectXYZ*> vpEdges12;
-        std::vector<ORB_SLAM3::EdgeInverseSim3ProjectXYZ*> vpEdges21;
-        std::vector<size_t> vnIndexEdge;
-        std::vector<bool> vbIsInKF2;
-
-        vnIndexEdge.reserve(2 * N);
-        vpEdges12.reserve(2 * N);
-        vpEdges21.reserve(2 * N);
-        vbIsInKF2.reserve(2 * N);
+        mProblem.R12 = g2oS12.rotation();
+        mProblem.t12 = g2oS12.translation();
+        mProblem.s12 = g2oS12.scale();
+        mProblem.fixScale = bFixScale;
+        mProblem.camera1 = pKF1->mpCamera;
+        mProblem.camera2 = pKF2->mpCamera;
 
         const float deltaHuber = std::sqrt(th2);
+        mProblem.huber = deltaHuber;
 
-        int nCorrespondences = 0;
-        int nBadMPs = 0;
-        int nInKF2 = 0;
-        int nOutKF2 = 0;
-        int nMatchWithoutMP = 0;
-
-        std::vector<int> vIdsOnlyInKF2;
+        const int N = vpMatches1.size();
+        const std::vector<MapPoint*> vpMapPoints1 = pKF1->GetMapPointMatches();
 
         for(int i = 0; i < N; i++)
         {
@@ -112,59 +92,18 @@ namespace ORB_SLAM3
             MapPoint* pMP1 = vpMapPoints1[i];
             MapPoint* pMP2 = vpMatches1[i];
 
-            const int id1 = 2 * i + 1;
-            const int id2 = 2 * (i + 1);
-
             const int i2 = std::get<0>(pMP2->GetIndexInKeyFrame(pKF2));
 
-            Eigen::Vector3f P3D1c;
-            Eigen::Vector3f P3D2c;
-
-            if(pMP1 && pMP2)
-            {
-                if(!pMP1->isBad() && !pMP2->isBad())
-                {
-                    g2o::VertexSBAPointXYZ* vPoint1 = new g2o::VertexSBAPointXYZ();
-                    Eigen::Vector3f P3D1w = pMP1->GetWorldPos();
-                    P3D1c = R1w * P3D1w + t1w;
-                    vPoint1->setEstimate(P3D1c.cast<double>());
-                    vPoint1->setId(id1);
-                    vPoint1->setFixed(true);
-                    optimizer.addVertex(vPoint1);
-
-                    g2o::VertexSBAPointXYZ* vPoint2 = new g2o::VertexSBAPointXYZ();
-                    Eigen::Vector3f P3D2w = pMP2->GetWorldPos();
-                    P3D2c = R2w * P3D2w + t2w;
-                    vPoint2->setEstimate(P3D2c.cast<double>());
-                    vPoint2->setId(id2);
-                    vPoint2->setFixed(true);
-                    optimizer.addVertex(vPoint2);
-                }
-                else
-                {
-                    nBadMPs++;
-                    continue;
-                }
-            }
-            else
-            {
-                nMatchWithoutMP++;
-
-                //TODO The 3D position in KF1 doesn't exist
-                if(!pMP2->isBad())
-                {
-                    g2o::VertexSBAPointXYZ* vPoint2 = new g2o::VertexSBAPointXYZ();
-                    Eigen::Vector3f P3D2w = pMP2->GetWorldPos();
-                    P3D2c = R2w * P3D2w + t2w;
-                    vPoint2->setEstimate(P3D2c.cast<double>());
-                    vPoint2->setId(id2);
-                    vPoint2->setFixed(true);
-                    optimizer.addVertex(vPoint2);
-
-                    vIdsOnlyInKF2.push_back(id2);
-                }
+            //TODO The 3D position in KF1 doesn't exist
+            if(!pMP1)
                 continue;
-            }
+            if(pMP1->isBad() || pMP2->isBad())
+                continue;
+
+            Eigen::Vector3f P3D1w = pMP1->GetWorldPos();
+            const Eigen::Vector3f P3D1c = R1w * P3D1w + t1w;
+            Eigen::Vector3f P3D2w = pMP2->GetWorldPos();
+            const Eigen::Vector3f P3D2c = R2w * P3D2w + t2w;
 
             if(i2 < 0 && !bAllPoints)
             {
@@ -180,37 +119,19 @@ namespace ORB_SLAM3
                 continue;
             }
 
-            nCorrespondences++;
-
             // Set edge x1 = S12*X2
             Eigen::Matrix<double, 2, 1> obs1;
             const cv::KeyPoint &kpUn1 = pKF1->mvKeysUn[i];
             obs1 << kpUn1.pt.x, kpUn1.pt.y;
-
-            ORB_SLAM3::EdgeSim3ProjectXYZ* e12 = new ORB_SLAM3::EdgeSim3ProjectXYZ();
-
-            e12->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id2)));
-            e12->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-            e12->setMeasurement(obs1);
             const float &invSigmaSquare1 = pKF1->mvInvLevelSigma2[kpUn1.octave];
-            e12->setInformation(Eigen::Matrix2d::Identity() * invSigmaSquare1);
-
-            g2o::RobustKernelHuber* rk1 = new g2o::RobustKernelHuber;
-            e12->setRobustKernel(rk1);
-            rk1->setDelta(deltaHuber);
-            optimizer.addEdge(e12);
 
             // Set edge x2 = S21*X1
             Eigen::Matrix<double, 2, 1> obs2;
             cv::KeyPoint kpUn2;
-            bool inKF2;
             if(i2 >= 0)
             {
                 kpUn2 = pKF2->mvKeysUn[i2];
                 obs2 << kpUn2.pt.x, kpUn2.pt.y;
-                inKF2 = true;
-
-                nInKF2++;
             }
             else
             {
@@ -220,65 +141,37 @@ namespace ORB_SLAM3
 
                 obs2 << x, y;
                 kpUn2 = cv::KeyPoint(cv::Point2f(x, y), pMP2->mnTrackScaleLevel);
-
-                inKF2 = false;
-                nOutKF2++;
             }
-
-            ORB_SLAM3::EdgeInverseSim3ProjectXYZ* e21 = new ORB_SLAM3::EdgeInverseSim3ProjectXYZ();
-
-            e21->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id1)));
-            e21->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-            e21->setMeasurement(obs2);
             float invSigmaSquare2 = pKF2->mvInvLevelSigma2[kpUn2.octave];
-            e21->setInformation(Eigen::Matrix2d::Identity() * invSigmaSquare2);
 
-            g2o::RobustKernelHuber* rk2 = new g2o::RobustKernelHuber;
-            e21->setRobustKernel(rk2);
-            rk2->setDelta(deltaHuber);
-            optimizer.addEdge(e21);
-
-            vpEdges12.push_back(e12);
-            vpEdges21.push_back(e21);
-            vnIndexEdge.push_back(i);
-
-            vbIsInKF2.push_back(inKF2);
+            mProblem.add(P3D1c.cast<double>(), P3D2c.cast<double>(), obs1, obs2, invSigmaSquare1, invSigmaSquare2);
+            mvnMatch.push_back(i);
         }
+        mvbOut.assign(mProblem.size(), 0);
+    }
+
+    void Sim3Task::Solve(optim::Sim3Solver &solver)
+    {
+        const std::size_t n = mProblem.size();
 
         // Optimize!
-        optimizer.initializeOptimization();
-        optimizer.optimize(5);
+        solver.Prepare(mProblem);
+        solver.Solve(mProblem, 5);
 
         // Check inliers
         int nBad = 0;
-        int nBadOutKF2 = 0;
-        for(size_t i = 0; i < vpEdges12.size(); i++)
+        for(std::size_t i = 0; i < n; i++)
         {
-            ORB_SLAM3::EdgeSim3ProjectXYZ* e12 = vpEdges12[i];
-            ORB_SLAM3::EdgeInverseSim3ProjectXYZ* e21 = vpEdges21[i];
-            if(!e12 || !e21)
-                continue;
-
-            if(e12->chi2() > th2 || e21->chi2() > th2)
+            if(mProblem.chi2_1[i] > mTh2 || mProblem.chi2_2[i] > mTh2)
             {
-                size_t idx = vnIndexEdge[i];
-                vpMatches1[idx] = static_cast<MapPoint*>(NULL);
-                optimizer.removeEdge(e12);
-                optimizer.removeEdge(e21);
-                vpEdges12[i] = static_cast<ORB_SLAM3::EdgeSim3ProjectXYZ*>(NULL);
-                vpEdges21[i] = static_cast<ORB_SLAM3::EdgeInverseSim3ProjectXYZ*>(NULL);
+                mvbOut[i] = 1;
+                mProblem.active[i] = 0;
                 nBad++;
-
-                if(!vbIsInKF2[i])
-                {
-                    nBadOutKF2++;
-                }
                 continue;
             }
 
             //Check if remove the robust adjustment improve the result
-            e12->setRobustKernel(0);
-            e21->setRobustKernel(0);
+            mProblem.robust[i] = 0;
         }
 
         int nMoreIterations;
@@ -287,41 +180,73 @@ namespace ORB_SLAM3
         else
             nMoreIterations = 5;
 
-        if(nCorrespondences - nBad < 10)
-            return 0;
+        if(static_cast<int>(n) - nBad < 10)
+            return;
 
         // Optimize again only with inliers
-        optimizer.initializeOptimization();
-        optimizer.optimize(nMoreIterations);
+        solver.Solve(mProblem, nMoreIterations);
+        solver.Evaluate(mProblem);
 
-        int nIn = 0;
-        mAcumHessian = Eigen::MatrixXd::Zero(7, 7);
-        for(size_t i = 0; i < vpEdges12.size(); i++)
+        mnIn = 0;
+        for(std::size_t i = 0; i < n; i++)
         {
-            ORB_SLAM3::EdgeSim3ProjectXYZ* e12 = vpEdges12[i];
-            ORB_SLAM3::EdgeInverseSim3ProjectXYZ* e21 = vpEdges21[i];
-            if(!e12 || !e21)
+            if(!mProblem.active[i])
                 continue;
 
-            e12->computeError();
-            e21->computeError();
-
-            if(e12->chi2() > th2 || e21->chi2() > th2)
-            {
-                size_t idx = vnIndexEdge[i];
-                vpMatches1[idx] = static_cast<MapPoint*>(NULL);
-            }
+            if(mProblem.chi2_1[i] > mTh2 || mProblem.chi2_2[i] > mTh2)
+                mvbOut[i] = 1;
             else
-            {
-                nIn++;
-            }
+                mnIn++;
         }
+        mbFound = true;
+    }
+
+    int Sim3Task::Apply(std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+                        Eigen::Matrix<double, 7, 7> &mAcumHessian) const
+    {
+        for(std::size_t i = 0; i < mvbOut.size(); i++)
+            if(mvbOut[i])
+                vpMatches1[mvnMatch[i]] = static_cast<MapPoint*>(NULL);
+
+        if(!mbFound)
+            return 0;
+
+        mAcumHessian = Eigen::MatrixXd::Zero(7, 7);
 
         // Recover optimized Sim3
-        g2o::VertexSim3Expmap* vSim3_recov = static_cast<g2o::VertexSim3Expmap*>(optimizer.vertex(0));
-        g2oS12 = vSim3_recov->estimate();
+        g2oS12.rotation() = mProblem.R12;
+        g2oS12.translation() = mProblem.t12;
+        g2oS12.scale() = mProblem.s12;
 
-        return nIn;
+        return mnIn;
+    }
+
+    Digest Sim3Task::Input() const
+    {
+        Digest digest;
+        digest.Add('S', mProblem.R12.x(), mProblem.R12.y(), mProblem.R12.z(), mProblem.R12.w(), mProblem.t12.x(),
+                   mProblem.t12.y(), mProblem.t12.z(), mProblem.s12, mProblem.fixScale);
+        for(std::size_t i = 0; i < mProblem.size(); i++)
+            digest.Add('C', i, mvnMatch[i], mProblem.X1[i].x(), mProblem.X1[i].y(), mProblem.X1[i].z(),
+                       mProblem.X2[i].x(), mProblem.X2[i].y(), mProblem.X2[i].z(), mProblem.uv1[i].x(),
+                       mProblem.uv1[i].y(), mProblem.uv2[i].x(), mProblem.uv2[i].y(), mProblem.invSigma2_1[i],
+                       mProblem.invSigma2_2[i]);
+        return digest;
+    }
+
+    int Optimizer::OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches1, g2o::Sim3 &g2oS12,
+                                const float th2, const bool bFixScale, Eigen::Matrix<double, 7, 7> &mAcumHessian,
+                                const bool bAllPoints)
+    {
+#ifdef ORBSLAM3R_OPT_SHADOW
+        return shadow::OptimizeSim3(pKF1, pKF2, vpMatches1, g2oS12, th2, bFixScale, mAcumHessian, bAllPoints);
+#else
+        Sim3Task task;
+        task.Build(pKF1, pKF2, vpMatches1, g2oS12, th2, bFixScale, bAllPoints);
+        const std::unique_ptr<optim::Sim3Solver> pSolver = optim::MakeSim3Solver();
+        task.Solve(*pSolver);
+        return task.Apply(vpMatches1, g2oS12, mAcumHessian);
+#endif
     }
 
 } // namespace ORB_SLAM3
